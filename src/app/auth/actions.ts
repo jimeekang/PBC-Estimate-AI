@@ -76,8 +76,6 @@ export async function login(prevState: any, formData: FormData) {
     }
     return { errors: { _form: ['An unexpected error occurred. Please try again.'] } };
   }
-
-  redirect('/estimate');
 }
 
 export async function logout() {
