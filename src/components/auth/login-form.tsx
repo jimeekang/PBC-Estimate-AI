@@ -49,8 +49,8 @@ export function LoginForm() {
         setIsPending(false);
         return setErrors({ _form: ['Please verify your email before logging in. A new verification link has been sent.'] });
       }
-      // On success, the AuthProvider will detect the change and the parent page
-      // (/login) will automatically handle the redirect to /estimate.
+      // On success, trigger a full page refresh to navigate.
+      window.location.href = '/estimate';
     } catch (e: any) {
       setIsPending(false);
       if (e.code === 'auth/invalid-credential') {
