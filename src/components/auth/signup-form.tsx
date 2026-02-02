@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
@@ -22,7 +21,6 @@ function SubmitButton({ isPending }: { isPending: boolean }) {
 export function SignupForm() {
   const [errors, setErrors] = useState<{ [key: string]: string[] | undefined } | null>(null);
   const [isPending, setIsPending] = useState(false);
-  const router = useRouter();
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -52,7 +50,7 @@ export function SignupForm() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await sendEmailVerification(userCredential.user);
-      router.push('/verify-email');
+      window.location.href = '/verify-email';
     } catch (e: any) {
       setIsPending(false);
       if (e.code === 'auth/email-already-in-use') {
