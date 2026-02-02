@@ -1,14 +1,32 @@
+'use client';
+
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoginForm } from '@/components/auth/login-form';
-import type { Metadata } from 'next';
 import { Logo } from '@/components/logo';
-
-export const metadata: Metadata = {
-    title: 'Login | EstimateAI Painter',
-};
+import { useAuth } from '@/providers/auth-provider';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace('/estimate');
+    }
+  }, [user, loading, router]);
+
+  if (loading || (!loading && user)) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-full items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-md space-y-8">
