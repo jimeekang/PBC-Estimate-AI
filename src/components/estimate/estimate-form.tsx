@@ -312,7 +312,7 @@ export function EstimateForm() {
                   <FormItem>
                     <FormLabel>Number of rooms</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g. 3" {...field} onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} />
+                      <Input type="number" placeholder="e.g. 3" {...field} value={field.value ?? ''} onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -325,7 +325,7 @@ export function EstimateForm() {
                   <FormItem>
                     <FormLabel>Approx. size (sqm)</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g. 100" {...field} onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} />
+                      <Input type="number" placeholder="e.g. 100" {...field} value={field.value ?? ''} onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
