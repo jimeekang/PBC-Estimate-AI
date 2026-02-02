@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { useFormStatus } from 'react-dom';
 import { login } from '@/app/auth/actions';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,13 @@ function SubmitButton() {
 }
 
 export function LoginForm() {
-  const [state, formAction] = useActionState(login, null);
+  const [state, formAction] = useActionState(login, { errors: {} });
+
+  useEffect(() => {
+    if (state?.success) {
+        window.location.href = '/estimate';
+    }
+  }, [state]);
 
   return (
     <form action={formAction} className="space-y-6">

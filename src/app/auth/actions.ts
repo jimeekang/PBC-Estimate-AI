@@ -42,7 +42,7 @@ export async function signup(prevState: any, formData: FormData) {
     return { errors: { _form: ['An unexpected error occurred. Please try again.'] } };
   }
 
-  redirect('/verify-email');
+  return { success: true };
 }
 
 const loginSchema = z.object({
@@ -78,7 +78,7 @@ export async function login(prevState: any, formData: FormData) {
     return { errors: { _form: ['An unexpected error occurred. Please try again.'] } };
   }
 
-  return {};
+  return { success: true };
 }
 
 export async function logout() {
