@@ -1,36 +1,67 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
-import { useFormStatus } from 'react-dom';
-import { login } from '@/app/auth/actions';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
+function SubmitButton({ isPending }: { isPending: boolean }) {
   return (
-    <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+    <Button type="submit" className="w-full" disabled={isPending}>
+      {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
       Sign In
     </Button>
   );
 }
 
 export function LoginForm() {
-  const [state, formAction] = useActionState(login, { errors: {} });
+  const [errors, setErrors] = useState<{ [key: string]: string[] | undefined } | null>(null);
+  const [isPending, setIsPending] = useState(false);
 
-  useEffect(() => {
-    if (state?.success) {
-        window.location.href = '/estimate';
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsPending(true);
+    setErrors(null);
+
+    const formData = new FormData(event.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+
+    if (!email) {
+      setIsPending(false);
+      return setErrors({ email: ['Email is required.'] });
     }
-  }, [state]);
+    if (!password) {
+      setIsPending(false);
+      return setErrors({ password: ['Password is required.'] });
+    }
+
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      if (!userCredential.user.emailVerified) {
+        await sendEmailVerification(userCredential.user);
+        await auth.signOut(); // Log out user until they are verified
+        setIsPending(false);
+        return setErrors({ _form: ['Please verify your email before logging in. A new verification link has been sent.'] });
+      }
+      // On success, the AuthProvider will detect the change and the parent page
+      // (/login) will automatically handle the redirect to /estimate.
+    } catch (e: any) {
+      setIsPending(false);
+      if (e.code === 'auth/invalid-credential') {
+        return setErrors({ _form: ['Invalid email or password.'] });
+      }
+      return setErrors({ _form: ['An unexpected error occurred. Please try again.'] });
+    }
+  };
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="email">Email address</Label>
         <Input
@@ -41,8 +72,8 @@ export function LoginForm() {
           required
           placeholder="email@example.com"
         />
-        {state?.errors?.email && (
-          <p className="text-sm text-destructive">{state.errors.email.join(', ')}</p>
+        {errors?.email && (
+          <p className="text-sm text-destructive">{errors.email.join(', ')}</p>
         )}
       </div>
 
@@ -56,21 +87,21 @@ export function LoginForm() {
           </div>
         </div>
         <Input id="password" name="password" type="password" required />
-         {state?.errors?.password && (
-          <p className="text-sm text-destructive">{state.errors.password.join(', ')}</p>
+         {errors?.password && (
+          <p className="text-sm text-destructive">{errors.password.join(', ')}</p>
         )}
       </div>
       
-      {state?.errors?._form && (
+      {errors?._form && (
         <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Login Failed</AlertTitle>
-            <AlertDescription>{state.errors._form.join(', ')}</AlertDescription>
+            <AlertDescription>{errors._form.join(', ')}</AlertDescription>
         </Alert>
       )}
 
       <div>
-        <SubmitButton />
+        <SubmitButton isPending={isPending} />
       </div>
     </form>
   );
