@@ -55,7 +55,6 @@ export async function login(prevState: any, formData: FormData) {
 
   if (!result.success) {
     return {
-      success: false,
       errors: result.error.flatten().fieldErrors,
     };
   }
@@ -67,7 +66,6 @@ export async function login(prevState: any, formData: FormData) {
     if (!userCredential.user.emailVerified) {
       await sendEmailVerification(userCredential.user);
       return {
-        success: false,
         errors: {
           _form: ['Please verify your email before logging in. A new verification link has been sent.'],
         },
@@ -75,12 +73,12 @@ export async function login(prevState: any, formData: FormData) {
     }
   } catch (e: any) {
     if (e.code === 'auth/invalid-credential') {
-      return { success: false, errors: { _form: ['Invalid email or password.'] } };
+      return { errors: { _form: ['Invalid email or password.'] } };
     }
-    return { success: false, errors: { _form: ['An unexpected error occurred. Please try again.'] } };
+    return { errors: { _form: ['An unexpected error occurred. Please try again.'] } };
   }
 
-  return { success: true };
+  return {};
 }
 
 export async function logout() {

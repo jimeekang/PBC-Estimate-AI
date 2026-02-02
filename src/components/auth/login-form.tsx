@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { login } from '@/app/auth/actions';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -22,14 +21,7 @@ function SubmitButton() {
 }
 
 export function LoginForm() {
-  const [state, formAction] = useActionState(login, { success: false });
-  const router = useRouter();
-
-  useEffect(() => {
-    if (state?.success) {
-      router.push('/estimate');
-    }
-  }, [state, router]);
+  const [state, formAction] = useActionState(login, null);
 
   return (
     <form action={formAction} className="space-y-6">
