@@ -12,6 +12,20 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GeneratePaintingEstimateInputSchema = z.object({
+  name: z.string().describe('The name of the customer.'),
+  email: z.string().describe('The email of the customer.'),
+  phone: z.string().optional().describe('The phone number of the customer.'),
+  typeOfWork: z.enum(['Interior Painting', 'Exterior Painting', 'Timber']).describe('The type of work to be done.'),
+  scopeOfPainting: z.enum(['Full painting', 'Partial painting']).describe('The scope of the painting job.'),
+  propertyType: z.string().describe('The type of property.'),
+  numberOfRooms: z.number().optional().describe('The number of rooms to be painted.'),
+  approxSize: z.number().optional().describe('The approximate size of the area to be painted in square meters.'),
+  existingWallColour: z.string().optional().describe('The existing wall colour.'),
+  location: z.string().optional().describe('The location of the property.'),
+  timingPurpose: z.enum(['Ready to proceed', 'Budget only']).describe('The timing and purpose of the estimate.'),
+  wallCondition: z.array(z.enum(['Cracks', 'Mould', 'Stains or contamination'])).optional().describe('The condition of the walls.'),
+  jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional().describe('Factors contributing to job difficulty.'),
+
   paintAreas: z.object({
     ceilingPaint: z.boolean().describe('Whether ceiling paint is selected.'),
     wallPaint: z.boolean().describe('Whether wall paint is selected.'),
@@ -38,20 +52,51 @@ const prompt = ai.definePrompt({
   name: 'generatePaintingEstimatePrompt',
   input: {schema: GeneratePaintingEstimateInputSchema},
   output: {schema: GeneratePaintingEstimateOutputSchema},
-  prompt: `You are a painting cost estimator AI.
+  prompt: `You are a painting cost estimator AI for a company called "PBC quote pro".
+  Your estimates should be professional and based on Australian market rates.
 
-  Based on the following information about the painting job, provide an estimated price range and a short explanation of how the price was calculated.
+  A customer has requested an estimate. Here is the information they provided:
 
-  Paint Areas:
-  Ceiling Paint: {{paintAreas.ceilingPaint}}
-  Wall Paint: {{paintAreas.wallPaint}}
-  Trim Paint: {{paintAreas.trimPaint}}
+  **Customer Details:**
+  - Name: {{name}}
+  - Email: {{email}}
+  {{#if phone}}- Phone: {{phone}}{{/if}}
+  - Location: {{#if location}}{{location}}{{else}}Not provided{{/if}}
 
-  {{#if trimPaintOptions}}
-  Trim Paint Options:
-  Paint Type: {{trimPaintOptions.paintType}}
-  Trim Items: {{#each trimPaintOptions.trimItems}}- {{this}}\n{{/each}}
+  **Job Details:**
+  - Property Type: {{propertyType}}
+  - Type of Work: {{typeOfWork}}
+  - Scope of Painting: {{scopeOfPainting}}
+  - Timing/Purpose: {{timingPurpose}}
+  {{#if numberOfRooms}}- Number of Rooms: {{numberOfRooms}}{{/if}}
+  {{#if approxSize}}- Approx. Size (sqm): {{approxSize}}{{/if}}
+  {{#if existingWallColour}}- Existing Wall Colour: {{existingWallColour}}{{/if}}
+
+  **Areas to Paint:**
+  - Ceiling: {{#if paintAreas.ceilingPaint}}Yes{{else}}No{{/if}}
+  - Walls: {{#if paintAreas.wallPaint}}Yes{{else}}No{{/if}}
+  - Trim: {{#if paintAreas.trimPaint}}Yes{{else}}No{{/if}}
+
+  {{#if paintAreas.trimPaint}}
+  **Trim Details:**
+    {{#if trimPaintOptions}}
+    - Paint Type: {{trimPaintOptions.paintType}}
+    - Items: {{#each trimPaintOptions.trimItems}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+    {{else}}
+    - No trim details provided.
+    {{/if}}
   {{/if}}
+
+  **Conditions & Difficulty:**
+  {{#if wallCondition}}
+  - Wall Condition: {{#each wallCondition}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} (This may require extra preparation work like filling cracks, treating mould, or applying stain blocker, which will increase the cost).
+  {{/if}}
+  {{#if jobDifficulty}}
+  - Job Difficulty Factors: {{#each jobDifficulty}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} (Factors like high ceilings, stairs, and difficult access will increase labor costs).
+  {{/if}}
+
+  Based on all this information, provide a realistic estimated price range (e.g., "$1500 - $2500") and a concise, friendly explanation for the estimate.
+  The explanation should briefly mention the key factors that influenced the price, such as the scope, conditions, and difficulty.
   `,
 });
 
