@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { useFormStatus } from 'react-dom';
 import { signup } from '@/app/auth/actions';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { useRouter } from 'next/navigation';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -20,7 +21,14 @@ function SubmitButton() {
 }
 
 export function SignupForm() {
-  const [state, formAction] = useActionState(signup, null);
+  const [state, formAction] = useActionState(signup, { errors: {} });
+  const router = useRouter();
+
+  useEffect(() => {
+    if (state?.success) {
+      router.push('/verify-email');
+    }
+  }, [state, router]);
 
   return (
     <form action={formAction} className="space-y-6">
