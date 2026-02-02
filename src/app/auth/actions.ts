@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   signInWithEmailAndPassword,
+  signOut,
 } from 'firebase/auth';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -75,15 +76,9 @@ export async function login(prevState: any, formData: FormData) {
     }
     return { errors: { _form: ['An unexpected error occurred. Please try again.'] } };
   }
-
-  redirect('/estimate');
 }
 
 export async function logout() {
-  try {
-    await auth.signOut();
-  } catch (e) {
-    console.error('Logout failed', e);
-  }
+  await signOut(auth);
   redirect('/login');
 }
