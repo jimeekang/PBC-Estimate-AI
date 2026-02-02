@@ -45,6 +45,7 @@ import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-paintin
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { useAuth } from '@/providers/auth-provider';
 
 const trimItems = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
@@ -101,6 +102,7 @@ const estimateFormSchema = z.object({
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
 
 export function EstimateForm() {
+  const { user } = useAuth();
   const [state, setState] = useState<{data?: GeneratePaintingEstimateOutput, error?: string}>({});
   const [isPending, setIsPending] = useState(false);
   const { toast } = useToast();
@@ -131,7 +133,7 @@ export function EstimateForm() {
 
   async function onSubmit(values: EstimateFormValues) {
     setIsPending(true);
-    const result = await submitEstimate({}, values);
+    const result = await submitEstimate(values, user?.uid);
     if(result.error) {
         toast({
             variant: "destructive",
