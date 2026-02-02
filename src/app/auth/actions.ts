@@ -5,9 +5,7 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   signInWithEmailAndPassword,
-  signOut,
 } from 'firebase/auth';
-import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 const signupSchema = z
@@ -79,9 +77,4 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   return { success: true };
-}
-
-export async function logout() {
-  await signOut(auth);
-  redirect('/login');
 }
