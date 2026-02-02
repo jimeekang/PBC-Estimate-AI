@@ -362,29 +362,15 @@ export function EstimateForm() {
                         control={form.control}
                         name="paintAreas.ceilingPaint"
                         render={({ field }) => (
-                            <FormItem className="flex flex-row items-center justify-between rounded-lg p-3 shadow-sm">
-                            <div className="space-y-0.5">
-                                <FormLabel className="text-base flex items-center gap-2">
-                                <PaintRoller />
-                                Ceiling Painting
+                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                                <FormControl>
+                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                <FormLabel className="flex items-center gap-2 cursor-pointer">
+                                    <PaintRoller className="h-5 w-5" /> Ceiling Painting
                                 </FormLabel>
-                            </div>
-                            <FormControl>
-                                <RadioGroup
-                                    onValueChange={(value) => field.onChange(value === 'true')}
-                                    value={String(field.value)}
-                                    className="flex items-center space-x-4"
-                                >
-                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                        <FormControl><RadioGroupItem value="true" id="ceil-inc"/></FormControl>
-                                        <FormLabel htmlFor="ceil-inc" className="font-normal">Include</FormLabel>
-                                    </FormItem>
-                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                        <FormControl><RadioGroupItem value="false" id="ceil-exc"/></FormControl>
-                                        <FormLabel htmlFor="ceil-exc" className="font-normal">Exclude</FormLabel>
-                                    </FormItem>
-                                </RadioGroup>
-                            </FormControl>
+                                </div>
                             </FormItem>
                         )}
                         />
