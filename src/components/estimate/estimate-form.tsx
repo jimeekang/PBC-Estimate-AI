@@ -92,11 +92,6 @@ const estimateFormSchema = z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
     trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])).min(1, 'Please select at least one trim item.'),
   }).optional(),
-}).refine(data => {
-    return !data.paintAreas.trimPaint || (data.paintAreas.trimPaint && data.trimPaintOptions && data.trimPaintOptions.paintType && data.trimPaintOptions.trimItems.length > 0);
-}, {
-    message: 'Please select trim paint options',
-    path: ['trimPaintOptions'],
 });
 
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
