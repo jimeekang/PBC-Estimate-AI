@@ -1,6 +1,7 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { signup } from '@/app/auth/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,7 @@ function SubmitButton() {
 }
 
 export function SignupForm() {
-  const [state, formAction] = useFormState(signup, { errors: {} });
+  const [state, formAction] = useActionState(signup, { errors: {} });
 
   return (
     <form action={formAction} className="space-y-6">
