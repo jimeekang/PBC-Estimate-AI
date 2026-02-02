@@ -35,7 +35,7 @@ export function LoginForm() {
           required
           placeholder="email@example.com"
         />
-        {state.errors?.email && (
+        {state?.errors?.email && (
           <p className="text-sm text-destructive">{state.errors.email.join(', ')}</p>
         )}
       </div>
@@ -50,12 +50,12 @@ export function LoginForm() {
           </div>
         </div>
         <Input id="password" name="password" type="password" required />
-         {state.errors?.password && (
+         {state?.errors?.password && (
           <p className="text-sm text-destructive">{state.errors.password.join(', ')}</p>
         )}
       </div>
       
-      {state.errors?._form && (
+      {state?.errors?._form && (
         <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Login Failed</AlertTitle>

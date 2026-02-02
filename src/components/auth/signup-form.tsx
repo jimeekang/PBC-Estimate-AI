@@ -34,7 +34,7 @@ export function SignupForm() {
           required
           placeholder="email@example.com"
         />
-        {state.errors?.email && (
+        {state?.errors?.email && (
           <p className="text-sm text-destructive">{state.errors.email.join(', ')}</p>
         )}
       </div>
@@ -42,7 +42,7 @@ export function SignupForm() {
       <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
         <Input id="password" name="password" type="password" required />
-        {state.errors?.password && (
+        {state?.errors?.password && (
           <p className="text-sm text-destructive">{state.errors.password.join(', ')}</p>
         )}
       </div>
@@ -50,12 +50,12 @@ export function SignupForm() {
       <div className="space-y-2">
         <Label htmlFor="confirmPassword">Confirm Password</Label>
         <Input id="confirmPassword" name="confirmPassword" type="password" required />
-         {state.errors?.confirmPassword && (
+         {state?.errors?.confirmPassword && (
           <p className="text-sm text-destructive">{state.errors.confirmPassword.join(', ')}</p>
         )}
       </div>
 
-      {state.errors?._form && (
+      {state?.errors?._form && (
         <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Signup Failed</AlertTitle>
