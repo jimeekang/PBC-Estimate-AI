@@ -20,7 +20,7 @@ function SubmitButton() {
 }
 
 export function SignupForm() {
-  const [state, formAction] = useActionState(signup, { errors: {} });
+  const [state, formAction] = useActionState(signup, null);
 
   return (
     <form action={formAction} className="space-y-6">

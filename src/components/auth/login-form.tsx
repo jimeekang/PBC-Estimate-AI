@@ -21,7 +21,7 @@ function SubmitButton() {
 }
 
 export function LoginForm() {
-  const [state, formAction] = useActionState(login, { errors: {} });
+  const [state, formAction] = useActionState(login, null);
 
   return (
     <form action={formAction} className="space-y-6">

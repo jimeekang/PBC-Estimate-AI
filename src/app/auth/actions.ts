@@ -64,6 +64,7 @@ export async function login(prevState: any, formData: FormData) {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     if (!userCredential.user.emailVerified) {
+      await sendEmailVerification(userCredential.user);
       return {
         errors: {
           _form: ['Please verify your email before logging in. A new verification link has been sent.'],
@@ -76,6 +77,8 @@ export async function login(prevState: any, formData: FormData) {
     }
     return { errors: { _form: ['An unexpected error occurred. Please try again.'] } };
   }
+
+  redirect('/estimate');
 }
 
 export async function logout() {
