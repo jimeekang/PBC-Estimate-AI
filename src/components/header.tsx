@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from './ui/button';
-import { logout } from '@/app/auth/actions';
+import { auth } from '@/lib/firebase';
+import { signOut } from 'firebase/auth';
 import { Logo } from './logo';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import {
@@ -14,13 +15,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 
 export default function Header() {
   const { user } = useAuth();
 
   const handleLogout = async () => {
-    await logout();
+    await signOut(auth);
+    window.location.href = '/login';
   };
 
   const getInitials = (email: string | null | undefined) => {
