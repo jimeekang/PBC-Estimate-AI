@@ -1,7 +1,7 @@
 'use server';
 
 import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
-import { auth, db } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { z } from 'zod';
 
@@ -38,9 +38,8 @@ const estimateFormSchema = z.object({
     path: ['trimPaintOptions'],
 });
 
-export async function submitEstimate(prevState: any, formData: z.infer<typeof estimateFormSchema>) {
-  const user = auth.currentUser;
-  if (!user) {
+export async function submitEstimate(formData: z.infer<typeof estimateFormSchema>, userId?: string) {
+  if (!userId) {
     return { error: 'You must be logged in to get an estimate.' };
   }
 
@@ -63,7 +62,7 @@ export async function submitEstimate(prevState: any, formData: z.infer<typeof es
     const estimate = await generatePaintingEstimate(aiPayload);
 
     await addDoc(collection(db, 'estimates'), {
-      userId: user.uid,
+      userId: userId,
       options: validatedFields.data,
       estimate,
       createdAt: serverTimestamp(),
