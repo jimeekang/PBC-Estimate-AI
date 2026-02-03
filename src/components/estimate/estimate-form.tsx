@@ -416,6 +416,105 @@ export function EstimateForm() {
                     </div>
                 </div>
 
+                <AnimatePresence>
+                  {showTrimOptions && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-6 rounded-md border p-6 bg-accent/5">
+                        <div className="flex items-center gap-2 text-lg font-semibold border-b pb-2">
+                          <Palette className="h-5 w-5 text-primary" />
+                          <span>Trim Paint Options</span>
+                        </div>
+                        <FormField
+                          control={form.control}
+                          name="trimPaintOptions.paintType"
+                          render={({ field }) => (
+                            <FormItem className="space-y-3">
+                              <FormLabel>Paint Type</FormLabel>
+                              <FormControl>
+                                <RadioGroup
+                                  onValueChange={field.onChange}
+                                  defaultValue={field.value}
+                                  className="flex flex-col space-y-1"
+                                >
+                                  <FormItem className="flex items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                      <RadioGroupItem value="Oil-based" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal cursor-pointer">Oil-based</FormLabel>
+                                  </FormItem>
+                                  <FormItem className="flex items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                      <RadioGroupItem value="Water-based" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal cursor-pointer">Water-based</FormLabel>
+                                  </FormItem>
+                                </RadioGroup>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="trimPaintOptions.trimItems"
+                          render={() => (
+                            <FormItem>
+                              <div className="mb-4">
+                                <FormLabel className="text-base">Trim Items</FormLabel>
+                                <FormDescription>
+                                  Select which items you want to be painted.
+                                </FormDescription>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                {trimItems.map((item) => (
+                                  <FormField
+                                    key={item.id}
+                                    control={form.control}
+                                    name="trimPaintOptions.trimItems"
+                                    render={({ field }) => {
+                                      return (
+                                        <FormItem
+                                          key={item.id}
+                                          className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors bg-background"
+                                        >
+                                          <FormControl>
+                                            <Checkbox
+                                              checked={field.value?.includes(item.id)}
+                                              onCheckedChange={(checked) => {
+                                                return checked
+                                                  ? field.onChange([...(field.value || []), item.id])
+                                                  : field.onChange(
+                                                      field.value?.filter(
+                                                        (value) => value !== item.id
+                                                      )
+                                                    )
+                                              }}
+                                            />
+                                          </FormControl>
+                                          <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">
+                                            <item.icon className="h-5 w-5" /> {item.label}
+                                          </FormLabel>
+                                        </FormItem>
+                                      )
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <FormField
                     control={form.control}
                     name="wallCondition"
@@ -495,108 +594,6 @@ export function EstimateForm() {
 
             </CardContent>
           </Card>
-
-          <AnimatePresence>
-            {showTrimOptions && (
-              <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                <Card className="shadow-md">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Palette className="h-6 w-6 text-primary" />
-                        <span>Trim Paint Options</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <FormField
-                      control={form.control}
-                      name="trimPaintOptions.paintType"
-                      render={({ field }) => (
-                        <FormItem className="space-y-3">
-                          <FormLabel>Paint Type</FormLabel>
-                          <FormControl>
-                            <RadioGroup
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                              className="flex flex-col space-y-1"
-                            >
-                              <FormItem className="flex items-center space-x-3 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="Oil-based" />
-                                </FormControl>
-                                <FormLabel className="font-normal">Oil-based</FormLabel>
-                              </FormItem>
-                              <FormItem className="flex items-center space-x-3 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="Water-based" />
-                                </FormControl>
-                                <FormLabel className="font-normal">Water-based</FormLabel>
-                              </FormItem>
-                            </RadioGroup>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                     <FormField
-                        control={form.control}
-                        name="trimPaintOptions.trimItems"
-                        render={() => (
-                            <FormItem>
-                            <div className="mb-4">
-                                <FormLabel className="text-base">Trim Items</FormLabel>
-                                <FormDescription>
-                                Select which items you want to be painted.
-                                </FormDescription>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            {trimItems.map((item) => (
-                                <FormField
-                                key={item.id}
-                                control={form.control}
-                                name="trimPaintOptions.trimItems"
-                                render={({ field }) => {
-                                    return (
-                                    <FormItem
-                                        key={item.id}
-                                        className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors"
-                                    >
-                                        <FormControl>
-                                        <Checkbox
-                                            checked={field.value?.includes(item.id)}
-                                            onCheckedChange={(checked) => {
-                                            return checked
-                                                ? field.onChange([...(field.value || []), item.id])
-                                                : field.onChange(
-                                                    field.value?.filter(
-                                                    (value) => value !== item.id
-                                                    )
-                                                )
-                                            }}
-                                        />
-                                        </FormControl>
-                                        <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">
-                                            <item.icon className="h-5 w-5" /> {item.label}
-                                        </FormLabel>
-                                    </FormItem>
-                                    )
-                                }}
-                                />
-                            ))}
-                            </div>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                        />
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           <Button type="submit" size="lg" className="w-full text-lg" disabled={isPending}>
             {isPending ? (
