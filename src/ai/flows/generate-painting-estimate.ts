@@ -23,7 +23,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
   existingWallColour: z.string().optional().describe('The existing wall colour.'),
   location: z.string().optional().describe('The location of the property.'),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']).describe('The reason/purpose for the painting job.'),
-  wallCondition: z.array(z.enum(['Cracks', 'Mould', 'Stains or contamination'])).optional().describe('The condition of the walls.'),
+  paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional().describe('The current condition of the existing paint.'),
   jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional().describe('Factors contributing to job difficulty.'),
 
   paintAreas: z.object({
@@ -90,15 +90,16 @@ const prompt = ai.definePrompt({
   {{/if}}
 
   **Conditions & Difficulty:**
-  {{#if wallCondition}}
-  - Wall Condition: {{#each wallCondition}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} (This may require extra preparation work like filling cracks, treating mould, or applying stain blocker, which will increase the cost).
+  {{#if paintCondition}}
+  - Current Paint Condition: {{paintCondition}} 
+    (Excellent means like new. Fair means some wear, minor peeling. Poor means significant damage/peeling requiring extensive prep).
   {{/if}}
   {{#if jobDifficulty}}
   - Job Difficulty Factors: {{#each jobDifficulty}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} (Factors like high ceilings, stairs, and difficult access will increase labor costs).
   {{/if}}
 
   Based on all this information, provide a realistic estimated price range (e.g., "$1500 - $2500") and a concise, friendly explanation for the estimate.
-  The explanation should briefly mention the key factors that influenced the price, such as the scope, conditions, and difficulty.
+  The explanation should briefly mention the key factors that influenced the price, such as the scope, paint condition (preparatory work required), and difficulty factors.
   `,
 });
 
