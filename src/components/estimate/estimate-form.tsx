@@ -26,7 +26,6 @@ import {
   Palette,
   RectangleHorizontal,
   ShieldAlert,
-  TreePine,
   TrendingUp,
   User,
   WandSparkles,
@@ -86,7 +85,6 @@ const estimateFormSchema = z.object({
     ceilingPaint: z.boolean().default(false),
     wallPaint: z.boolean().default(false),
     trimPaint: z.boolean().default(false),
-    timberPaint: z.boolean().default(false),
   }).default({}),
   trimPaintOptions: z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
@@ -109,7 +107,6 @@ export function EstimateForm() {
         ceilingPaint: false,
         wallPaint: false,
         trimPaint: false,
-        timberPaint: false,
       },
       name: '',
       email: '',
@@ -126,8 +123,7 @@ export function EstimateForm() {
   });
 
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
-  const watchTimberPaint = form.watch('paintAreas.timberPaint');
-  const showTrimOptions = watchTrimPaint || watchTimberPaint;
+  const showTrimOptions = watchTrimPaint;
 
   async function onSubmit(values: EstimateFormValues) {
     setIsPending(true);
@@ -368,7 +364,7 @@ export function EstimateForm() {
             <CardContent className="space-y-6">
                 <div className="space-y-4">
                     <FormLabel>Paint Areas</FormLabel>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-md border p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-md border p-4">
                        <FormField
                         control={form.control}
                         name="paintAreas.ceilingPaint"
@@ -412,22 +408,6 @@ export function EstimateForm() {
                                 <div className="space-y-1 leading-none">
                                 <FormLabel className="flex items-center gap-2 cursor-pointer">
                                     <Palette className="h-5 w-5" /> Trim Paint
-                                </FormLabel>
-                                </div>
-                            </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="paintAreas.timberPaint"
-                            render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
-                                <FormControl>
-                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                <FormLabel className="flex items-center gap-2 cursor-pointer">
-                                    <TreePine className="h-5 w-5" /> Timber Paint
                                 </FormLabel>
                                 </div>
                             </FormItem>
