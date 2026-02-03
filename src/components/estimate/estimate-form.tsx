@@ -59,6 +59,10 @@ const jobDifficultyItems = [
   { id: 'Difficult access areas', label: 'Difficult access areas' },
 ] as const;
 
+const roomOptions = [
+  'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Bathroom', 'Livingroom', 'Lounge', 'Kitchen', 'Laundry', 'Etc'
+];
+
 const propertyTypes = ['Apartment', 'House', 'Townhouse', 'Office', 'Other'];
 
 const typeOfWorkItems = [
@@ -73,7 +77,7 @@ const estimateFormSchema = z.object({
   typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).min(1, 'Please select at least one type of work.'),
   scopeOfPainting: z.enum(['Full painting', 'Partial painting']),
   propertyType: z.string().min(1, 'Property type is required.'),
-  numberOfRooms: z.coerce.number().positive().optional(),
+  roomsToPaint: z.array(z.string()).optional(),
   approxSize: z.coerce.number().positive().optional(),
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
@@ -114,6 +118,7 @@ export function EstimateForm() {
       typeOfWork: [],
       scopeOfPainting: 'Full painting',
       propertyType: '',
+      roomsToPaint: [],
       existingWallColour: '',
       location: '',
       timingPurpose: 'Ready to proceed',
@@ -291,36 +296,38 @@ export function EstimateForm() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                    control={form.control}
-                    name="timingPurpose"
-                    render={({ field }) => (
-                    <FormItem className="space-y-3">
-                        <FormLabel>Timing / Purpose</FormLabel>
-                        <FormControl>
-                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                            <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="Ready to proceed" /></FormControl>
-                            <FormLabel className="font-normal">Ready to proceed</FormLabel>
-                            </FormItem>
-                            <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="Budget only" /></FormControl>
-                            <FormLabel className="font-normal">Budget only</FormLabel>
-                            </FormItem>
-                        </RadioGroup>
-                        </FormControl>
-                    </FormItem>
-                    )}
-              />
               <FormField
                 control={form.control}
-                name="numberOfRooms"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Number of rooms</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="e.g. 3" {...field} value={field.value ?? ''} onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} />
-                    </FormControl>
+                name="roomsToPaint"
+                render={() => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>Rooms to Paint</FormLabel>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                      {roomOptions.map((room) => (
+                        <FormField
+                          key={room}
+                          control={form.control}
+                          name="roomsToPaint"
+                          render={({ field }) => {
+                            return (
+                              <FormItem key={room} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(room)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), room])
+                                        : field.onChange(field.value?.filter((value) => value !== room))
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal cursor-pointer text-xs">{room}</FormLabel>
+                              </FormItem>
+                            )
+                          }}
+                        />
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -342,7 +349,7 @@ export function EstimateForm() {
                 control={form.control}
                 name="existingWallColour"
                 render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
+                  <FormItem>
                     <FormLabel>Existing Wall Colour</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. White, Dark Blue" {...field} />
@@ -350,6 +357,27 @@ export function EstimateForm() {
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+              <FormField
+                    control={form.control}
+                    name="timingPurpose"
+                    render={({ field }) => (
+                    <FormItem className="space-y-3">
+                        <FormLabel>Timing / Purpose</FormLabel>
+                        <FormControl>
+                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                            <FormControl><RadioGroupItem value="Ready to proceed" /></FormControl>
+                            <FormLabel className="font-normal">Ready to proceed</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                            <FormControl><RadioGroupItem value="Budget only" /></FormControl>
+                            <FormLabel className="font-normal">Budget only</FormLabel>
+                            </FormItem>
+                        </RadioGroup>
+                        </FormControl>
+                    </FormItem>
+                    )}
               />
             </CardContent>
           </Card>
