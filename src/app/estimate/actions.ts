@@ -9,7 +9,7 @@ const estimateFormSchema = z.object({
   name: z.string().min(1, 'Name is required.'),
   email: z.string().email('Invalid email address.'),
   phone: z.string().optional(),
-  typeOfWork: z.enum(['Interior Painting', 'Exterior Painting', 'Timber']),
+  typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).min(1, 'Please select at least one type of work.'),
   scopeOfPainting: z.enum(['Full painting', 'Partial painting']),
   propertyType: z.string().min(1, 'Property type is required.'),
   numberOfRooms: z.coerce.number().positive().optional(),
@@ -31,14 +31,9 @@ const estimateFormSchema = z.object({
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
     })
   ),
-}).refine(data => {
-    return !data.paintAreas.trimPaint || (data.paintAreas.trimPaint && data.trimPaintOptions && data.trimPaintOptions.paintType && data.trimPaintOptions.trimItems.length > 0);
-}, {
-    message: 'Please select trim paint options',
-    path: ['trimPaintOptions'],
 });
 
-export async function submitEstimate(formData: z.infer<typeof estimateFormSchema>, userId?: string) {
+export async function submitEstimate(formData: any, userId?: string) {
   if (!userId) {
     return { error: 'You must be logged in to get an estimate.' };
   }
@@ -53,13 +48,12 @@ export async function submitEstimate(formData: z.infer<typeof estimateFormSchema
   }
 
   try {
-    const aiPayload = validatedFields.data;
+    const aiPayload = { ...validatedFields.data };
     if (!aiPayload.paintAreas.trimPaint) {
-        // @ts-ignore
         delete aiPayload.trimPaintOptions;
     }
     
-    const estimate = await generatePaintingEstimate(aiPayload);
+    const estimate = await generatePaintingEstimate(aiPayload as any);
 
     await addDoc(collection(db, 'estimates'), {
       userId: userId,

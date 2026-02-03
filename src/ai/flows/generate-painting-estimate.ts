@@ -15,7 +15,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
   name: z.string().describe('The name of the customer.'),
   email: z.string().describe('The email of the customer.'),
   phone: z.string().optional().describe('The phone number of the customer.'),
-  typeOfWork: z.enum(['Interior Painting', 'Exterior Painting', 'Timber']).describe('The type of work to be done.'),
+  typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).describe('The type of work to be done.'),
   scopeOfPainting: z.enum(['Full painting', 'Partial painting']).describe('The scope of the painting job.'),
   propertyType: z.string().describe('The type of property.'),
   numberOfRooms: z.number().optional().describe('The number of rooms to be painted.'),
@@ -65,7 +65,7 @@ const prompt = ai.definePrompt({
 
   **Job Details:**
   - Property Type: {{propertyType}}
-  - Type of Work: {{typeOfWork}}
+  - Type of Work: {{#each typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
   - Scope of Painting: {{scopeOfPainting}}
   - Timing/Purpose: {{timingPurpose}}
   {{#if numberOfRooms}}- Number of Rooms: {{numberOfRooms}}{{/if}}
