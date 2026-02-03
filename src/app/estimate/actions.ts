@@ -10,7 +10,7 @@ const estimateFormSchema = z.object({
   email: z.string().email('Invalid email address.'),
   phone: z.string().optional(),
   typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).min(1, 'Please select at least one type of work.'),
-  scopeOfPainting: z.enum(['Full painting', 'Partial painting']),
+  scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
   roomsToPaint: z.array(z.string()).optional(),
   approxSize: z.coerce.number().positive().optional(),
