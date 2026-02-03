@@ -16,7 +16,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
   email: z.string().describe('The email of the customer.'),
   phone: z.string().optional().describe('The phone number of the customer.'),
   typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).describe('The type of work to be done.'),
-  scopeOfPainting: z.enum(['Full painting', 'Partial painting']).describe('The scope of the painting job.'),
+  scopeOfPainting: z.enum(['Entire property', 'Specific areas only']).describe('The scope of the painting job.'),
   propertyType: z.string().describe('The type of property.'),
   roomsToPaint: z.array(z.string()).optional().describe('The specific rooms selected to be painted.'),
   approxSize: z.number().optional().describe('The approximate size of the area to be painted in square meters.'),
@@ -66,10 +66,10 @@ const prompt = ai.definePrompt({
   **Job Details:**
   - Property Type: {{propertyType}}
   - Type of Work: {{#each typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
-  - Scope of Painting: {{scopeOfPainting}}
+  - Scope: {{scopeOfPainting}}
   - Reason for painting: {{timingPurpose}}
   {{#if roomsToPaint}}
-  - Rooms to Paint: {{#each roomsToPaint}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+  - Rooms/Areas to Paint: {{#each roomsToPaint}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
   {{/if}}
   {{#if approxSize}}- Approx. Size (sqm): {{approxSize}}{{/if}}
   {{#if existingWallColour}}- Existing Wall Colour: {{existingWallColour}}{{/if}}
