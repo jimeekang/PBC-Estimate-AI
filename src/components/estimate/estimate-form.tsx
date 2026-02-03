@@ -46,10 +46,10 @@ const trimItems = [
   { id: 'Skirting Boards', label: 'Skirting Boards', icon: Baseline },
 ] as const;
 
-const wallConditionItems = [
-  { id: 'Cracks', label: 'Cracks' },
-  { id: 'Mould', label: 'Mould' },
-  { id: 'Stains or contamination', label: 'Stains or contamination' },
+const paintConditionOptions = [
+  { id: 'Excellent', label: 'Excellent - Like new, no visible issues' },
+  { id: 'Fair', label: 'Fair - Some wear, minor peeling or fading' },
+  { id: 'Poor', label: 'Poor - Peeling, cracking, or significant damage' },
 ] as const;
 
 const jobDifficultyItems = [
@@ -82,7 +82,7 @@ const estimateFormSchema = z.object({
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
-  wallCondition: z.array(z.enum(['Cracks', 'Mould', 'Stains or contamination'])).optional(),
+  paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
   jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional(),
 
   paintAreas: z.object({
@@ -122,7 +122,7 @@ export function EstimateForm() {
       existingWallColour: '',
       location: '',
       timingPurpose: 'Maintenance or refresh',
-      wallCondition: [],
+      paintCondition: undefined,
       jobDifficulty: [],
     },
   });
@@ -545,40 +545,32 @@ export function EstimateForm() {
 
                 <FormField
                     control={form.control}
-                    name="wallCondition"
-                    render={() => (
-                        <FormItem>
-                        <div className="mb-4">
-                            <FormLabel className="text-base flex items-center gap-2"><ShieldAlert /> Wall Condition</FormLabel>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {wallConditionItems.map((item) => (
-                            <FormField
-                            key={item.id}
-                            control={form.control}
-                            name="wallCondition"
-                            render={({ field }) => {
-                                return (
-                                <FormItem key={item.id} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
-                                    <FormControl>
-                                    <Checkbox
-                                        checked={field.value?.includes(item.id)}
-                                        onCheckedChange={(checked) => {
-                                        return checked
-                                            ? field.onChange([...(field.value || []), item.id])
-                                            : field.onChange(field.value?.filter((value) => value !== item.id))
-                                        }}
-                                    />
-                                    </FormControl>
-                                    <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">{item.label}</FormLabel>
-                                </FormItem>
-                                )
-                            }}
-                            />
-                        ))}
-                        </div>
+                    name="paintCondition"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-base flex items-center gap-2">
+                          <ShieldAlert className="h-5 w-5" /> Current paint condition
+                        </FormLabel>
+                        <FormControl>
+                          <RadioGroup
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            className="flex flex-col space-y-1"
+                          >
+                            {paintConditionOptions.map((option) => (
+                              <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value={option.id} />
+                                </FormControl>
+                                <FormLabel className="font-normal cursor-pointer">
+                                  {option.label}
+                                </FormLabel>
+                              </FormItem>
+                            ))}
+                          </RadioGroup>
+                        </FormControl>
                         <FormMessage />
-                        </FormItem>
+                      </FormItem>
                     )}
                 />
                 <FormField

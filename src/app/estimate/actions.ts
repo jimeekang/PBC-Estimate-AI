@@ -17,7 +17,7 @@ const estimateFormSchema = z.object({
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
-  wallCondition: z.array(z.enum(['Cracks', 'Mould', 'Stains or contamination'])).optional(),
+  paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
   jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional(),
 
   paintAreas: z.object({
