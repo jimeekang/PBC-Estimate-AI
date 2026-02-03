@@ -26,6 +26,7 @@ import {
   Palette,
   RectangleHorizontal,
   ShieldAlert,
+  TreePine,
   TrendingUp,
   User,
   WandSparkles,
@@ -85,10 +86,11 @@ const estimateFormSchema = z.object({
     ceilingPaint: z.boolean().default(false),
     wallPaint: z.boolean().default(false),
     trimPaint: z.boolean().default(false),
+    timberPaint: z.boolean().default(false),
   }).default({}),
   trimPaintOptions: z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
-    trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])).min(1, 'Please select at least one trim item.'),
+    trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
   }).optional(),
 });
 
@@ -107,6 +109,7 @@ export function EstimateForm() {
         ceilingPaint: false,
         wallPaint: false,
         trimPaint: false,
+        timberPaint: false,
       },
       name: '',
       email: '',
@@ -123,6 +126,8 @@ export function EstimateForm() {
   });
 
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
+  const watchTimberPaint = form.watch('paintAreas.timberPaint');
+  const showTrimOptions = watchTrimPaint || watchTimberPaint;
 
   async function onSubmit(values: EstimateFormValues) {
     setIsPending(true);
@@ -363,7 +368,7 @@ export function EstimateForm() {
             <CardContent className="space-y-6">
                 <div className="space-y-4">
                     <FormLabel>Paint Areas</FormLabel>
-                    <div className="space-y-2 rounded-md border p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-md border p-4">
                        <FormField
                         control={form.control}
                         name="paintAreas.ceilingPaint"
@@ -374,7 +379,7 @@ export function EstimateForm() {
                                 </FormControl>
                                 <div className="space-y-1 leading-none">
                                 <FormLabel className="flex items-center gap-2 cursor-pointer">
-                                    <PaintRoller className="h-5 w-5" /> Ceiling Painting
+                                    <PaintRoller className="h-5 w-5" /> Ceiling Paint
                                 </FormLabel>
                                 </div>
                             </FormItem>
@@ -407,6 +412,22 @@ export function EstimateForm() {
                                 <div className="space-y-1 leading-none">
                                 <FormLabel className="flex items-center gap-2 cursor-pointer">
                                     <Palette className="h-5 w-5" /> Trim Paint
+                                </FormLabel>
+                                </div>
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="paintAreas.timberPaint"
+                            render={({ field }) => (
+                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                                <FormControl>
+                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                <FormLabel className="flex items-center gap-2 cursor-pointer">
+                                    <TreePine className="h-5 w-5" /> Timber Paint
                                 </FormLabel>
                                 </div>
                             </FormItem>
@@ -496,7 +517,7 @@ export function EstimateForm() {
           </Card>
 
           <AnimatePresence>
-            {watchTrimPaint && (
+            {showTrimOptions && (
               <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -549,7 +570,7 @@ export function EstimateForm() {
                             <div className="mb-4">
                                 <FormLabel className="text-base">Trim Items</FormLabel>
                                 <FormDescription>
-                                Select which trim items you want to be painted.
+                                Select which items you want to be painted.
                                 </FormDescription>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

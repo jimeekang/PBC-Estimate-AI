@@ -30,11 +30,12 @@ const GeneratePaintingEstimateInputSchema = z.object({
     ceilingPaint: z.boolean().describe('Whether ceiling paint is selected.'),
     wallPaint: z.boolean().describe('Whether wall paint is selected.'),
     trimPaint: z.boolean().describe('Whether trim paint is selected.'),
+    timberPaint: z.boolean().describe('Whether timber paint is selected.'),
   }).describe('The paint areas selected by the user.'),
   trimPaintOptions: z.optional(z.object({
     paintType: z.enum(['Oil-based', 'Water-based']).describe('The type of trim paint selected.'),
     trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])).describe('The trim items selected.'),
-  }).describe('The trim paint options selected by the user, if trim paint is selected.')),
+  }).describe('The trim paint options selected by the user, if trim or timber paint is selected.')),
 });
 export type GeneratePaintingEstimateInput = z.infer<typeof GeneratePaintingEstimateInputSchema>;
 
@@ -76,14 +77,15 @@ const prompt = ai.definePrompt({
   - Ceiling: {{#if paintAreas.ceilingPaint}}Yes{{else}}No{{/if}}
   - Walls: {{#if paintAreas.wallPaint}}Yes{{else}}No{{/if}}
   - Trim: {{#if paintAreas.trimPaint}}Yes{{else}}No{{/if}}
+  - Timber: {{#if paintAreas.timberPaint}}Yes{{else}}No{{/if}}
 
-  {{#if paintAreas.trimPaint}}
-  **Trim Details:**
+  {{#if (or paintAreas.trimPaint paintAreas.timberPaint)}}
+  **Trim/Timber Details:**
     {{#if trimPaintOptions}}
     - Paint Type: {{trimPaintOptions.paintType}}
     - Items: {{#each trimPaintOptions.trimItems}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
     {{else}}
-    - No trim details provided.
+    - No specific trim/timber details provided.
     {{/if}}
   {{/if}}
 

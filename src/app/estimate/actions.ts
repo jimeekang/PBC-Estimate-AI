@@ -24,6 +24,7 @@ const estimateFormSchema = z.object({
     ceilingPaint: z.boolean().default(false),
     wallPaint: z.boolean().default(false),
     trimPaint: z.boolean().default(false),
+    timberPaint: z.boolean().default(false),
   }).default({}),
   trimPaintOptions: z.optional(
     z.object({
@@ -49,7 +50,8 @@ export async function submitEstimate(formData: any, userId?: string) {
 
   try {
     const aiPayload = { ...validatedFields.data };
-    if (!aiPayload.paintAreas.trimPaint) {
+    // If neither trim nor timber paint is selected, remove trimPaintOptions
+    if (!aiPayload.paintAreas.trimPaint && !aiPayload.paintAreas.timberPaint) {
         delete aiPayload.trimPaintOptions;
     }
     
