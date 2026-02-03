@@ -22,7 +22,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
   approxSize: z.number().optional().describe('The approximate size of the area to be painted in square meters.'),
   existingWallColour: z.string().optional().describe('The existing wall colour.'),
   location: z.string().optional().describe('The location of the property.'),
-  timingPurpose: z.enum(['Ready to proceed', 'Budget only']).describe('The timing and purpose of the estimate.'),
+  timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']).describe('The reason/purpose for the painting job.'),
   wallCondition: z.array(z.enum(['Cracks', 'Mould', 'Stains or contamination'])).optional().describe('The condition of the walls.'),
   jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional().describe('Factors contributing to job difficulty.'),
 
@@ -67,7 +67,7 @@ const prompt = ai.definePrompt({
   - Property Type: {{propertyType}}
   - Type of Work: {{#each typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
   - Scope of Painting: {{scopeOfPainting}}
-  - Timing/Purpose: {{timingPurpose}}
+  - Reason for painting: {{timingPurpose}}
   {{#if roomsToPaint}}
   - Rooms to Paint: {{#each roomsToPaint}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
   {{/if}}

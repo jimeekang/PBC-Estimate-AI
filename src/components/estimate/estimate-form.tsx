@@ -81,7 +81,7 @@ const estimateFormSchema = z.object({
   approxSize: z.coerce.number().positive().optional(),
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
-  timingPurpose: z.enum(['Ready to proceed', 'Budget only']),
+  timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   wallCondition: z.array(z.enum(['Cracks', 'Mould', 'Stains or contamination'])).optional(),
   jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional(),
 
@@ -121,7 +121,7 @@ export function EstimateForm() {
       roomsToPaint: [],
       existingWallColour: '',
       location: '',
-      timingPurpose: 'Ready to proceed',
+      timingPurpose: 'Maintenance or refresh',
       wallCondition: [],
       jobDifficulty: [],
     },
@@ -363,16 +363,16 @@ export function EstimateForm() {
                     name="timingPurpose"
                     render={({ field }) => (
                     <FormItem className="space-y-3">
-                        <FormLabel>Timing / Purpose</FormLabel>
+                        <FormLabel>Why are you painting?</FormLabel>
                         <FormControl>
                         <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
                             <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="Ready to proceed" /></FormControl>
-                            <FormLabel className="font-normal">Ready to proceed</FormLabel>
+                            <FormControl><RadioGroupItem value="Maintenance or refresh" /></FormControl>
+                            <FormLabel className="font-normal">Maintenance or refresh</FormLabel>
                             </FormItem>
                             <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="Budget only" /></FormControl>
-                            <FormLabel className="font-normal">Budget only</FormLabel>
+                            <FormControl><RadioGroupItem value="Preparing for sale or rental" /></FormControl>
+                            <FormLabel className="font-normal">Preparing for sale or rental</FormLabel>
                             </FormItem>
                         </RadioGroup>
                         </FormControl>
