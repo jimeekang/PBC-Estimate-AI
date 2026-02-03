@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -18,20 +18,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Baseline,
-  BedDouble,
-  Clock,
   DoorOpen,
-  Home,
   Layers,
   Loader2,
-  Mail,
-  MapPin,
   PaintRoller,
   Paintbrush,
   Palette,
-  Phone,
   RectangleHorizontal,
-  Ruler,
   ShieldAlert,
   TrendingUp,
   User,
@@ -68,11 +61,16 @@ const jobDifficultyItems = [
 
 const propertyTypes = ['Apartment', 'House', 'Townhouse', 'Office', 'Other'];
 
+const typeOfWorkItems = [
+  { id: 'Interior Painting', label: 'Interior Painting' },
+  { id: 'Exterior Painting', label: 'Exterior Painting' },
+] as const;
+
 const estimateFormSchema = z.object({
   name: z.string().min(1, 'Name is required.'),
   email: z.string().email('Invalid email address.'),
   phone: z.string().optional(),
-  typeOfWork: z.enum(['Interior Painting', 'Exterior Painting', 'Timber']),
+  typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).min(1, 'Please select at least one type of work.'),
   scopeOfPainting: z.enum(['Full painting', 'Partial painting']),
   propertyType: z.string().min(1, 'Property type is required.'),
   numberOfRooms: z.coerce.number().positive().optional(),
@@ -113,7 +111,7 @@ export function EstimateForm() {
       name: '',
       email: '',
       phone: '',
-      typeOfWork: 'Interior Painting',
+      typeOfWork: [],
       scopeOfPainting: 'Full painting',
       propertyType: '',
       existingWallColour: '',
@@ -218,25 +216,36 @@ export function EstimateForm() {
               <FormField
                 control={form.control}
                 name="typeOfWork"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
+                render={() => (
+                  <FormItem className="sm:col-span-2">
                     <FormLabel>Type of Work</FormLabel>
-                    <FormControl>
-                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl><RadioGroupItem value="Interior Painting" /></FormControl>
-                          <FormLabel className="font-normal">Interior Painting</FormLabel>
-                        </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl><RadioGroupItem value="Exterior Painting" /></FormControl>
-                          <FormLabel className="font-normal">Exterior Painting</FormLabel>
-                        </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl><RadioGroupItem value="Timber" /></FormControl>
-                          <FormLabel className="font-normal">Timber</FormLabel>
-                        </FormItem>
-                      </RadioGroup>
-                    </FormControl>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                      {typeOfWorkItems.map((item) => (
+                        <FormField
+                          key={item.id}
+                          control={form.control}
+                          name="typeOfWork"
+                          render={({ field }) => {
+                            return (
+                              <FormItem key={item.id} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(item.id)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), item.id])
+                                        : field.onChange(field.value?.filter((value) => value !== item.id))
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">{item.label}</FormLabel>
+                              </FormItem>
+                            )
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
