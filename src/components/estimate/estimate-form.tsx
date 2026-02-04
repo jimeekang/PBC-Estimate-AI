@@ -33,6 +33,9 @@ import {
   TrendingUp,
   User,
   WandSparkles,
+  Home,
+  Droplets,
+  Hammer,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -67,6 +70,14 @@ const roomOptions = [
   'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Bathroom', 'Livingroom', 'Lounge', 'Kitchen', 'Laundry', 'Etc'
 ];
 
+const exteriorAreaOptions = [
+  { id: 'Wall', label: 'Wall', icon: Home },
+  { id: 'Eaves', label: 'Eaves', icon: ArrowUpToLine },
+  { id: 'Gutter', label: 'Gutter', icon: Droplets },
+  { id: 'Fasia', label: 'Fasia', icon: Sparkles },
+  { id: 'Exterior Trim', label: 'Exterior Trim', icon: Hammer },
+];
+
 const propertyTypes = ['Apartment', 'House', 'Townhouse', 'Office', 'Other'];
 
 const typeOfWorkItems = [
@@ -82,6 +93,7 @@ const estimateFormSchema = z.object({
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
   roomsToPaint: z.array(z.string()).optional(),
+  exteriorAreas: z.array(z.string()).optional(),
   approxSize: z.coerce.number().positive().optional(),
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
@@ -123,6 +135,7 @@ export function EstimateForm() {
       scopeOfPainting: 'Entire property',
       propertyType: '',
       roomsToPaint: [],
+      exteriorAreas: [],
       existingWallColour: '',
       location: '',
       timingPurpose: 'Maintenance or refresh',
@@ -131,8 +144,11 @@ export function EstimateForm() {
     },
   });
 
+  const watchTypeOfWork = form.watch('typeOfWork') || [];
+  const isInterior = watchTypeOfWork.includes('Interior Painting');
+  const isExterior = watchTypeOfWork.includes('Exterior Painting');
+  
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
-  const showTrimOptions = watchTrimPaint;
 
   async function onSubmit(values: EstimateFormValues) {
     setIsPending(true);
@@ -259,6 +275,105 @@ export function EstimateForm() {
                   </FormItem>
                 )}
               />
+              
+              <AnimatePresence>
+                {isInterior && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="sm:col-span-2 overflow-hidden"
+                  >
+                    <FormField
+                      control={form.control}
+                      name="roomsToPaint"
+                      render={() => (
+                        <FormItem>
+                          <FormLabel>Rooms to Paint (Interior)</FormLabel>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                            {roomOptions.map((room) => (
+                              <FormField
+                                key={room}
+                                control={form.control}
+                                name="roomsToPaint"
+                                render={({ field }) => {
+                                  return (
+                                    <FormItem key={room} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                                      <FormControl>
+                                        <Checkbox
+                                          checked={field.value?.includes(room)}
+                                          onCheckedChange={(checked) => {
+                                            return checked
+                                              ? field.onChange([...(field.value || []), room])
+                                              : field.onChange(field.value?.filter((value) => value !== room))
+                                          }}
+                                        />
+                                      </FormControl>
+                                      <FormLabel className="font-normal cursor-pointer text-xs">{room}</FormLabel>
+                                    </FormItem>
+                                  )
+                                }}
+                              />
+                            ))}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {isExterior && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="sm:col-span-2 overflow-hidden"
+                  >
+                    <FormField
+                      control={form.control}
+                      name="exteriorAreas"
+                      render={() => (
+                        <FormItem>
+                          <FormLabel>Exterior Areas</FormLabel>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                            {exteriorAreaOptions.map((item) => (
+                              <FormField
+                                key={item.id}
+                                control={form.control}
+                                name="exteriorAreas"
+                                render={({ field }) => {
+                                  return (
+                                    <FormItem key={item.id} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                                      <FormControl>
+                                        <Checkbox
+                                          checked={field.value?.includes(item.id)}
+                                          onCheckedChange={(checked) => {
+                                            return checked
+                                              ? field.onChange([...(field.value || []), item.id])
+                                              : field.onChange(field.value?.filter((value) => value !== item.id))
+                                          }}
+                                        />
+                                      </FormControl>
+                                      <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs">
+                                        <item.icon className="h-4 w-4" /> {item.label}
+                                      </FormLabel>
+                                    </FormItem>
+                                  )
+                                }}
+                              />
+                            ))}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <FormField
                 control={form.control}
                 name="scopeOfPainting"
@@ -300,42 +415,6 @@ export function EstimateForm() {
                     </FormItem>
                   )}
                 />
-              <FormField
-                control={form.control}
-                name="roomsToPaint"
-                render={() => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Rooms to Paint</FormLabel>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                      {roomOptions.map((room) => (
-                        <FormField
-                          key={room}
-                          control={form.control}
-                          name="roomsToPaint"
-                          render={({ field }) => {
-                            return (
-                              <FormItem key={room} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value?.includes(room)}
-                                    onCheckedChange={(checked) => {
-                                      return checked
-                                        ? field.onChange([...(field.value || []), room])
-                                        : field.onChange(field.value?.filter((value) => value !== room))
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormLabel className="font-normal cursor-pointer text-xs">{room}</FormLabel>
-                              </FormItem>
-                            )
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <FormField
                 control={form.control}
                 name="approxSize"
@@ -449,7 +528,7 @@ export function EstimateForm() {
                 </div>
 
                 <AnimatePresence>
-                  {showTrimOptions && (
+                  {watchTrimPaint && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}

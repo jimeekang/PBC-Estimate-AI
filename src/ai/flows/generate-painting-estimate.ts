@@ -18,7 +18,8 @@ const GeneratePaintingEstimateInputSchema = z.object({
   typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).describe('The type of work to be done.'),
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']).describe('The scope of the painting job.'),
   propertyType: z.string().describe('The type of property.'),
-  roomsToPaint: z.array(z.string()).optional().describe('The specific rooms selected to be painted.'),
+  roomsToPaint: z.array(z.string()).optional().describe('The specific rooms selected to be painted (for Interior).'),
+  exteriorAreas: z.array(z.string()).optional().describe('The specific exterior areas selected (for Exterior).'),
   approxSize: z.number().optional().describe('The approximate size of the area to be painted in square meters.'),
   existingWallColour: z.string().optional().describe('The existing wall colour.'),
   location: z.string().optional().describe('The location of the property.'),
@@ -66,6 +67,7 @@ const prompt = ai.definePrompt({
   - **Service Scope Adjustments**:
     - The baseline includes Ceilings, Walls, and Doors.
     - **Window Frames** and **Skirting Boards**: These are NOT included in the baseline and require meticulous, time-consuming labor. If these are selected in "Trim Items", increase the estimate significantly.
+    - **Exterior Specifics**: Exterior work involving Eaves, Gutters, and Fascia requires specialized preparation and often heights equipment, increasing the cost compared to simple wall painting.
   - **Condition Surcharge**: 
     - Excellent: Standard rate.
     - Fair: Add 10-15% for minor preparation.
@@ -78,7 +80,15 @@ const prompt = ai.definePrompt({
   - Property: {{propertyType}}
   - Work Type: {{#each typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
   - Scope: {{scopeOfPainting}} (Goal: {{timingPurpose}})
-  {{#if roomsToPaint}}- Areas: {{#each roomsToPaint}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}
+  
+  {{#if roomsToPaint}}
+  - Interior Areas: {{#each roomsToPaint}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+  {{/if}}
+  
+  {{#if exteriorAreas}}
+  - Exterior Areas: {{#each exteriorAreas}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+  {{/if}}
+
   {{#if approxSize}}- Size: {{approxSize}} sqm{{/if}}
   {{#if existingWallColour}}- Current Color: {{existingWallColour}}{{/if}}
 
@@ -95,7 +105,7 @@ const prompt = ai.definePrompt({
   1. Provide a realistic "Estimated Price Range" in AUD (e.g., "$4,200 - $4,800").
   2. Write an "Explanation" that:
      - Greets the customer by name professionally.
-     - Specifically mentions how the property type ({{propertyType}}) and the number of rooms influenced the base price.
+     - Specifically mentions how the property type ({{propertyType}}) and the selected areas (Interior/Exterior) influenced the base price.
      - If Windows or Skirting Boards were selected, explain that these require extra detail work and increased the labor cost.
      - Mention that the estimate factors in both high-quality materials and the expert labor (man-days) required for a professional finish.
      - Maintain a helpful, expert, and encouraging tone.
