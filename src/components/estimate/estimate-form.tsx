@@ -17,15 +17,19 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+  ArrowUpToLine,
   Baseline,
+  Construction,
   DoorOpen,
+  Layout,
   Layers,
   Loader2,
+  MoveUpRight,
   PaintRoller,
   Paintbrush,
   Palette,
-  RectangleHorizontal,
   ShieldAlert,
+  Sparkles,
   TrendingUp,
   User,
   WandSparkles,
@@ -42,7 +46,7 @@ import { useAuth } from '@/providers/auth-provider';
 
 const trimItems = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
-  { id: 'Window Frames', label: 'Window Frames', icon: RectangleHorizontal },
+  { id: 'Window Frames', label: 'Window Frames', icon: Layout },
   { id: 'Skirting Boards', label: 'Skirting Boards', icon: Baseline },
 ] as const;
 
@@ -53,10 +57,10 @@ const paintConditionOptions = [
 ] as const;
 
 const jobDifficultyItems = [
-  { id: 'Stairs', label: 'Stairs' },
-  { id: 'High ceilings', label: 'High ceilings' },
-  { id: 'Extensive mouldings or trims', label: 'Extensive mouldings or trims' },
-  { id: 'Difficult access areas', label: 'Difficult access areas' },
+  { id: 'Stairs', label: 'Stairs', icon: MoveUpRight },
+  { id: 'High ceilings', label: 'High ceilings', icon: ArrowUpToLine },
+  { id: 'Extensive mouldings or trims', label: 'Extensive mouldings or trims', icon: Sparkles },
+  { id: 'Difficult access areas', label: 'Difficult access areas', icon: Construction },
 ] as const;
 
 const roomOptions = [
@@ -600,7 +604,9 @@ export function EstimateForm() {
                                         }}
                                     />
                                     </FormControl>
-                                    <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">{item.label}</FormLabel>
+                                    <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">
+                                      <item.icon className="h-5 w-5" /> {item.label}
+                                    </FormLabel>
                                 </FormItem>
                                 )
                             }}
