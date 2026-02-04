@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -7,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -121,6 +121,7 @@ export function EstimateForm() {
   const [state, setState] = useState<{data?: GeneratePaintingEstimateOutput, error?: string}>({});
   const [isPending, setIsPending] = useState(false);
   const [estimateCount, setEstimateCount] = useState(0);
+  const [isCountLoading, setIsCountLoading] = useState(true);
   const [isLimitReached, setIsLimitReached] = useState(false);
   const { toast } = useToast();
 
@@ -133,7 +134,7 @@ export function EstimateForm() {
         trimPaint: false,
       },
       name: '',
-      email: '',
+      email: user?.email || '',
       phone: '',
       typeOfWork: [],
       scopeOfPainting: 'Entire property',
@@ -151,9 +152,18 @@ export function EstimateForm() {
   useEffect(() => {
     async function fetchCount() {
       if (user) {
-        const count = await getEstimateCount(user.uid);
-        setEstimateCount(count);
-        if (count >= 2) setIsLimitReached(true);
+        setIsCountLoading(true);
+        try {
+          const count = await getEstimateCount(user.uid);
+          setEstimateCount(count);
+          if (count >= 2) {
+            setIsLimitReached(true);
+          }
+        } catch (err) {
+          console.error("Failed to fetch count:", err);
+        } finally {
+          setIsCountLoading(false);
+        }
       }
     }
     fetchCount();
@@ -185,10 +195,18 @@ export function EstimateForm() {
         });
         if ((result as any).limitReached) {
             setIsLimitReached(true);
+            setEstimateCount(2);
         }
     } else {
-        setEstimateCount(prev => prev + 1);
-        if (estimateCount + 1 >= 2) setIsLimitReached(true);
+        const newCount = estimateCount + 1;
+        setEstimateCount(newCount);
+        if (newCount >= 2) {
+            setIsLimitReached(true);
+        }
+        toast({
+          title: "Success",
+          description: `Estimate generated! (${newCount}/2 used)`,
+        });
     }
     
     setState(result);
@@ -197,15 +215,23 @@ export function EstimateForm() {
 
   return (
     <>
-      {isLimitReached && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Free Limit Reached</AlertTitle>
-          <AlertDescription>
-            You have already generated 2 estimates. To generate more, please contact our support team or upgrade your account.
-          </AlertDescription>
-        </Alert>
-      )}
+      <AnimatePresence>
+        {isLimitReached && !isCountLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            <Alert variant="destructive" className="mb-6">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Free Limit Reached</AlertTitle>
+              <AlertDescription>
+                You have already generated 2 estimates. Please contact our support team for a professional on-site quote.
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -732,17 +758,30 @@ export function EstimateForm() {
             </CardContent>
           </Card>
 
-          <Button type="submit" size="lg" className="w-full text-lg" disabled={isPending || isLimitReached}>
-            {isPending ? (
-              <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-            ) : (
-              <WandSparkles className="mr-2 h-6 w-6" />
-            )}
-            {isLimitReached ? 'Limit Reached' : 'Generate Estimate'}
-          </Button>
-          
-          <div className="text-center text-sm text-muted-foreground mt-2">
-            Remaining free estimates: {Math.max(0, 2 - estimateCount)} / 2
+          <div className="space-y-4">
+            <Button 
+              type="submit" 
+              size="lg" 
+              className="w-full text-lg h-14" 
+              disabled={isPending || isLimitReached || isCountLoading}
+            >
+              {isPending ? (
+                <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+              ) : (
+                <WandSparkles className="mr-2 h-6 w-6" />
+              )}
+              {isLimitReached ? 'Free Limit Reached' : isCountLoading ? 'Checking limits...' : 'Generate Estimate'}
+            </Button>
+            
+            <div className="text-center text-sm font-medium p-2 rounded-lg bg-accent/10 border border-accent/20">
+              {isCountLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Syncing with database...
+                </span>
+              ) : (
+                <>Remaining free estimates: <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span></>
+              )}
+            </div>
           </div>
         </form>
       </Form>
@@ -756,7 +795,7 @@ export function EstimateForm() {
                 exit={{ opacity: 0, y: -20 }}
             >
                 <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4"/>
-                <p className="text-muted-foreground">Our AI is crunching the numbers... Please wait.</p>
+                <p className="text-muted-foreground">Our AI is crunching the numbers... This may take a few seconds.</p>
             </motion.div>
         )}
       </AnimatePresence>
