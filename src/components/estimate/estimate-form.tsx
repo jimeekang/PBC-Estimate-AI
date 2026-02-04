@@ -241,6 +241,28 @@ export function EstimateForm() {
             <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-8">
               <FormField
                 control={form.control}
+                name="scopeOfPainting"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2 space-y-3">
+                    <FormLabel>What needs to be painted?</FormLabel>
+                    <FormControl>
+                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4 sm:gap-8">
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl><RadioGroupItem value="Entire property" /></FormControl>
+                          <FormLabel className="font-normal cursor-pointer">Entire property</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl><RadioGroupItem value="Specific areas only" /></FormControl>
+                          <FormLabel className="font-normal cursor-pointer">Specific areas only</FormLabel>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="typeOfWork"
                 render={() => (
                   <FormItem className="sm:col-span-2">
@@ -375,27 +397,6 @@ export function EstimateForm() {
               </AnimatePresence>
 
               <FormField
-                control={form.control}
-                name="scopeOfPainting"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>What needs to be painted?</FormLabel>
-                    <FormControl>
-                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl><RadioGroupItem value="Entire property" /></FormControl>
-                          <FormLabel className="font-normal">Entire property</FormLabel>
-                        </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl><RadioGroupItem value="Specific areas only" /></FormControl>
-                          <FormLabel className="font-normal">Specific areas only</FormLabel>
-                        </FormItem>
-                      </RadioGroup>
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
                   control={form.control}
                   name="propertyType"
                   render={({ field }) => (
@@ -451,11 +452,11 @@ export function EstimateForm() {
                         <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
                             <FormItem className="flex items-center space-x-3 space-y-0">
                             <FormControl><RadioGroupItem value="Maintenance or refresh" /></FormControl>
-                            <FormLabel className="font-normal">Maintenance or refresh</FormLabel>
+                            <FormLabel className="font-normal cursor-pointer">Maintenance or refresh</FormLabel>
                             </FormItem>
                             <FormItem className="flex items-center space-x-3 space-y-0">
                             <FormControl><RadioGroupItem value="Preparing for sale or rental" /></FormControl>
-                            <FormLabel className="font-normal">Preparing for sale or rental</FormLabel>
+                            <FormLabel className="font-normal cursor-pointer">Preparing for sale or rental</FormLabel>
                             </FormItem>
                         </RadioGroup>
                         </FormControl>
