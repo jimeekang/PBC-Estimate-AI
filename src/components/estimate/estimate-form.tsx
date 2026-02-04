@@ -36,16 +36,18 @@ import {
   Home,
   Droplets,
   Hammer,
+  AlertTriangle,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { submitEstimate } from '@/app/estimate/actions';
-import { useState } from 'react';
+import { submitEstimate, getEstimateCount } from '@/app/estimate/actions';
+import { useEffect, useState } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/providers/auth-provider';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 const trimItems = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
@@ -118,6 +120,8 @@ export function EstimateForm() {
   const { user } = useAuth();
   const [state, setState] = useState<{data?: GeneratePaintingEstimateOutput, error?: string}>({});
   const [isPending, setIsPending] = useState(false);
+  const [estimateCount, setEstimateCount] = useState(0);
+  const [isLimitReached, setIsLimitReached] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<EstimateFormValues>({
@@ -144,27 +148,65 @@ export function EstimateForm() {
     },
   });
 
+  useEffect(() => {
+    async function fetchCount() {
+      if (user) {
+        const count = await getEstimateCount(user.uid);
+        setEstimateCount(count);
+        if (count >= 2) setIsLimitReached(true);
+      }
+    }
+    fetchCount();
+  }, [user]);
+
   const watchTypeOfWork = form.watch('typeOfWork') || [];
   const isInterior = watchTypeOfWork.includes('Interior Painting');
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
 
   async function onSubmit(values: EstimateFormValues) {
+    if (isLimitReached) {
+        toast({
+            variant: "destructive",
+            title: "Limit Reached",
+            description: "You have already used your 2 free estimates.",
+        });
+        return;
+    }
+
     setIsPending(true);
     const result = await submitEstimate(values, user?.uid);
+    
     if(result.error) {
         toast({
             variant: "destructive",
             title: "Error",
             description: result.error,
-        })
+        });
+        if ((result as any).limitReached) {
+            setIsLimitReached(true);
+        }
+    } else {
+        setEstimateCount(prev => prev + 1);
+        if (estimateCount + 1 >= 2) setIsLimitReached(true);
     }
+    
     setState(result);
     setIsPending(false);
   }
 
   return (
     <>
+      {isLimitReached && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Free Limit Reached</AlertTitle>
+          <AlertDescription>
+            You have already generated 2 estimates. To generate more, please contact our support team or upgrade your account.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <Card className="shadow-md">
@@ -690,14 +732,18 @@ export function EstimateForm() {
             </CardContent>
           </Card>
 
-          <Button type="submit" size="lg" className="w-full text-lg" disabled={isPending}>
+          <Button type="submit" size="lg" className="w-full text-lg" disabled={isPending || isLimitReached}>
             {isPending ? (
               <Loader2 className="mr-2 h-6 w-6 animate-spin" />
             ) : (
               <WandSparkles className="mr-2 h-6 w-6" />
             )}
-            Generate Estimate
+            {isLimitReached ? 'Limit Reached' : 'Generate Estimate'}
           </Button>
+          
+          <div className="text-center text-sm text-muted-foreground mt-2">
+            Remaining free estimates: {Math.max(0, 2 - estimateCount)} / 2
+          </div>
         </form>
       </Form>
 
