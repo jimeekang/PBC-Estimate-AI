@@ -1,9 +1,19 @@
+'use client';
+
 import { MailCheck } from 'lucide-react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { auth } from '@/lib/firebase';
 
 export default function VerifyEmailPage() {
+  const router = useRouter();
+
+  const handleReturnToLogin = async () => {
+    await auth.signOut();
+    router.push('/login');
+  };
+
   return (
     <div className="flex min-h-full items-center justify-center p-4">
       <Card className="w-full max-w-md text-center shadow-lg">
@@ -17,8 +27,8 @@ export default function VerifyEmailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button asChild className="w-full">
-            <Link href="/login">Return to Login</Link>
+          <Button onClick={handleReturnToLogin} className="w-full">
+            Return to Login
           </Button>
           <p className="mt-4 text-xs text-muted-foreground">
             Didn't receive an email? Check your spam folder or try signing up again.

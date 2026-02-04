@@ -43,14 +43,22 @@ export function LoginForm() {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      if (!userCredential.user.emailVerified) {
-        await sendEmailVerification(userCredential.user);
-        await auth.signOut(); // Log out user until they are verified
+      const user = userCredential.user;
+
+      // Explicitly reload the user to get the latest emailVerified state from Firebase
+      await user.reload();
+
+      if (!user.emailVerified) {
+        // If email is not verified, send a new verification email and sign the user out.
+        await sendEmailVerification(user);
+        await auth.signOut();
         setIsPending(false);
-        return setErrors({ _form: ['Please verify your email before logging in. A new verification link has been sent.'] });
+        return setErrors({ _form: ['Please verify your email to log in. We have sent a new verification link to your email address.'] });
       }
-      // On success, trigger a full page refresh to navigate.
+      
+      // On successful verification, redirect to the estimate page.
       window.location.href = '/estimate';
+
     } catch (e: any) {
       setIsPending(false);
       if (e.code === 'auth/invalid-credential') {
