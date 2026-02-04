@@ -7,6 +7,7 @@ import { auth } from '@/lib/firebase';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -14,17 +15,22 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
+      if (user) {
+        const idTokenResult = await user.getIdTokenResult();
+        setIsAdmin(!!idTokenResult.claims.admin);
+      }
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  return <AuthContext.Provider value={{ user, loading }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, isAdmin }}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
@@ -32,5 +38,5 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return { user: context.user, loading: context.loading };
+  return context;
 };

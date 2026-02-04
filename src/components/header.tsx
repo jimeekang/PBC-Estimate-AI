@@ -15,10 +15,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { LogOut } from 'lucide-react';
+import { LayoutDashboard, LogOut } from 'lucide-react';
 
 export default function Header() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -55,6 +55,14 @@ export default function Header() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin">
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      <span>Admin Dashboard</span>
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
