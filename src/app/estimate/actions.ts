@@ -50,13 +50,11 @@ export async function submitEstimate(formData: any, userId?: string) {
   try {
     const rawData = validatedFields.data;
     
-    // Clean payload for AI and storage
     const aiPayload: any = {
       ...rawData,
-      approxSize: rawData.approxSize || undefined, // Convert null to undefined for AI
+      approxSize: rawData.approxSize || undefined,
     };
 
-    // If trim paint is not selected, ensure trimPaintOptions is removed
     if (!aiPayload.paintAreas.trimPaint) {
         delete aiPayload.trimPaintOptions;
     }
@@ -73,9 +71,16 @@ export async function submitEstimate(formData: any, userId?: string) {
     return { data: estimate };
   } catch (error: any) {
     console.error('Error generating estimate:', error);
-    // Return a more descriptive error message if possible
-    return { 
-      error: error.message || 'Failed to generate estimate. Please try again later.' 
-    };
+    
+    let message = 'Failed to generate estimate. Please try again later.';
+    const errorString = error.message || '';
+    
+    if (errorString.includes('403 Forbidden') && errorString.includes('API key')) {
+      message = 'Your Gemini API key has been reported as leaked and is blocked. Please issue a new key in Google AI Studio and update your .env file.';
+    } else if (errorString.includes('quota')) {
+      message = 'API rate limit exceeded. Please try again in a few minutes.';
+    }
+
+    return { error: message };
   }
 }
