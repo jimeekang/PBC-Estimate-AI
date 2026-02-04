@@ -1,0 +1,15 @@
+{
+  "firestore": {
+    "collections": {
+      "estimates": {
+        "description": "Stores AI-generated painting estimates for users",
+        "fields": {
+          "userId": "string",
+          "options": "map",
+          "estimate": "map",
+          "createdAt": "timestamp"
+        }
+      }
+    }
+  }
+}

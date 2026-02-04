@@ -1,4 +1,3 @@
-
 'use server';
 
 import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
@@ -52,20 +51,16 @@ export async function submitEstimate(formData: any, userId?: string) {
         limitReached: true
       };
     }
-  } catch (err) {
-    console.error('Error checking limit:', err);
-  }
 
-  const validatedFields = estimateFormSchema.safeParse(formData);
+    const validatedFields = estimateFormSchema.safeParse(formData);
 
-  if (!validatedFields.success) {
-    console.error('Validation Error:', validatedFields.error.flatten().fieldErrors);
-    return {
-      error: 'Invalid form data. Please check all required fields.',
-    };
-  }
+    if (!validatedFields.success) {
+      console.error('Validation Error:', validatedFields.error.flatten().fieldErrors);
+      return {
+        error: 'Invalid form data. Please check all required fields.',
+      };
+    }
 
-  try {
     const rawData = validatedFields.data;
     const aiPayload: any = {
       ...rawData,
@@ -88,12 +83,12 @@ export async function submitEstimate(formData: any, userId?: string) {
     return { data: estimate };
   } catch (error: any) {
     console.error('Error generating estimate:', error);
-    let message = 'Failed to generate estimate. Please try again later.';
-    return { error: message };
+    return { error: 'Failed to generate estimate. ' + (error.message || 'Please try again later.') };
   }
 }
 
 export async function getEstimateCount(userId: string) {
+  if (!userId) return 0;
   try {
     const estimatesRef = collection(db, 'estimates');
     const q = query(estimatesRef, where('userId', '==', userId));
@@ -101,6 +96,7 @@ export async function getEstimateCount(userId: string) {
     return snapshot.data().count;
   } catch (err) {
     console.error('Error fetching count from Firestore:', err);
+    // 보안 규칙 위반 시 콘솔에 로그가 찍히며 0이 반환될 수 있으므로 주의 깊게 확인이 필요합니다.
     return 0;
   }
 }
