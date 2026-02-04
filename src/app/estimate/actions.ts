@@ -13,6 +13,7 @@ const estimateFormSchema = z.object({
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
   roomsToPaint: z.array(z.string()).optional(),
+  exteriorAreas: z.array(z.string()).optional(),
   approxSize: z.coerce.number().positive().optional().nullable(),
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
@@ -75,7 +76,6 @@ export async function submitEstimate(formData: any, userId?: string) {
     let message = 'Failed to generate estimate. Please try again later.';
     const errorString = error.message || '';
     
-    // Detailed error handling for blocked/leaked API keys
     if (errorString.includes('403') || errorString.includes('API key')) {
       message = 'Your Gemini API key has been blocked (possibly leaked). Please issue a NEW API key at https://aistudio.google.com/app/apikey and update your .env file.';
     } else if (errorString.includes('quota')) {
