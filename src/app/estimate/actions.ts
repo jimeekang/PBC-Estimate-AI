@@ -13,7 +13,7 @@ const estimateFormSchema = z.object({
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
   roomsToPaint: z.array(z.string()).optional(),
-  approxSize: z.coerce.number().positive().optional(),
+  approxSize: z.coerce.number().positive().optional().nullable(),
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
@@ -41,31 +41,41 @@ export async function submitEstimate(formData: any, userId?: string) {
   const validatedFields = estimateFormSchema.safeParse(formData);
 
   if (!validatedFields.success) {
-    console.error(validatedFields.error.flatten().fieldErrors);
+    console.error('Validation Error:', validatedFields.error.flatten().fieldErrors);
     return {
-      error: 'Invalid form data. Please check your inputs.',
+      error: 'Invalid form data. Please check all required fields.',
     };
   }
 
   try {
-    const aiPayload = { ...validatedFields.data };
-    // If trim paint is not selected, remove trimPaintOptions
+    const rawData = validatedFields.data;
+    
+    // Clean payload for AI and storage
+    const aiPayload: any = {
+      ...rawData,
+      approxSize: rawData.approxSize || undefined, // Convert null to undefined for AI
+    };
+
+    // If trim paint is not selected, ensure trimPaintOptions is removed
     if (!aiPayload.paintAreas.trimPaint) {
         delete aiPayload.trimPaintOptions;
     }
     
-    const estimate = await generatePaintingEstimate(aiPayload as any);
+    const estimate = await generatePaintingEstimate(aiPayload);
 
     await addDoc(collection(db, 'estimates'), {
       userId: userId,
-      options: validatedFields.data,
+      options: rawData,
       estimate,
       createdAt: serverTimestamp(),
     });
 
     return { data: estimate };
-  } catch (error) {
-    console.error('Error getting estimate or saving to Firestore:', error);
-    return { error: 'Failed to generate estimate. Please try again.' };
+  } catch (error: any) {
+    console.error('Error generating estimate:', error);
+    // Return a more descriptive error message if possible
+    return { 
+      error: error.message || 'Failed to generate estimate. Please try again later.' 
+    };
   }
 }
