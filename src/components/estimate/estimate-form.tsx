@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -39,7 +38,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { submitEstimate, getEstimateCount } from '@/app/estimate/actions';
+import { submitEstimate } from '@/app/estimate/actions';
 import { useEffect, useState } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
@@ -48,6 +47,8 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/providers/auth-provider';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp, query, where, getCountFromServer } from 'firebase/firestore';
 
 const trimItems = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
@@ -149,24 +150,26 @@ export function EstimateForm() {
     },
   });
 
-  useEffect(() => {
-    async function fetchCount() {
-      if (user) {
-        setIsCountLoading(true);
-        try {
-          const count = await getEstimateCount(user.uid);
-          setEstimateCount(count);
-          if (count >= 2) {
-            setIsLimitReached(true);
-          }
-        } catch (err) {
-          console.error("Failed to fetch count:", err);
-        } finally {
-          setIsCountLoading(false);
-        }
-      }
+  const fetchEstimateCount = async (uid: string) => {
+    try {
+      const estimatesRef = collection(db, 'estimates');
+      const q = query(estimatesRef, where('userId', '==', uid));
+      const snapshot = await getCountFromServer(q);
+      const count = snapshot.data().count;
+      setEstimateCount(count);
+      setIsLimitReached(count >= 2);
+      return count;
+    } catch (err) {
+      console.error("Error fetching count:", err);
+      return 0;
     }
-    fetchCount();
+  };
+
+  useEffect(() => {
+    if (user) {
+      setIsCountLoading(true);
+      fetchEstimateCount(user.uid).finally(() => setIsCountLoading(false));
+    }
   }, [user]);
 
   const watchTypeOfWork = form.watch('typeOfWork') || [];
@@ -175,7 +178,12 @@ export function EstimateForm() {
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
 
   async function onSubmit(values: EstimateFormValues) {
-    if (isLimitReached) {
+    if (!user) return;
+    
+    // 최종 확인 (클라이언트 측)
+    const currentCount = await fetchEstimateCount(user.uid);
+    if (currentCount >= 2) {
+        setIsLimitReached(true);
         toast({
             variant: "destructive",
             title: "Limit Reached",
@@ -185,7 +193,7 @@ export function EstimateForm() {
     }
 
     setIsPending(true);
-    const result = await submitEstimate(values, user?.uid);
+    const result = await submitEstimate(values);
     
     if(result.error) {
         toast({
@@ -193,23 +201,35 @@ export function EstimateForm() {
             title: "Error",
             description: result.error,
         });
-        if ((result as any).limitReached) {
-            setIsLimitReached(true);
-            setEstimateCount(2);
+    } else if (result.data) {
+        try {
+            // Firestore에 저장 (클라이언트 SDK 사용으로 보안 규칙 통과)
+            await addDoc(collection(db, 'estimates'), {
+                userId: user.uid,
+                options: values,
+                estimate: result.data,
+                createdAt: serverTimestamp(),
+            });
+            
+            const newCount = currentCount + 1;
+            setEstimateCount(newCount);
+            setIsLimitReached(newCount >= 2);
+            
+            toast({
+              title: "Success",
+              description: `Estimate generated! (${newCount}/2 used)`,
+            });
+            setState(result);
+        } catch (dbError: any) {
+            console.error("Firestore Save Error:", dbError);
+            toast({
+                variant: "destructive",
+                title: "Storage Error",
+                description: "Failed to save estimate to database.",
+            });
         }
-    } else {
-        const newCount = estimateCount + 1;
-        setEstimateCount(newCount);
-        if (newCount >= 2) {
-            setIsLimitReached(true);
-        }
-        toast({
-          title: "Success",
-          description: `Estimate generated! (${newCount}/2 used)`,
-        });
     }
     
-    setState(result);
     setIsPending(false);
   }
 
