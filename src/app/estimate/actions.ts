@@ -75,8 +75,9 @@ export async function submitEstimate(formData: any, userId?: string) {
     let message = 'Failed to generate estimate. Please try again later.';
     const errorString = error.message || '';
     
-    if (errorString.includes('403 Forbidden') && errorString.includes('API key')) {
-      message = 'Your Gemini API key has been reported as leaked and is blocked. Please issue a new key in Google AI Studio and update your .env file.';
+    // Detailed error handling for blocked/leaked API keys
+    if (errorString.includes('403') || errorString.includes('API key')) {
+      message = 'Your Gemini API key has been blocked (possibly leaked). Please issue a NEW API key at https://aistudio.google.com/app/apikey and update your .env file.';
     } else if (errorString.includes('quota')) {
       message = 'API rate limit exceeded. Please try again in a few minutes.';
     }
