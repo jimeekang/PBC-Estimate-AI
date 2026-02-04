@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { PrivacyPolicy } from './privacy-policy';
 
 function SubmitButton({ isPending }: { isPending: boolean }) {
   return (
@@ -31,20 +33,37 @@ export function SignupForm() {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     const confirmPassword = formData.get('confirmPassword') as string;
+    const privacyPolicy = formData.get('privacyPolicy');
 
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
       setIsPending(false);
       return setErrors({ email: ['Please enter a valid email address.'] });
     }
 
-    if (!password || password.length < 6) {
-      setIsPending(false);
-      return setErrors({ password: ['Password must be at least 6 characters long.'] });
+    const passwordErrors = [];
+    if (password.length < 8) {
+        passwordErrors.push('Must be at least 8 characters long.');
+    }
+    if (!/[A-Z]/.test(password)) {
+        passwordErrors.push('Must contain at least one uppercase letter.');
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+        passwordErrors.push('Must contain at least one special character.');
+    }
+
+    if (passwordErrors.length > 0) {
+        setIsPending(false);
+        return setErrors({ password: passwordErrors });
     }
 
     if (password !== confirmPassword) {
       setIsPending(false);
       return setErrors({ confirmPassword: ["Passwords don't match"] });
+    }
+
+    if (privacyPolicy !== 'on') {
+      setIsPending(false);
+      return setErrors({ privacyPolicy: ['You must agree to the Privacy Policy.'] });
     }
 
     try {
@@ -80,8 +99,19 @@ export function SignupForm() {
       <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
         <Input id="password" name="password" type="password" required />
+        <div className="text-xs text-muted-foreground">
+            <ul className="list-disc list-inside space-y-1">
+                <li>At least 8 characters</li>
+                <li>At least one uppercase letter</li>
+                <li>At least one special character</li>
+            </ul>
+        </div>
         {errors?.password && (
-          <p className="text-sm text-destructive">{errors.password.join(', ')}</p>
+            <div className="text-sm text-destructive">
+                {errors.password.map((error, index) => (
+                    <p key={index}>{error}</p>
+                ))}
+            </div>
         )}
       </div>
       
@@ -90,6 +120,22 @@ export function SignupForm() {
         <Input id="confirmPassword" name="confirmPassword" type="password" required />
          {errors?.confirmPassword && (
           <p className="text-sm text-destructive">{errors.confirmPassword.join(', ')}</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center space-x-2">
+            <Checkbox id="privacy-policy" name="privacyPolicy" />
+            <label
+                htmlFor="privacy-policy"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+                I agree to the Privacy Policy
+            </label>
+            <PrivacyPolicy />
+        </div>
+        {errors?.privacyPolicy && (
+          <p className="text-sm text-destructive">{errors.privacyPolicy.join(', ')}</p>
         )}
       </div>
 
