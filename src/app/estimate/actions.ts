@@ -2,7 +2,7 @@
 
 import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, getDocs, query, where, getCountFromServer } from 'firebase/firestore';
 import { z } from 'zod';
 
 const estimateFormSchema = z.object({
@@ -37,6 +37,24 @@ const estimateFormSchema = z.object({
 export async function submitEstimate(formData: any, userId?: string) {
   if (!userId) {
     return { error: 'You must be logged in to get an estimate.' };
+  }
+
+  // Check usage limit (Max 2 free estimates)
+  try {
+    const estimatesRef = collection(db, 'estimates');
+    const q = query(estimatesRef, where('userId', '==', userId));
+    const snapshot = await getCountFromServer(q);
+    const count = snapshot.data().count;
+
+    if (count >= 2) {
+      return { 
+        error: 'You have reached your limit of 2 free estimates. Please contact support for more.',
+        limitReached: true
+      };
+    }
+  } catch (err) {
+    console.error('Error checking limit:', err);
+    // Continue if check fails, but log it
   }
 
   const validatedFields = estimateFormSchema.safeParse(formData);
@@ -83,5 +101,17 @@ export async function submitEstimate(formData: any, userId?: string) {
     }
 
     return { error: message };
+  }
+}
+
+export async function getEstimateCount(userId: string) {
+  try {
+    const estimatesRef = collection(db, 'estimates');
+    const q = query(estimatesRef, where('userId', '==', userId));
+    const snapshot = await getCountFromServer(q);
+    return snapshot.data().count;
+  } catch (err) {
+    console.error('Error fetching count:', err);
+    return 0;
   }
 }
