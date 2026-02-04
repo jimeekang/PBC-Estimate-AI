@@ -1,8 +1,9 @@
+
 'use server';
 
 import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp, getDocs, query, where, getCountFromServer } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, query, where, getCountFromServer } from 'firebase/firestore';
 import { z } from 'zod';
 
 const estimateFormSchema = z.object({
@@ -39,7 +40,6 @@ export async function submitEstimate(formData: any, userId?: string) {
     return { error: 'You must be logged in to get an estimate.' };
   }
 
-  // Check usage limit (Max 2 free estimates)
   try {
     const estimatesRef = collection(db, 'estimates');
     const q = query(estimatesRef, where('userId', '==', userId));
@@ -54,7 +54,6 @@ export async function submitEstimate(formData: any, userId?: string) {
     }
   } catch (err) {
     console.error('Error checking limit:', err);
-    // Continue if check fails, but log it
   }
 
   const validatedFields = estimateFormSchema.safeParse(formData);
@@ -68,7 +67,6 @@ export async function submitEstimate(formData: any, userId?: string) {
 
   try {
     const rawData = validatedFields.data;
-    
     const aiPayload: any = {
       ...rawData,
       approxSize: rawData.approxSize || undefined,
@@ -90,16 +88,7 @@ export async function submitEstimate(formData: any, userId?: string) {
     return { data: estimate };
   } catch (error: any) {
     console.error('Error generating estimate:', error);
-    
     let message = 'Failed to generate estimate. Please try again later.';
-    const errorString = error.message || '';
-    
-    if (errorString.includes('403') || errorString.includes('API key')) {
-      message = 'Your Gemini API key has been blocked (possibly leaked). Please issue a NEW API key at https://aistudio.google.com/app/apikey and update your .env file.';
-    } else if (errorString.includes('quota')) {
-      message = 'API rate limit exceeded. Please try again in a few minutes.';
-    }
-
     return { error: message };
   }
 }
@@ -111,7 +100,7 @@ export async function getEstimateCount(userId: string) {
     const snapshot = await getCountFromServer(q);
     return snapshot.data().count;
   } catch (err) {
-    console.error('Error fetching count:', err);
+    console.error('Error fetching count from Firestore:', err);
     return 0;
   }
 }
