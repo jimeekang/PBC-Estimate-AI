@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, getDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_API_KEY,
@@ -15,5 +15,22 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+export const getEstimates = async () => {
+    const estimatesCol = collection(db, 'estimates');
+    const estimateSnapshot = await getDocs(estimatesCol);
+    const estimateList = estimateSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    return estimateList;
+}
+
+export const getEstimate = async (id: string) => {
+    const estimateDoc = doc(db, 'estimates', id);
+    const estimateSnapshot = await getDoc(estimateDoc);
+    if (estimateSnapshot.exists()) {
+        return { ...estimateSnapshot.data(), id: estimateSnapshot.id };
+    } else {
+        return null;
+    }
+}
 
 export { app, auth, db };

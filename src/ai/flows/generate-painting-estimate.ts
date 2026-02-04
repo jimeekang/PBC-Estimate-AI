@@ -40,8 +40,10 @@ const GeneratePaintingEstimateInputSchema = z.object({
 export type GeneratePaintingEstimateInput = z.infer<typeof GeneratePaintingEstimateInputSchema>;
 
 const GeneratePaintingEstimateOutputSchema = z.object({
-  estimatedPriceRange: z.string().describe('The estimated price range for the painting job.'),
+  priceRange: z.string().describe('The estimated price range for the painting job. e.g., "$4,200 - $4,800"'),
   explanation: z.string().describe('A short explanation of how the price was calculated.'),
+  details: z.array(z.string()).optional().describe('A bulleted list of the key factors that influenced the estimate.'),
+  // breakdown: z.record(z.string()).optional().describe('A simple key-value breakdown of the major cost components (e.g., { Labor: "$3000", Materials: "$1200" }).'),
 });
 export type GeneratePaintingEstimateOutput = z.infer<typeof GeneratePaintingEstimateOutputSchema>;
 
@@ -100,15 +102,16 @@ const prompt = ai.definePrompt({
   # SITE CONDITIONS
   - Paint Condition: {{#if paintCondition}}{{paintCondition}}{{else}}Unknown{{/if}}
   - Challenges: {{#if jobDifficulty}}{{#each jobDifficulty}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}None listed{{/if}}
-
+	
   # OUTPUT INSTRUCTIONS
-  1. Provide a realistic "Estimated Price Range" in AUD (e.g., "$4,200 - $4,800").
-  2. Write an "Explanation" that:
-     - Greets the customer by name professionally.
-     - Specifically mentions how the property type ({{propertyType}}) and the selected areas (Interior/Exterior) influenced the base price.
-     - If Windows or Skirting Boards were selected, explain that these require extra detail work and increased the labor cost.
-     - Mention that the estimate factors in both high-quality materials and the expert labor (man-days) required for a professional finish.
-     - Maintain a helpful, expert, and encouraging tone.
+  1.  **priceRange**: Provide a realistic "Estimated Price Range" in AUD (e.g., "$4,200 - $4,800"). This is the primary output.
+  2.  **explanation**: Write an "Explanation" that:
+        - Greets the customer by name professionally.
+        - Specifically mentions how the property type ({{propertyType}}) and the selected areas (Interior/Exterior) influenced the base price.
+        - If Windows or Skirting Boards were selected, explain that these require extra detail work and increased the labor cost.
+        - Mention that the estimate factors in both high-quality materials and the expert labor (man-days) required for a professional finish.
+        - Maintain a helpful, expert, and encouraging tone.
+  3.  **details**: Provide a bulleted list of 3-5 key factors that influenced this specific estimate.
   `,
 });
 
