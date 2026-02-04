@@ -85,7 +85,7 @@ const prompt = ai.definePrompt({
   # SELECTED SERVICES
   - Ceiling: {{#if paintAreas.ceilingPaint}}Yes{{else}}No{{/if}}
   - Walls: {{#if paintAreas.wallPaint}}Yes{{else}}No{{/if}}
-  - Trim: {{#if paintAreas.trimPaint}}Yes ({{trimPaintOptions.paintType}} on {{#each trimPaintOptions.trimItems}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}){{else}}No{{/if}}
+  - Trim: {{#if paintAreas.trimPaint}}{{#if trimPaintOptions}}Yes ({{trimPaintOptions.paintType}} on {{#each trimPaintOptions.trimItems}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}){{else}}Yes (Specifics not provided){{/if}}{{else}}No{{/if}}
 
   # SITE CONDITIONS
   - Paint Condition: {{#if paintCondition}}{{paintCondition}}{{else}}Unknown{{/if}}
