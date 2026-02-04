@@ -584,7 +584,18 @@ export function EstimateForm() {
                   </FormItem>
                 )}
               />
-              <FormField
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="h-6 w-6 text-primary" />
+                <span>Conditions &amp; Difficulty</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-8">
+                <FormField
                     control={form.control}
                     name="timingPurpose"
                     render={({ field }) => (
@@ -604,18 +615,7 @@ export function EstimateForm() {
                         </FormControl>
                     </FormItem>
                     )}
-              />
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Layers className="h-6 w-6 text-primary" />
-                <span>Conditions & Difficulty</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-8">
+                />
                 <FormField
                     control={form.control}
                     name="paintCondition"
