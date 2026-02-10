@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Card, CardContent, CardHeader, CardTitle } from '@/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ArrowUpToLine,
   Baseline,
@@ -35,7 +35,6 @@ import {
   Home,
   Droplets,
   Hammer,
-  AlertTriangle,
   Info,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -159,7 +158,6 @@ export function EstimateForm() {
       const count = snapshot.data().count;
       setEstimateCount(count);
       
-      // 어드민이 아닐 때만 횟수 제한 적용
       if (!isAdmin) {
         setIsLimitReached(count >= 2);
       } else {
@@ -188,7 +186,6 @@ export function EstimateForm() {
   async function onSubmit(values: EstimateFormValues) {
     if (!user) return;
     
-    // 어드민이 아닐 경우에만 횟수 체크
     if (!isAdmin) {
       const currentCount = await fetchEstimateCount(user.uid);
       if (currentCount >= 2) {
@@ -222,7 +219,7 @@ export function EstimateForm() {
             
             if (!isAdmin) {
               const currentCount = await fetchEstimateCount(user.uid);
-              const newCount = currentCount; // fetchEstimateCount updates state
+              const newCount = currentCount;
               setEstimateCount(newCount);
               setIsLimitReached(newCount >= 2);
               
@@ -235,7 +232,7 @@ export function EstimateForm() {
                 title: "Success (Admin)",
                 description: `Estimate generated! (Unlimited access)`,
               });
-              await fetchEstimateCount(user.uid); // Refresh count for admin UI
+              await fetchEstimateCount(user.uid);
             }
             
             setState(result);
