@@ -34,13 +34,13 @@ export function SignupForm() {
     } catch (e: any) {
       console.error("Google Sign-In Error (Signup):", e);
       
-      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
-      let errorMessage = [`오류 발생: ${e.message}`];
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+      let errorMessage = [`Error: ${e.message}`];
       
       if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/unauthorized-domain') {
         errorMessage = [
-          '로그인 팝업이 비정상적으로 닫혔거나 승인되지 않은 도메인입니다.',
-          'Firebase 콘솔의 Authorized Domains에 아래 주소를 등록해 주세요:',
+          'Login popup closed unexpectedly or domain is unauthorized.',
+          'Please add this address to the Authorized Domains in Firebase Console:',
           `👉 ${currentDomain}`
         ];
       }

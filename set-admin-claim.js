@@ -1,55 +1,54 @@
-
 const admin = require('firebase-admin');
 
 // ===============================================================================================
-// === 어드민 권한 설정 가이드 =====================================================================
+// === Admin Permission Setup Guide =============================================================
 // ===============================================================================================
 
-// 1. 서비스 계정 키 파일 경로 (이미 설정됨)
+// 1. Service Account Key File Path (Already configured)
 const serviceAccount = require('./studio-5245261553-378c8-firebase-adminsdk-fbsvc-032b22c6a5.json');
 
-// 2. 어드민 권한을 수정할 사용자의 이메일 주소를 입력하세요.
+// 2. Enter the email address of the user to modify admin permissions for.
 const userEmail = 'kjm12081@gmail.com';
 
-// 3. 권한 설정 여부 (true: 부여, false: 해제)
+// 3. Set permission (true: Grant, false: Revoke)
 const isAdmin = false;
 
 // ===============================================================================================
 
-// Firebase Admin SDK 초기화
+// Initialize Firebase Admin SDK
 try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
 } catch (error) {
     if (error.code !== 'app/duplicate-app') {
-        console.error('Firebase Admin SDK 초기화 중 오류 발생:', error);
+        console.error('Error initializing Firebase Admin SDK:', error);
         process.exit(1);
     }
 }
 
-// 이메일로 사용자 찾기 및 권한 수정
+// Find user by email and update permissions
 async function updateAdminClaim() {
   try {
     const user = await admin.auth().getUserByEmail(userEmail);
     const uid = user.uid;
 
-    // 'admin' 커스텀 클레임을 설정/해제
+    // Set/Revoke 'admin' custom claim
     await admin.auth().setCustomUserClaims(uid, { admin: isAdmin });
 
     if (isAdmin) {
-      console.log(`성공: ${userEmail} (UID: ${uid}) 계정에 어드민 권한이 부여되었습니다.`);
+      console.log(`Success: Admin permission granted to ${userEmail} (UID: ${uid}).`);
     } else {
-      console.log(`성공: ${userEmail} (UID: ${uid}) 계정의 어드민 권한이 해제되었습니다.`);
+      console.log(`Success: Admin permission revoked from ${userEmail} (UID: ${uid}).`);
     }
     
-    console.log('해당 사용자는 앱에서 로그아웃 후 다시 로그인해야 권한이 적용됩니다.');
+    console.log('The user must log out and log back in for the changes to take effect.');
     process.exit(0);
   } catch (error) {
     if (error.code === 'auth/user-not-found') {
-      console.error(`오류: '${userEmail}' 사용자를 찾을 수 없습니다. 먼저 앱에서 회원가입을 완료해 주세요.`);
+      console.error(`Error: User '${userEmail}' not found. Please ensure the user has signed up first.`);
     } else {
-      console.error('권한 설정 중 오류 발생:', error);
+      console.error('Error setting permissions:', error);
     }
     process.exit(1);
   }

@@ -199,54 +199,27 @@ export function EstimateForm() {
 
     setIsSearchingAddress(true);
     try {
-      // Append Australia to the query to restrict results to AU and improve relevance
       const searchQuery = queryStr.toLowerCase().includes('australia') ? queryStr : `${queryStr}, Australia`;
       const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=8&lang=en`);
       const data = await response.json();
       
       const suggestions = data.features.map((f: any) => {
         const p = f.properties;
-        
-        // Filter by country code for Australia
         const isAustralia = p.countrycode === 'AU' || p.country === 'Australia';
         if (!isAustralia) return null;
 
         const parts = [];
-        
-        // 1. House Number + Street (Specific Address)
-        if (p.housenumber && p.street) {
-          parts.push(`${p.housenumber} ${p.street}`);
-        } 
-        // 2. Or just Street
-        else if (p.street) {
-          parts.push(p.street);
-        }
-        // 3. Or just Name (if it's not the same as city/state)
-        else if (p.name && p.name !== p.city && p.name !== p.state) {
-          parts.push(p.name);
-        }
+        if (p.housenumber && p.street) parts.push(`${p.housenumber} ${p.street}`);
+        else if (p.street) parts.push(p.street);
+        else if (p.name && p.name !== p.city && p.name !== p.state) parts.push(p.name);
 
-        // 4. City / Suburb
-        if (p.city || p.district) {
-          parts.push(p.city || p.district);
-        }
+        if (p.city || p.district) parts.push(p.city || p.district);
+        if (p.state) parts.push(p.state);
+        if (p.postcode) parts.push(p.postcode);
 
-        // 5. State (Abbreviated if possible, but Photon usually returns full name)
-        if (p.state) {
-          parts.push(p.state);
-        }
-
-        // 6. Postcode
-        if (p.postcode) {
-          parts.push(p.postcode);
-        }
-
-        // Filter out empty parts and join
-        const formatted = parts.filter(Boolean).join(', ');
-        return formatted;
+        return parts.filter(Boolean).join(', ');
       }).filter(Boolean);
 
-      // Remove duplicates
       setAddressSuggestions(Array.from(new Set(suggestions as string[])));
     } catch (error) {
       console.error('Address search error:', error);
@@ -258,10 +231,8 @@ export function EstimateForm() {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       const location = form.getValues('location');
-      if (location && showSuggestions) {
-        searchAddress(location);
-      }
-    }, 400); // Slightly faster debounce
+      if (location && showSuggestions) searchAddress(location);
+    }, 400);
     return () => clearTimeout(timeoutId);
   }, [form.watch('location'), searchAddress, showSuggestions]);
 
@@ -301,13 +272,12 @@ export function EstimateForm() {
             
             if (!isAdmin) {
               const currentCount = await fetchEstimateCount(user.uid);
-              const newCount = currentCount;
-              setEstimateCount(newCount);
-              setIsLimitReached(newCount >= 2);
+              setEstimateCount(currentCount);
+              setIsLimitReached(currentCount >= 2);
               
               toast({
                 title: "Success",
-                description: `Estimate generated! (${newCount}/2 used)`,
+                description: `Estimate generated! (${currentCount}/2 used)`,
               });
             } else {
               toast({
