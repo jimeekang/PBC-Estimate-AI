@@ -32,12 +32,22 @@ export function EstimateResult({ result }: EstimateResultProps) {
         <CardContent className="space-y-4">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Estimated Price Range</p>
-            <p className="text-3xl font-bold text-primary">{result.estimatedPriceRange}</p>
+            <p className="text-3xl font-bold text-primary">{result.priceRange}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">Explanation</p>
             <p className="text-foreground">{result.explanation}</p>
           </div>
+          {result.details && result.details.length > 0 && (
+            <div className="pt-4 border-t border-primary/10">
+                <p className="text-sm font-semibold mb-2">Key Factors:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                    {result.details.map((detail, index) => (
+                        <li key={index} className="text-sm text-muted-foreground">{detail}</li>
+                    ))}
+                </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>
