@@ -31,28 +31,22 @@ export function LoginForm() {
     try {
       setIsGooglePending(true);
       setErrors(null);
-      console.log("Starting Google Sign-In...");
       const result = await signInWithGoogle();
-      
       if (result?.user) {
-        console.log("Google Sign-In Successful:", result.user.email);
-        // AuthProvider will handle the navigation to /estimate
+        console.log("Google Sign-In Successful");
       }
     } catch (e: any) {
       console.error("Google Sign-In Component Error:", e);
       if (e.code === 'auth/popup-closed-by-user') {
-        setErrors({ _form: ['로그인 팝업창이 닫혔습니다. 다시 시도해 주세요.'] });
+        setErrors({ _form: [
+          '로그인 창이 예기치 않게 닫혔습니다. 다음을 확인해 주세요:',
+          '1. 브라우저 설정에서 "타사 쿠키"가 허용되어 있는지 확인.',
+          '2. 광고 차단 프로그램(AdBlock 등)이 팝업을 강제로 닫았는지 확인.',
+          '3. Firebase 콘솔에 현재 접속 주소가 "승인된 도메인"으로 등록되어 있는지 확인.'
+        ] });
         return;
       }
-      if (e.code === 'auth/popup-blocked') {
-        setErrors({ _form: ['브라우저의 팝업 차단 기능이 활성화되어 있습니다. 팝업을 허용해 주세요.'] });
-        return;
-      }
-      if (e.code === 'auth/operation-not-allowed') {
-        setErrors({ _form: ['Firebase Console에서 구글 로그인이 활성화되지 않았습니다. 관리자에게 문의하세요.'] });
-        return;
-      }
-      setErrors({ _form: [`구글 로그인 중 오류가 발생했습니다: ${e.message}`] });
+      setErrors({ _form: [`오류 발생: ${e.message}`] });
     } finally {
       setIsGooglePending(false);
     }
@@ -79,7 +73,6 @@ export function LoginForm() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-
       await user.reload();
 
       if (!user.emailVerified) {
@@ -137,8 +130,12 @@ export function LoginForm() {
         {errors?._form && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Login Status</AlertTitle>
-            <AlertDescription>{errors._form.join(', ')}</AlertDescription>
+            <AlertTitle>알림</AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc list-inside">
+                {errors._form.map((msg, i) => <li key={i}>{msg}</li>)}
+              </ul>
+            </AlertDescription>
           </Alert>
         )}
 
