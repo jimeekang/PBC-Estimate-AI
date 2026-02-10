@@ -26,14 +26,18 @@ export function LoginForm() {
 
   const handleGoogleSignIn = async () => {
     try {
+        setErrors(null);
         await signInWithGoogle();
     } catch (e: any) {
-        // Don't show an error if the user closes the sign-in popup.
         if (e.code === 'auth/popup-closed-by-user') {
             return;
         }
+        if (e.code === 'auth/popup-blocked') {
+            setErrors({ _form: ['브라우저의 팝업 차단 기능이 활성화되어 있습니다. 주소창 옆의 팝업 차단 아이콘을 클릭하여 팝업을 허용해 주세요.'] });
+            return;
+        }
         console.error("Google Sign-In Error:", e);
-        setErrors({ _form: ['An unexpected error occurred with Google Sign-In. Please try again.'] });
+        setErrors({ _form: ['구글 로그인 중 예상치 못한 오류가 발생했습니다. 다시 시도해 주세요.'] });
     }
   }
 
