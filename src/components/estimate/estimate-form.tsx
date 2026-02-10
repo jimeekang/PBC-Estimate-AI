@@ -37,6 +37,7 @@ import {
   Hammer,
   Info,
   MapPin,
+  Calendar,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -118,6 +119,8 @@ const estimateFormSchema = z.object({
 });
 
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
+
+const BOOKING_URL = "https://clienthub.getjobber.com/booking/3a242065-0473-4039-ac49-e0a471328f15/?hl=en-AU&gei=ToaeaOX_Aemd4-EP8PLo4QQ&rwg_token=ACgRB3dTJDWOYboojrle3rI8gtbZw-AyOUJf57Jz7Mw9Y_ENGZMD4tsX753nFQ_jl26ENKc9X6ikq_w46rgHpuel-qj-sqpr8A%3D%3D";
 
 export function EstimateForm() {
   const { user, isAdmin } = useAuth();
@@ -898,6 +901,21 @@ export function EstimateForm() {
               )}
               {isLimitReached && !isAdmin ? 'Free Limit Reached' : isCountLoading ? 'Checking limits...' : 'Generate Estimate'}
             </Button>
+
+            <div className="text-center p-4 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm">
+              <p className="text-sm font-medium flex items-center justify-center gap-2">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span>If you want to book Quote? Click</span>
+                <a 
+                  href={BOOKING_URL}
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary font-bold underline hover:text-primary/80 transition-colors inline-flex items-center gap-1"
+                >
+                  here
+                </a>
+              </p>
+            </div>
             
             <div className="text-center text-sm font-medium p-2 rounded-lg bg-accent/10 border border-accent/20">
               {isCountLoading ? (
