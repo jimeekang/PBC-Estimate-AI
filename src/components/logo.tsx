@@ -16,7 +16,9 @@ export function Logo({ className }: { className?: string }) {
   return (
     <div className={cn('flex items-center gap-2 text-xl font-bold', className)}>
       <div className="relative h-10 w-10 overflow-hidden rounded-full border border-primary/10 bg-white p-1 shadow-sm">
-        {mounted && logo ? (
+        {!mounted ? (
+          <div className="h-full w-full bg-muted rounded-full" />
+        ) : logo ? (
           <Image
             src={logo.imageUrl}
             alt="Paint Buddy & Co Logo"
