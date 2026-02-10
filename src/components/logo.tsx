@@ -1,3 +1,4 @@
+
 'use client';
 
 import { cn } from '@/lib/utils';
@@ -32,8 +33,8 @@ export function Logo({ className }: { className?: string }) {
         )}
       </div>
       <div className="flex flex-col leading-tight">
-        <span className="text-foreground tracking-tight">Paint Buddy</span>
-        <span className="text-primary text-sm font-medium">& Co</span>
+        <span className="text-foreground tracking-tight text-lg">Paint Buddy</span>
+        <span className="text-primary text-sm font-bold -mt-1">& Co</span>
       </div>
     </div>
   );
