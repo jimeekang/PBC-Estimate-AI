@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -94,7 +93,7 @@ const typeOfWorkItems = [
 const estimateFormSchema = z.object({
   name: z.string().min(1, 'Name is required.'),
   email: z.string().email('Invalid email address.'),
-  phone: z.string().optional(),
+  phone: z.string().min(1, 'Phone number is required.'),
   typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).min(1, 'Please select at least one type of work.'),
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
@@ -393,7 +392,7 @@ export function EstimateForm() {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone Number (Optional)</FormLabel>
+                    <FormLabel>Phone Number</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. 0412 345 678" {...field} />
                     </FormControl>
