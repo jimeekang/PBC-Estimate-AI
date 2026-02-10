@@ -31,14 +31,19 @@ export function LoginForm() {
     try {
       setIsGooglePending(true);
       setErrors(null);
+      console.log("Starting Google Sign-In...");
       const result = await signInWithGoogle();
-      if (result.user) {
-          // Success: AuthProvider handles the redirect
-          console.log("Google Sign-In Success:", result.user.email);
+      
+      if (result?.user) {
+        console.log("Google Sign-In Successful:", result.user.email);
+        // AuthProvider will handle the navigation to /estimate
       }
     } catch (e: any) {
       console.error("Google Sign-In Component Error:", e);
-      if (e.code === 'auth/popup-closed-by-user') return;
+      if (e.code === 'auth/popup-closed-by-user') {
+        setErrors({ _form: ['로그인 팝업창이 닫혔습니다. 다시 시도해 주세요.'] });
+        return;
+      }
       if (e.code === 'auth/popup-blocked') {
         setErrors({ _form: ['브라우저의 팝업 차단 기능이 활성화되어 있습니다. 팝업을 허용해 주세요.'] });
         return;
@@ -132,7 +137,7 @@ export function LoginForm() {
         {errors?._form && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Login Failed</AlertTitle>
+            <AlertTitle>Login Status</AlertTitle>
             <AlertDescription>{errors._form.join(', ')}</AlertDescription>
           </Alert>
         )}
