@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -25,20 +24,32 @@ function SubmitButton({ isPending }: { isPending: boolean }) {
 export function LoginForm() {
   const [errors, setErrors] = useState<{ [key: string]: string[] | undefined } | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [isGooglePending, setIsGooglePending] = useState(false);
   const router = useRouter();
 
   const handleGoogleSignIn = async () => {
     try {
+      setIsGooglePending(true);
       setErrors(null);
-      await signInWithGoogle();
-      // AuthProvider will detect the user and redirect
+      const result = await signInWithGoogle();
+      if (result.user) {
+          // Success: AuthProvider handles the redirect
+          console.log("Google Sign-In Success:", result.user.email);
+      }
     } catch (e: any) {
+      console.error("Google Sign-In Component Error:", e);
       if (e.code === 'auth/popup-closed-by-user') return;
       if (e.code === 'auth/popup-blocked') {
         setErrors({ _form: ['브라우저의 팝업 차단 기능이 활성화되어 있습니다. 팝업을 허용해 주세요.'] });
         return;
       }
-      setErrors({ _form: ['구글 로그인 중 오류가 발생했습니다.'] });
+      if (e.code === 'auth/operation-not-allowed') {
+        setErrors({ _form: ['Firebase Console에서 구글 로그인이 활성화되지 않았습니다. 관리자에게 문의하세요.'] });
+        return;
+      }
+      setErrors({ _form: [`구글 로그인 중 오류가 발생했습니다: ${e.message}`] });
+    } finally {
+      setIsGooglePending(false);
     }
   };
 
@@ -140,8 +151,8 @@ export function LoginForm() {
         </div>
       </div>
 
-      <Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
-        <Icons.google className="mr-2 h-4 w-4" />
+      <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isGooglePending}>
+        {isGooglePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.google className="mr-2 h-4 w-4" />}
         Google
       </Button>
     </div>
