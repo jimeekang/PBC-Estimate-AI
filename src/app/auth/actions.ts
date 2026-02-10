@@ -35,9 +35,9 @@ export async function signup(prevState: any, formData: FormData) {
     await sendEmailVerification(userCredential.user);
   } catch (e: any) {
     if (e.code === 'auth/email-already-in-use') {
-      return { errors: { email: ['Email already in use.'] } };
+      return { errors: { email: ['이미 사용 중인 이메일입니다.'] } };
     }
-    return { errors: { _form: ['An unexpected error occurred. Please try again.'] } };
+    return { errors: { _form: ['회원가입 중 예상치 못한 오류가 발생했습니다. 다시 시도해 주세요.'] } };
   }
 
   return { success: true };
@@ -65,15 +65,15 @@ export async function login(prevState: any, formData: FormData) {
       await sendEmailVerification(userCredential.user);
       return {
         errors: {
-          _form: ['Please verify your email before logging in. A new verification link has been sent.'],
+          _form: ['이메일 인증이 필요합니다. 인증 메일이 발송되었습니다. 확인 후 다시 로그인해 주세요.'],
         },
       };
     }
   } catch (e: any) {
     if (e.code === 'auth/invalid-credential') {
-      return { errors: { _form: ['Invalid email or password.'] } };
+      return { errors: { _form: ['이메일 또는 비밀번호가 올바르지 않습니다.'] } };
     }
-    return { errors: { _form: ['An unexpected error occurred. Please try again.'] } };
+    return { errors: { _form: ['로그인 중 예상치 못한 오류가 발생했습니다. 다시 시도해 주세요.'] } };
   }
 
   return { success: true };
