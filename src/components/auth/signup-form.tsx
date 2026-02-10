@@ -30,16 +30,28 @@ export function SignupForm() {
     try {
       setIsGooglePending(true);
       setErrors(null);
-      console.log("Starting Google Sign-In from Signup...");
       await signInWithGoogle();
       // AuthProvider handles redirection
     } catch (e: any) {
       console.error("Google Sign-In Component Error (Signup):", e);
+      
+      let errorMessage = [`오류 발생: ${e.message}`];
+      
       if (e.code === 'auth/popup-closed-by-user') {
-        setErrors({ _form: ['로그인 팝업창이 닫혔습니다. 다시 시도해 주세요.'] });
-        return;
+        errorMessage = [
+          '로그인 팝업이 비정상적으로 닫혔습니다.',
+          '브라우저 설정에서 "팝업 및 리디렉션"을 허용하고 광고 차단기를 꺼주세요.'
+        ];
+      } else if (e.code === 'auth/unauthorized-domain') {
+        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
+        errorMessage = [
+          '승인되지 않은 도메인입니다.',
+          `Firebase 콘솔의 Authorized Domains에 다음 주소를 추가해 주세요:`,
+          `${currentDomain}`
+        ];
       }
-      setErrors({ _form: [`구글 로그인 중 오류가 발생했습니다: ${e.message}`] });
+      
+      setErrors({ _form: errorMessage });
     } finally {
       setIsGooglePending(false);
     }
@@ -159,7 +171,11 @@ export function SignupForm() {
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Signup Status</AlertTitle>
-            <AlertDescription>{errors._form.join(', ')}</AlertDescription>
+            <AlertDescription>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                {errors._form.map((msg, i) => <li key={i}>{msg}</li>)}
+              </ul>
+            </AlertDescription>
           </Alert>
         )}
 

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -47,9 +46,11 @@ export function LoginForm() {
           '3. Firebase 콘솔의 Authorized Domains에 현재 주소가 등록되어 있는지 확인이 필요합니다.'
         ];
       } else if (e.code === 'auth/unauthorized-domain') {
+        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
         errorMessage = [
           '승인되지 않은 도메인입니다.',
-          'Firebase Console -> Authentication -> Settings -> Authorized Domains에 현재 도메인을 추가해야 합니다.'
+          `Firebase Console -> Authentication -> Settings -> Authorized Domains에 다음 주소를 추가해 주세요:`,
+          `${currentDomain}`
         ];
       }
       
