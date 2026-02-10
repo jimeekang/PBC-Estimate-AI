@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -127,7 +126,7 @@ export function LoginForm() {
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Password</Label>
             <div className="text-sm">
-              <Link href="#" className="font-medium text-primary hover:underline">
+              <Link href="/forgot-password" title="Go to password reset page" className="font-medium text-primary hover:underline">
                 Forgot password?
               </Link>
             </div>
