@@ -32,25 +32,24 @@ export function LoginForm() {
       setIsGooglePending(true);
       setErrors(null);
       await signInWithGoogle();
-      // AuthProvider handles redirection
     } catch (e: any) {
-      console.error("Google Sign-In Error Catch:", e);
+      console.error("Google Sign-In Error:", e);
       
-      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
-      let errorMessage = [`오류 발생: ${e.message}`];
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+      let errorMessage = [`Error: ${e.message}`];
       
       if (e.code === 'auth/popup-closed-by-user') {
         errorMessage = [
-          '로그인 창이 자동으로 닫혔습니다. 다음을 확인해 주세요:',
-          '1. 브라우저 설정에서 "서드파티 쿠키 차단"을 해제해 주세요. (가장 흔한 원인)',
-          '2. 주소창 오른쪽의 "팝업 차단" 아이콘을 눌러 항상 허용을 선택해 주세요.',
-          '3. 시크릿 창(Incognito)에서는 작동하지 않을 수 있습니다.',
-          '4. 등록된 도메인 확인:',
+          'The login window was closed. Please check the following:',
+          '1. Disable "Block third-party cookies" in your browser settings.',
+          '2. Allow popups for this site in your browser.',
+          '3. Incognito mode might interfere with the login process.',
+          '4. Ensure the domain is authorized:',
           `👉 ${currentDomain}`
         ];
       } else if (e.code === 'auth/unauthorized-domain') {
         errorMessage = [
-          '승인되지 않은 도메인입니다. Firebase 콘솔에 아래 주소를 등록해 주세요:',
+          'This domain is not authorized. Please add the following address to Firebase Console:',
           `👉 ${currentDomain}`
         ];
       }
@@ -92,15 +91,15 @@ export function LoginForm() {
         }
         await auth.signOut();
         setIsPending(false);
-        return setErrors({ _form: ['이메일 인증이 필요합니다. 인증 메일이 발송되었습니다. 확인 후 다시 로그인해 주세요.'] });
+        return setErrors({ _form: ['Email verification is required. A verification email has been sent. Please check your inbox and log in again.'] });
       }
     } catch (e: any) {
       setIsPending(false);
       console.error("Email Login Error:", e);
       if (e.code === 'auth/invalid-credential') {
-        return setErrors({ _form: ['이메일 또는 비밀번호가 올바르지 않습니다.'] });
+        return setErrors({ _form: ['Invalid email or password.'] });
       }
-      return setErrors({ _form: ['로그인 중 예상치 못한 오류가 발생했습니다.'] });
+      return setErrors({ _form: ['An unexpected error occurred during login.'] });
     }
   };
 
@@ -140,7 +139,7 @@ export function LoginForm() {
         {errors?._form && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>로그인 오류</AlertTitle>
+            <AlertTitle>Login Error</AlertTitle>
             <AlertDescription>
               <ul className="list-disc list-inside space-y-1 text-xs mt-2">
                 {errors._form.map((msg, i) => <li key={i}>{msg}</li>)}
@@ -171,7 +170,7 @@ export function LoginForm() {
       <Alert className="bg-primary/5 border-primary/20">
         <Info className="h-4 w-4 text-primary" />
         <AlertDescription className="text-xs text-muted-foreground">
-          팝업이 즉시 닫힌다면 브라우저 설정에서 <b>서드파티 쿠키 허용</b>을 확인해 주세요.
+          If the popup closes immediately, please <b>allow third-party cookies</b> in your browser settings.
         </AlertDescription>
       </Alert>
     </div>

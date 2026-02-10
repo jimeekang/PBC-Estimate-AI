@@ -1,4 +1,3 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
@@ -46,7 +45,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (loading) return;
 
     if (user) {
-      // '/register'를 '/signup'으로 수정하여 구글 로그인 후 정상 이동되도록 함
       if (['/', '/login', '/signup'].includes(pathname)) {
         router.push('/estimate');
       }
