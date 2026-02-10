@@ -141,18 +141,21 @@ const explanationPrompt = ai.definePrompt({
   - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Not specified{{/if}}
   - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
 
-  # GENERATED PRICE
-  The calculated price range is AUD {{priceMin}} - {{priceMax}}.
+  # GENERATED PRICE DATA
+  Min: {{priceMin}}
+  Max: {{priceMax}}
 
   # INSTRUCTIONS
   1. **explanation**: Write a professional summary (3-5 sentences). 
      - Mention main cost drivers (scope, size, condition, trim detail, and access complexity).
-     - If exterior painting is included, mention weather windows, surface degradation, and height/access risks.
+     - If priceMax is over 30,000, emphasize that this is a large-scale project requiring a detailed site inspection for a final quote.
      - Use Australian English.
      - Do NOT mention internal formulas, weights, or algorithms.
      - Be transparent and build trust.
      - Clearly state that this is an "indicative estimate" subject to site inspection.
-  2. **priceRange**: Format as "$X,XXX - $X,XXX AUD".
+  2. **priceRange**: 
+     - If priceMax > 30,000, format as "From AUD {{priceMin}}+ (Site Inspection Required)".
+     - Otherwise, format as "AUD {{priceMin}} - {{priceMax}}".
   3. **details**: Provide a bulleted list of 3-5 key factors specific to this job.
   `
 });
@@ -244,7 +247,6 @@ export const generatePaintingEstimate = ai.defineFlow(
     // Interior + Exterior 결합 시 데이터 기반 최소/최대 보정
     if (isBoth) {
       totalMin = Math.max(totalMin, ANCHORS.InteriorExterior.min);
-      // 복합 공사의 경우 중앙값을 고려하여 Max 범위를 현실적으로 조정
       if (totalMax < ANCHORS.InteriorExterior.median) {
         totalMax = ANCHORS.InteriorExterior.median * 1.2;
       }
@@ -288,20 +290,12 @@ export const generatePaintingEstimate = ai.defineFlow(
       });
     }
 
-    // 최종 라운딩 및 캡 적용
+    // 최종 라운딩 적용
     totalMin = Math.round(totalMin);
     totalMax = Math.round(totalMax);
 
-    // 대형 공사 ($30,000 초과) 처리
-    if (totalMax > 30000 || (isBoth && totalMin > 25000)) {
-      return {
-        priceRange: "Site inspection needed",
-        explanation: "Based on the comprehensive scope of work spanning both interior and exterior surfaces, a manual site inspection is essential to provide an accurate quotation. The estimated value reflects a large-scale project that requires specialized assessment.",
-        details: ["Combined Interior & Exterior scope", "High complexity and detailed surface preparation", "Specialized access and safety equipment required"]
-      };
-    }
-
     // AI에게 전문적인 설명 생성 요청
+    // (이제 30k 초과 시에도 하드코딩된 리턴 대신 AI가 최소 시작가를 포함해 설명함)
     const { output } = await explanationPrompt({
       input,
       priceMin: totalMin,
