@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -25,15 +24,24 @@ function SubmitButton({ isPending }: { isPending: boolean }) {
 export function SignupForm() {
   const [errors, setErrors] = useState<{ [key: string]: string[] | undefined } | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [isGooglePending, setIsGooglePending] = useState(false);
 
   const handleGoogleSignIn = async () => {
     try {
+      setIsGooglePending(true);
       setErrors(null);
+      console.log("Starting Google Sign-In from Signup...");
       await signInWithGoogle();
       // AuthProvider handles redirection
     } catch (e: any) {
-      if (e.code === 'auth/popup-closed-by-user') return;
-      setErrors({ _form: ['Google sign-in failed. Please try again.'] });
+      console.error("Google Sign-In Component Error (Signup):", e);
+      if (e.code === 'auth/popup-closed-by-user') {
+        setErrors({ _form: ['로그인 팝업창이 닫혔습니다. 다시 시도해 주세요.'] });
+        return;
+      }
+      setErrors({ _form: [`구글 로그인 중 오류가 발생했습니다: ${e.message}`] });
+    } finally {
+      setIsGooglePending(false);
     }
   };
 
@@ -150,7 +158,7 @@ export function SignupForm() {
         {errors?._form && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Signup Failed</AlertTitle>
+            <AlertTitle>Signup Status</AlertTitle>
             <AlertDescription>{errors._form.join(', ')}</AlertDescription>
           </Alert>
         )}
@@ -169,8 +177,8 @@ export function SignupForm() {
         </div>
       </div>
 
-      <Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
-        <Icons.google className="mr-2 h-4 w-4" />
+      <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isGooglePending}>
+        {isGooglePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.google className="mr-2 h-4 w-4" />}
         Google
       </Button>
     </div>
