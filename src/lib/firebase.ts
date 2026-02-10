@@ -24,24 +24,16 @@ googleProvider.setCustomParameters({
 });
 
 export const signInWithGoogle = async () => {
-    // 구성 정보 확인을 위한 디버그 로그 (운영 환경에서는 삭제 권장)
     if (!firebaseConfig.apiKey || !firebaseConfig.authDomain) {
-        console.error("Firebase 구성 정보가 누락되었습니다! .env 파일을 확인해 주세요.");
+        console.error("Firebase configuration is missing in .env");
         throw new Error("Firebase configuration is missing.");
     }
 
     try {
-        console.log("Attempting signInWithPopup with domain:", firebaseConfig.authDomain);
         const result = await signInWithPopup(auth, googleProvider);
         return result;
     } catch (error: any) {
-        console.error("Firebase Google Sign-In Detailed Error:", error.code, error.message);
-        
-        // 특정 에러 코드에 대한 추가 정보 제공
-        if (error.code === 'auth/popup-closed-by-user') {
-            console.warn("팝업이 닫혔습니다. 이는 브라우저 설정(쿠키 차단)이나 Authorized Domains 미등록 문제일 수 있습니다.");
-        }
-        
+        console.error("Google Sign-In Error:", error.code, error.message);
         throw error;
     }
 }
