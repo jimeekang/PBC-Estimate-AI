@@ -3,22 +3,19 @@
 Professional painting estimate service using AI, "PBC Estimate AI".
 
 ## Key Features
-- **AI Estimate Generation**: Accurate price calculation using Genkit and Gemini 2.5 Flash.
-- **Customized Form**: Detailed options for building type, work scope, room types, paint condition, etc.
-- **History Management**: Generated estimate data stored in Firebase Firestore.
+- **AI Estimate Generation**: Accurate price calculation using Genkit and Gemini 2.5 Flash, based on real historical quote data.
+- **Data-Driven Logic**: Specialized pricing for Interior, Exterior, and Combined projects with specific rules for trim types, paint conditions, and difficulty factors.
+- **Address Autocomplete**: Integrated Australian address suggestion for precise location entry.
+- **Customized Form**: Detailed options for building type, work scope, room types, paint condition, and more.
+- **History Management**: Generated estimate data stored in Firebase Firestore for admin review.
 - **Authentication System**: Secure user management via Firebase Auth (Google Login and Email verification).
-
-## Recent Updates
-- **Authentication Error Fix**: Added domain authorization guide for cases where Google login popups close automatically (`auth/popup-closed-by-user`).
-- **Admin Permission Management**: Script `set-admin-claim.js` to grant or revoke admin privileges.
-- **Estimate Usage Limit**: Standard users are limited to 2 estimates, while admins have unlimited access.
-- **UI/UX Improvements**: Added intuitive icons and animations to the form, and fixed build errors.
 
 ## Tech Stack
 - **Framework**: Next.js 15 (App Router)
-- **AI**: Genkit, Google Generative AI
+- **AI**: Genkit, Google Generative AI (Gemini 2.5 Flash)
 - **Backend/Auth**: Firebase (Firestore, Authentication)
 - **UI/UX**: Tailwind CSS, Shadcn UI, Framer Motion
+- **Language**: Fully localized in English
 
 ## Getting Started
 
