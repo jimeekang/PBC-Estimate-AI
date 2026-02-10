@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -5,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, Info } from 'lucide-react';
 import Link from 'next/link';
 import { signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { auth, signInWithGoogle } from '@/lib/firebase';
@@ -39,12 +40,18 @@ export function LoginForm() {
       const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
       let errorMessage = [`오류 발생: ${e.message}`];
       
-      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/unauthorized-domain') {
+      if (e.code === 'auth/popup-closed-by-user') {
         errorMessage = [
-          '로그인 팝업이 비정상적으로 닫혔거나 승인되지 않은 도메인입니다.',
-          '1. 브라우저 설정에서 "팝업 및 리디렉션"을 허용해 주세요.',
-          '2. 광고 차단기(AdBlock 등)가 있다면 꺼주세요.',
-          '3. Firebase Console -> Authentication -> Settings -> Authorized Domains에 아래 주소를 복사해서 추가해 주세요:',
+          '로그인 창이 자동으로 닫혔습니다. 다음을 확인해 주세요:',
+          '1. 브라우저 설정에서 "서드파티 쿠키 차단"을 해제해 주세요. (가장 흔한 원인)',
+          '2. 주소창 오른쪽의 "팝업 차단" 아이콘을 눌러 항상 허용을 선택해 주세요.',
+          '3. 시크릿 창(Incognito)에서는 작동하지 않을 수 있습니다.',
+          '4. 등록된 도메인 확인:',
+          `👉 ${currentDomain}`
+        ];
+      } else if (e.code === 'auth/unauthorized-domain') {
+        errorMessage = [
+          '승인되지 않은 도메인입니다. Firebase 콘솔에 아래 주소를 등록해 주세요:',
           `👉 ${currentDomain}`
         ];
       }
@@ -136,7 +143,7 @@ export function LoginForm() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>로그인 오류</AlertTitle>
             <AlertDescription>
-              <ul className="list-disc list-inside space-y-1 text-xs">
+              <ul className="list-disc list-inside space-y-1 text-xs mt-2">
                 {errors._form.map((msg, i) => <li key={i}>{msg}</li>)}
               </ul>
             </AlertDescription>
@@ -161,6 +168,13 @@ export function LoginForm() {
         {isGooglePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.google className="mr-2 h-4 w-4" />}
         Google
       </Button>
+
+      <Alert className="bg-primary/5 border-primary/20">
+        <Info className="h-4 w-4 text-primary" />
+        <AlertDescription className="text-xs text-muted-foreground">
+          팝업이 즉시 닫힌다면 브라우저 설정에서 <b>서드파티 쿠키 허용</b>을 확인해 주세요.
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

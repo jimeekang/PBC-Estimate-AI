@@ -1,6 +1,6 @@
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getFirestore, collection, getDocs, doc, getDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -17,6 +17,9 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// 로컬 스토리지에 인증 상태 유지 설정
+setPersistence(auth, browserLocalPersistence);
+
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
@@ -25,6 +28,7 @@ googleProvider.setCustomParameters({
 
 export const signInWithGoogle = async () => {
     try {
+        // 팝업 방식 시도
         const result = await signInWithPopup(auth, googleProvider);
         return result;
     } catch (error: any) {
