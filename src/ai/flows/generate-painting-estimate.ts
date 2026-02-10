@@ -7,6 +7,7 @@
  * - Interior only: $2,500 - $8,000
  * - Exterior only: $6,500 - $16,000
  * - Combined: $12,000 - $30,000
+ * - Hard Cap: $35,000
  */
 
 import { ai } from '@/ai/genkit';
@@ -18,6 +19,8 @@ const ANCHORS = {
   Exterior: { min: 6500, max: 16000, median: 10650 },
   InteriorExterior: { min: 12000, max: 30000, median: 19000 }
 };
+
+const MAX_PRICE_CAP = 35000;
 
 // --- Interior 로직 상수 ---
 const ROOM_WEIGHT: Record<string, number> = {
@@ -141,20 +144,20 @@ const explanationPrompt = ai.definePrompt({
   - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Not specified{{/if}}
   - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
 
-  # GENERATED PRICE DATA
+  # GENERATED PRICE DATA (AUD)
   Min: {{priceMin}}
   Max: {{priceMax}}
 
   # INSTRUCTIONS
   1. **explanation**: Write a professional summary (3-5 sentences). 
      - Mention main cost drivers (scope, size, condition, trim detail, and access complexity).
-     - If priceMax is over 30,000, emphasize that this is a large-scale project requiring a detailed site inspection for a final quote.
+     - If priceMax is at the cap of 35,000, emphasize that this is a large-scale project requiring a detailed site inspection for a final quote.
      - Use Australian English.
      - Do NOT mention internal formulas, weights, or algorithms.
      - Be transparent and build trust.
      - Clearly state that this is an "indicative estimate" subject to site inspection.
   2. **priceRange**: 
-     - If priceMax > 30,000, format as "From AUD {{priceMin}}+ (Site Inspection Required)".
+     - If priceMax >= 35,000, format as "From AUD {{priceMin}}+ (Site Inspection Required)".
      - Otherwise, format as "AUD {{priceMin}} - {{priceMax}}".
   3. **details**: Provide a bulleted list of 3-5 key factors specific to this job.
   `
@@ -290,12 +293,19 @@ export const generatePaintingEstimate = ai.defineFlow(
       });
     }
 
-    // 최종 라운딩 적용
+    // --- 5) 최종 라운딩 및 하드 캡(Hard Cap) 적용 ---
     totalMin = Math.round(totalMin);
     totalMax = Math.round(totalMax);
 
+    // 모든 견적 결과가 $35,000을 넘지 않도록 제한
+    if (totalMax > MAX_PRICE_CAP) {
+      totalMax = MAX_PRICE_CAP;
+    }
+    if (totalMin > MAX_PRICE_CAP - 1000) {
+      totalMin = MAX_PRICE_CAP - 5000; // 큰 규모 공사임을 시각적으로 보여주기 위한 최소가 조정
+    }
+
     // AI에게 전문적인 설명 생성 요청
-    // (이제 30k 초과 시에도 하드코딩된 리턴 대신 AI가 최소 시작가를 포함해 설명함)
     const { output } = await explanationPrompt({
       input,
       priceMin: totalMin,
