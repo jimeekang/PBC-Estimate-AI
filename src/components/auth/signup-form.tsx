@@ -31,23 +31,17 @@ export function SignupForm() {
       setIsGooglePending(true);
       setErrors(null);
       await signInWithGoogle();
-      // AuthProvider handles redirection
     } catch (e: any) {
-      console.error("Google Sign-In Component Error (Signup):", e);
+      console.error("Google Sign-In Error (Signup):", e);
       
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
       let errorMessage = [`오류 발생: ${e.message}`];
       
-      if (e.code === 'auth/popup-closed-by-user') {
+      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/unauthorized-domain') {
         errorMessage = [
-          '로그인 팝업이 비정상적으로 닫혔습니다.',
-          '브라우저 설정에서 "팝업 및 리디렉션"을 허용하고 광고 차단기를 꺼주세요.'
-        ];
-      } else if (e.code === 'auth/unauthorized-domain') {
-        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
-        errorMessage = [
-          '승인되지 않은 도메인입니다.',
-          `Firebase 콘솔의 Authorized Domains에 다음 주소를 추가해 주세요:`,
-          `${currentDomain}`
+          '로그인 팝업이 비정상적으로 닫혔거나 승인되지 않은 도메인입니다.',
+          'Firebase 콘솔의 Authorized Domains에 아래 주소를 등록해 주세요:',
+          `👉 ${currentDomain}`
         ];
       }
       
