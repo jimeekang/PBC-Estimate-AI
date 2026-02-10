@@ -36,6 +36,7 @@ import {
   Droplets,
   Hammer,
   AlertTriangle,
+  Info,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -180,7 +181,6 @@ export function EstimateForm() {
   async function onSubmit(values: EstimateFormValues) {
     if (!user) return;
     
-    // 최종 확인 (클라이언트 측)
     const currentCount = await fetchEstimateCount(user.uid);
     if (currentCount >= 2) {
         setIsLimitReached(true);
@@ -203,7 +203,6 @@ export function EstimateForm() {
         });
     } else if (result.data) {
         try {
-            // Firestore에 저장 (클라이언트 SDK 사용으로 보안 규칙 통과)
             await addDoc(collection(db, 'estimates'), {
                 userId: user.uid,
                 options: values,
@@ -242,11 +241,11 @@ export function EstimateForm() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
-            <Alert variant="destructive" className="mb-6">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Free Limit Reached</AlertTitle>
+            <Alert variant="default" className="mb-6 border-primary bg-primary/5">
+              <Info className="h-4 w-4 text-primary" />
+              <AlertTitle className="text-primary">Free Limit Reached</AlertTitle>
               <AlertDescription>
-                You have already generated 2 estimates. Please contact our support team for a professional on-site quote.
+                You have already used your 2 free AI estimates. For a more accurate quote, please contact us for an on-site inspection.
               </AlertDescription>
             </Alert>
           </motion.div>
