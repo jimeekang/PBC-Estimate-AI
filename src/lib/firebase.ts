@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, collection, getDocs, doc, getDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -14,7 +14,15 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
+auth.useDeviceLanguage(); // Set auth to use the device's language
 const db = getFirestore(app);
+
+// Google Auth Provider
+const googleProvider = new GoogleAuthProvider();
+
+export const signInWithGoogle = () => {
+    return signInWithPopup(auth, googleProvider);
+}
 
 export const getEstimates = async () => {
     const estimatesCol = collection(db, 'estimates');
@@ -24,13 +32,12 @@ export const getEstimates = async () => {
 }
 
 export const getEstimate = async (id: string) => {
-    const estimateDoc = doc(db, 'estimates', id);
-    const estimateSnapshot = await getDoc(estimateDoc);
-    if (estimateSnapshot.exists()) {
-        return { ...estimateSnapshot.data(), id: estimateSnapshot.id };
-    } else {
-        return null;
+    const docRef = doc(db, 'estimates', id);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return { ...docSnap.data(), id: docSnap.id };
     }
+    return null;
 }
 
-export { app, auth, db };
+export { auth, db };
