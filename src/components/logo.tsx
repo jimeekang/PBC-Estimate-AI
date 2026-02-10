@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useEffect, useState } from 'react';
 import logoImg from "../../logo-bg-remove.png";
+
 export function Logo({ className }: { className?: string }) {
   const [mounted, setMounted] = useState(false);
   const logo = PlaceHolderImages.find((img) => img.id === 'logo');
@@ -15,26 +16,24 @@ export function Logo({ className }: { className?: string }) {
   }, []);
 
   return (
-    <div className={cn('flex items-center gap-2 text-xl font-bold', className)}>
+    <div className={cn('flex items-center gap-2 font-bold', className)}>
       <div className="relative h-10 w-10 overflow-hidden rounded-full border border-primary/10 bg-white p-1 shadow-sm">
         {!mounted ? (
           <div className="h-full w-full bg-muted rounded-full" />
-        ) : logo ? (
+        ) : (
           <Image
             src={logoImg}
-            alt="Paint Buddy & Co Logo"
+            alt="PBC Logo"
             fill
             className="object-contain"
-            data-ai-hint={logo.imageHint}
+            data-ai-hint={logo?.imageHint || 'paint logo'}
             priority
           />
-        ) : (
-          <div className="h-full w-full bg-muted rounded-full" />
         )}
       </div>
-      <div className="flex flex-col leading-tight">
-        <span className="text-foreground tracking-tight text-lg">Paint Buddy</span>
-        <span className="text-primary text-sm font-bold -mt-1">& Co</span>
+      <div className="flex items-baseline gap-1.5 leading-none">
+        <span className="text-foreground tracking-tight text-lg">PBC</span>
+        <span className="text-primary text-lg font-bold">Estimate AI</span>
       </div>
     </div>
   );

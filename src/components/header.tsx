@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -16,7 +17,6 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { LayoutDashboard, LogOut } from 'lucide-react';
-import { Badge } from './ui/badge';
 
 export default function Header() {
   const { user, isAdmin } = useAuth();
@@ -33,13 +33,10 @@ export default function Header() {
   return (
     <header className="border-b bg-card">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center">
           <Link href="/">
             <Logo />
           </Link>
-          <Badge variant="secondary" className="hidden sm:flex font-bold px-2 py-0.5 text-xs bg-primary/10 text-primary border-primary/20">
-            Estimate AI
-          </Badge>
         </div>
         <nav>
           {user ? (
