@@ -1,23 +1,25 @@
 'use server';
 
 /**
- * @fileOverview An AI agent to estimate the painting price range and provide a short explanation.
+ * @fileOverview Data-driven AI agent to estimate the painting price range.
  * 
- * This flow performs logic-based price calculation first, then uses AI to generate
- * a professional explanation for the customer.
+ * Based on historical quote data analysis:
+ * - Interior only: $2,500 - $8,000
+ * - Exterior only: $6,500 - $16,000
+ * - Combined: $12,000 - $30,000
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
-// --- 로직 상수 정의 ---
-
+// --- 데이터 기반 기준가 (Anchors) ---
 const ANCHORS = {
-  Interior: { min: 1500, max: 8000 },
-  Exterior: { min: 2000, max: 10000 },
-  InteriorExterior: { min: 3500, max: 18000 }
+  Interior: { min: 2500, max: 8000, median: 3000 },
+  Exterior: { min: 6500, max: 16000, median: 10650 },
+  InteriorExterior: { min: 12000, max: 30000, median: 19000 }
 };
 
+// --- Interior 로직 상수 ---
 const ROOM_WEIGHT: Record<string, number> = {
   "Bedroom 1": 1.0,
   "Bedroom 2": 1.0,
@@ -30,7 +32,7 @@ const ROOM_WEIGHT: Record<string, number> = {
   "Etc": 0.6
 };
 
-const BASE_ROOM_SCORE = 3.0;
+const BASE_ROOM_SCORE = 3.0; // Standard 2-3 room baseline
 
 const AREA_SHARE = {
   ceilingPaint: 0.25,
@@ -40,7 +42,7 @@ const AREA_SHARE = {
 
 const TRIM_TYPE_MULTIPLIER = {
   "Oil-based": { min: 1.00, max: 1.05 },
-  "Water-based": { min: 1.10, max: 1.25 }
+  "Water-based": { min: 1.10, max: 1.25 } // Water-based is more expensive as per requirements
 };
 
 const TRIM_ITEM_RATES = {
@@ -49,7 +51,7 @@ const TRIM_ITEM_RATES = {
   "Skirting Boards": { min: 6 * 16, max: 12 * 16 }
 };
 
-// --- Exterior 전용 로직 상수 ---
+// --- Exterior 로직 상수 ---
 const EXTERIOR_ITEM_BASE: Record<string, { min: number, max: number }> = {
   "Wall": { min: 2500, max: 9000 },
   "Eaves": { min: 1200, max: 3500 },
@@ -66,8 +68,7 @@ const EXTERIOR_SIZE_BANDS = [
   { minSqm: 201, maxSqm: 1000, minMult: 1.10, maxMult: 1.30 }
 ];
 
-const EXTERIOR_FULL_PACKAGE_MIN_FLOOR = 6500;
-
+// --- 공통 보정 상수 ---
 const CONDITION_MULTIPLIER = {
   "Excellent": { min: 0.95, max: 1.05 },
   "Fair": { min: 1.10, max: 1.25 },
@@ -137,24 +138,20 @@ const explanationPrompt = ai.definePrompt({
   - Property type: {{input.propertyType}}
   - Scope: {{input.scopeOfPainting}}
   - Work type: {{#each input.typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
-  - Rooms: {{#if input.roomsToPaint}}{{#each input.roomsToPaint}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}Not specified{{/if}}
-  - Exterior Areas: {{#if input.exteriorAreas}}{{#each input.exteriorAreas}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}N/A{{/if}}
-  - Paint Areas: {{#if input.paintAreas.ceilingPaint}}Ceiling, {{/if}}{{#if input.paintAreas.wallPaint}}Walls, {{/if}}{{#if input.paintAreas.trimPaint}}Trim{{/if}}
-  - Trim Details: {{#if input.trimPaintOptions}}{{input.trimPaintOptions.paintType}} on {{#each input.trimPaintOptions.trimItems}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}N/A{{/if}}
-  - Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
-  - Difficulty: {{#if input.jobDifficulty}}{{#each input.jobDifficulty}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}Standard access{{/if}}
+  - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Not specified{{/if}}
+  - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
 
   # GENERATED PRICE
-  The calculated price range is {{priceMin}} - {{priceMax}} AUD.
+  The calculated price range is ${{priceMin}} - ${{priceMax}} AUD.
 
   # INSTRUCTIONS
   1. **explanation**: Write a professional summary (3-5 sentences). 
-     - Mention main cost drivers (property size, room count, paint condition, trim details, and access).
+     - Mention main cost drivers (scope, size, condition, trim detail, and access complexity).
      - If exterior painting is included, mention weather windows, surface degradation, and height/access risks.
      - Use Australian English.
-     - Do NOT mention internal formulas or algorithms.
+     - Do NOT mention internal formulas, weights, or algorithms.
      - Be transparent and build trust.
-     - State clearly that this is an "indicative estimate" subject to site inspection.
+     - Clearly state that this is an "indicative estimate" subject to site inspection.
   2. **priceRange**: Format as "$X,XXX - $X,XXX AUD".
   3. **details**: Provide a bulleted list of 3-5 key factors specific to this job.
   `
@@ -171,45 +168,44 @@ export const generatePaintingEstimate = ai.defineFlow(
   async (input) => {
     const isInt = input.typeOfWork.includes('Interior Painting');
     const isExt = input.typeOfWork.includes('Exterior Painting');
+    const isBoth = isInt && isExt;
 
-    let totalMin = 0;
-    let totalMax = 0;
+    let intMin = 0;
+    let intMax = 0;
+    let extMin = 0;
+    let extMax = 0;
 
-    // --- 1) Interior 계산 ---
+    // --- 1) Interior 계산 모듈 ---
     if (isInt) {
       const anchor = ANCHORS.Interior;
-      let intMin = anchor.min;
-      let intMax = anchor.max;
+      let baseMin = anchor.min;
+      let baseMax = anchor.max;
 
-      // Room 기반 세분화
-      if (input.roomsToPaint && input.roomsToPaint.length > 0) {
-        const roomScore = input.roomsToPaint.reduce((sum, room) => sum + (ROOM_WEIGHT[room] || 0.6), 0);
-        const roomFactor = Math.max(0.6, Math.min(2.2, roomScore / BASE_ROOM_SCORE));
-        intMin *= roomFactor;
-        intMax *= roomFactor;
-      }
+      // Room Score 보정
+      const roomScore = (input.roomsToPaint || []).reduce((sum, room) => sum + (ROOM_WEIGHT[room] || 0.6), 0);
+      const roomFactor = Math.max(0.6, Math.min(2.5, roomScore / BASE_ROOM_SCORE));
+      
+      baseMin *= roomFactor;
+      baseMax *= roomFactor;
 
-      // Paint Areas 반영
+      // Area Share 보정
       let areaFactor = 0;
       if (input.paintAreas.ceilingPaint) areaFactor += AREA_SHARE.ceilingPaint;
       if (input.paintAreas.wallPaint) areaFactor += AREA_SHARE.wallPaint;
       if (input.paintAreas.trimPaint) areaFactor += AREA_SHARE.trimPaint;
       areaFactor = areaFactor > 0 ? areaFactor : 1.0;
       
-      intMin *= areaFactor;
-      intMax *= areaFactor;
-
-      totalMin += intMin;
-      totalMax += intMax;
+      intMin = baseMin * areaFactor;
+      intMax = baseMax * areaFactor;
     }
 
-    // --- 2) Exterior 계산 (모듈 합산 방식) ---
-    if (isExt && input.exteriorAreas && input.exteriorAreas.length > 0) {
+    // --- 2) Exterior 계산 모듈 ---
+    if (isExt) {
       let extSumMin = 0;
       let extSumMax = 0;
 
-      // 항목별 베이스 합산
-      input.exteriorAreas.forEach(area => {
+      // 항목별 합산
+      (input.exteriorAreas || []).forEach(area => {
         const base = EXTERIOR_ITEM_BASE[area];
         if (base) {
           extSumMin += base.min;
@@ -217,11 +213,10 @@ export const generatePaintingEstimate = ai.defineFlow(
         }
       });
 
-      // 리스크 가중치 적용
+      // 리스크 및 사이즈 가중치
       let extRiskedMin = extSumMin * EXTERIOR_RISK_MULTIPLIER.min;
       let extRiskedMax = extSumMax * EXTERIOR_RISK_MULTIPLIER.max;
 
-      // 사이즈 보정 (Soft Factor)
       if (input.approxSize) {
         const band = EXTERIOR_SIZE_BANDS.find(b => input.approxSize! >= b.minSqm && input.approxSize! <= b.maxSqm) 
                    || EXTERIOR_SIZE_BANDS[EXTERIOR_SIZE_BANDS.length - 1];
@@ -229,22 +224,35 @@ export const generatePaintingEstimate = ai.defineFlow(
         extRiskedMax *= band.maxMult;
       }
 
-      // Full Package Floor 룰 적용
+      // Full Exterior Package 룰 ($6.5k floor)
       const requiredItems = ["Wall", "Eaves", "Gutter", "Fascia", "Exterior Trim"];
-      const isFullPackage = requiredItems.every(item => input.exteriorAreas!.includes(item));
+      const isFullExt = requiredItems.every(item => (input.exteriorAreas || []).includes(item));
 
-      if (isFullPackage) {
-        extRiskedMin = Math.max(extRiskedMin, EXTERIOR_FULL_PACKAGE_MIN_FLOOR);
-        extRiskedMax = Math.max(extRiskedMax, EXTERIOR_FULL_PACKAGE_MIN_FLOOR * 1.25);
+      if (isFullExt) {
+        extRiskedMin = Math.max(extRiskedMin, ANCHORS.Exterior.min);
+        extRiskedMax = Math.max(extRiskedMax, ANCHORS.Exterior.min * 1.3);
       }
 
-      totalMin += extRiskedMin;
-      totalMax += extRiskedMax;
+      extMin = extRiskedMin;
+      extMax = extRiskedMax;
     }
 
-    // --- 3) 공통 추가 항목 (Trim, Condition, Difficulty) ---
+    // --- 3) 최종 합산 및 결합 보정 ---
+    let totalMin = intMin + extMin;
+    let totalMax = intMax + extMax;
 
-    // Trim 세분화 (Interior 선택 시에만 적용하거나, 전체에 합산)
+    // Interior + Exterior 결합 시 데이터 기반 최소/최대 보정
+    if (isBoth) {
+      totalMin = Math.max(totalMin, ANCHORS.InteriorExterior.min);
+      // 복합 공사의 경우 중앙값을 고려하여 Max 범위를 현실적으로 조정
+      if (totalMax < ANCHORS.InteriorExterior.median) {
+        totalMax = ANCHORS.InteriorExterior.median * 1.2;
+      }
+    }
+
+    // --- 4) 추가 항목 (Trim, Condition, Difficulty) ---
+
+    // Trim 세부 할증 (Interior 선택 시)
     if (input.paintAreas.trimPaint && input.trimPaintOptions) {
       const roomCount = input.roomsToPaint?.length || 1;
       const { paintType, trimItems } = input.trimPaintOptions;
@@ -252,16 +260,16 @@ export const generatePaintingEstimate = ai.defineFlow(
       let itemsBaseMax = 0;
       
       trimItems.forEach(item => {
-        const rate = TRIM_ITEM_RATES[item];
+        const rate = TRIM_ITEM_RATES[item as keyof typeof TRIM_ITEM_RATES];
         if (rate) {
           itemsBaseMin += rate.min * roomCount;
           itemsBaseMax += rate.max * roomCount;
         }
       });
 
-      const multiplier = TRIM_TYPE_MULTIPLIER[paintType] || TRIM_TYPE_MULTIPLIER["Oil-based"];
-      totalMin += itemsBaseMin * multiplier.min;
-      totalMax += itemsBaseMax * multiplier.max;
+      const multiplier = TRIM_TYPE_MULTIPLIER[paintType as keyof typeof TRIM_TYPE_MULTIPLIER];
+      totalMin += itemsBaseMin * (multiplier?.min || 1.0);
+      totalMax += itemsBaseMax * (multiplier?.max || 1.1);
     }
 
     // Condition 적용
@@ -272,7 +280,7 @@ export const generatePaintingEstimate = ai.defineFlow(
     // Difficulty 추가
     if (input.jobDifficulty) {
       input.jobDifficulty.forEach(diff => {
-        const addon = DIFFICULTY_ADDON[diff];
+        const addon = DIFFICULTY_ADDON[diff as keyof typeof DIFFICULTY_ADDON];
         if (addon) {
           totalMin += addon.min;
           totalMax += addon.max;
@@ -280,20 +288,20 @@ export const generatePaintingEstimate = ai.defineFlow(
       });
     }
 
-    // Global Bounds 적용
-    totalMin = Math.max(1500, Math.round(totalMin));
+    // 최종 라운딩 및 캡 적용
+    totalMin = Math.round(totalMin);
     totalMax = Math.round(totalMax);
 
-    // 30,000 이상일 경우 처리
-    if (totalMax > 30000) {
+    // 대형 공사 ($30,000 초과) 처리
+    if (totalMax > 30000 || (isBoth && totalMin > 25000)) {
       return {
         priceRange: "Site inspection needed",
-        explanation: "Based on the extensive scope and specific requirements, a manual site inspection is required to provide an accurate quote. The estimated value exceeds our standard online calculation range.",
-        details: ["High complexity job", "Extensive surface area", "Requires specialized access and safety setup"]
+        explanation: "Based on the comprehensive scope of work spanning both interior and exterior surfaces, a manual site inspection is essential to provide an accurate quotation. The estimated value reflects a large-scale project that requires specialized assessment.",
+        details: ["Combined Interior & Exterior scope", "High complexity and detailed surface preparation", "Specialized access and safety equipment required"]
       };
     }
 
-    // AI에게 설명 생성을 위해 결과값 전달
+    // AI에게 전문적인 설명 생성 요청
     const { output } = await explanationPrompt({
       input,
       priceMin: totalMin,
