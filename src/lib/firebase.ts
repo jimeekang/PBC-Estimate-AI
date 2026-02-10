@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, collection, getDocs, doc, getDoc } from 'firebase/firestore';
@@ -10,6 +11,13 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_APP_ID,
 };
+
+// Log config presence (but not secrets) for debugging
+console.log("Firebase Config Status:", {
+  apiKey: !!firebaseConfig.apiKey,
+  authDomain: firebaseConfig.authDomain,
+  projectId: firebaseConfig.projectId
+});
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -30,10 +38,11 @@ export const signInWithGoogle = async () => {
     }
 
     try {
+        console.log("Attempting Google Sign-In with Popup...");
         const result = await signInWithPopup(auth, googleProvider);
         return result;
     } catch (error: any) {
-        console.error("Google Sign-In Error:", error.code, error.message);
+        console.error("Google Sign-In Error Details:", error.code, error.message);
         throw error;
     }
 }

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -31,22 +32,32 @@ export function LoginForm() {
     try {
       setIsGooglePending(true);
       setErrors(null);
+      console.log("Starting Google Sign-In Process...");
       const result = await signInWithGoogle();
       if (result?.user) {
-        console.log("Google Sign-In Successful");
+        console.log("Google Sign-In Successful for user:", result.user.email);
       }
     } catch (e: any) {
       console.error("Google Sign-In Component Error:", e);
+      
+      let errorMessage = [`오류 발생: ${e.message}`];
+      
       if (e.code === 'auth/popup-closed-by-user') {
-        setErrors({ _form: [
-          '로그인 창이 예기치 않게 닫혔습니다. 다음을 확인해 주세요:',
-          '1. 브라우저 설정에서 "타사 쿠키"가 허용되어 있는지 확인.',
-          '2. 광고 차단 프로그램(AdBlock 등)이 팝업을 강제로 닫았는지 확인.',
-          '3. Firebase 콘솔에 현재 접속 주소가 "승인된 도메인"으로 등록되어 있는지 확인.'
-        ] });
-        return;
+        errorMessage = [
+          '로그인 팝업창이 닫혔습니다.',
+          '1. 직접 창을 닫지 않았다면, 브라우저의 "팝업 차단" 설정을 확인해 주세요.',
+          '2. 광고 차단 프로그램(AdBlock 등)이 실행 중이라면 잠시 중지해 주세요.',
+          '3. 브라우저 설정에서 "타사 쿠키 허용"이 되어 있는지 확인해 주세요.',
+          '4. 계속 실패할 경우 시크릿 모드(Incognito)에서 시도해 보세요.'
+        ];
+      } else if (e.code === 'auth/unauthorized-domain') {
+        errorMessage = [
+          '현재 도메인이 Firebase 승인 도메인에 등록되어 있지 않습니다.',
+          'Firebase Console -> Authentication -> Settings -> Authorized Domains에 현재 주소를 추가해야 합니다.'
+        ];
       }
-      setErrors({ _form: [`오류 발생: ${e.message}`] });
+      
+      setErrors({ _form: errorMessage });
     } finally {
       setIsGooglePending(false);
     }
@@ -87,6 +98,7 @@ export function LoginForm() {
       }
     } catch (e: any) {
       setIsPending(false);
+      console.error("Email Login Error:", e);
       if (e.code === 'auth/invalid-credential') {
         return setErrors({ _form: ['이메일 또는 비밀번호가 올바르지 않습니다.'] });
       }
@@ -130,9 +142,9 @@ export function LoginForm() {
         {errors?._form && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>알림</AlertTitle>
+            <AlertTitle>로그인 오류</AlertTitle>
             <AlertDescription>
-              <ul className="list-disc list-inside">
+              <ul className="list-disc list-inside space-y-1 text-xs">
                 {errors._form.map((msg, i) => <li key={i}>{msg}</li>)}
               </ul>
             </AlertDescription>
