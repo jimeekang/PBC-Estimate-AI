@@ -142,7 +142,7 @@ const explanationPrompt = ai.definePrompt({
   - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
 
   # GENERATED PRICE
-  The calculated price range is ${{priceMin}} - ${{priceMax}} AUD.
+  The calculated price range is AUD {{priceMin}} - {{priceMax}}.
 
   # INSTRUCTIONS
   1. **explanation**: Write a professional summary (3-5 sentences). 
