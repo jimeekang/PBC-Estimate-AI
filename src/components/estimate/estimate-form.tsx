@@ -191,27 +191,63 @@ export function EstimateForm() {
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
 
-  // Debounced address search
-  const searchAddress = useCallback(async (query: string) => {
-    if (!query || query.length < 3) {
+  // Debounced address search focusing on detailed Australian addresses
+  const searchAddress = useCallback(async (queryStr: string) => {
+    if (!queryStr || queryStr.length < 3) {
       setAddressSuggestions([]);
       return;
     }
 
     setIsSearchingAddress(true);
     try {
-      // Append Australia to the query to restrict results to AU
-      const searchQuery = query.toLowerCase().includes('australia') ? query : `${query}, Australia`;
-      const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=5`);
+      // Append Australia to the query to restrict results to AU and improve relevance
+      const searchQuery = queryStr.toLowerCase().includes('australia') ? queryStr : `${queryStr}, Australia`;
+      const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=8&lang=en`);
       const data = await response.json();
+      
       const suggestions = data.features.map((f: any) => {
         const p = f.properties;
-        // Filter by country just in case
-        if (p.countrycode && p.countrycode.toLowerCase() !== 'au' && p.country && p.country.toLowerCase() !== 'australia') {
-          return null;
+        
+        // Filter by country code for Australia
+        const isAustralia = p.countrycode === 'AU' || p.country === 'Australia';
+        if (!isAustralia) return null;
+
+        const parts = [];
+        
+        // 1. House Number + Street (Specific Address)
+        if (p.housenumber && p.street) {
+          parts.push(`${p.housenumber} ${p.street}`);
+        } 
+        // 2. Or just Street
+        else if (p.street) {
+          parts.push(p.street);
         }
-        return [p.name, p.street, p.city, p.state, p.country].filter(Boolean).join(', ');
+        // 3. Or just Name (if it's not the same as city/state)
+        else if (p.name && p.name !== p.city && p.name !== p.state) {
+          parts.push(p.name);
+        }
+
+        // 4. City / Suburb
+        if (p.city || p.district) {
+          parts.push(p.city || p.district);
+        }
+
+        // 5. State (Abbreviated if possible, but Photon usually returns full name)
+        if (p.state) {
+          parts.push(p.state);
+        }
+
+        // 6. Postcode
+        if (p.postcode) {
+          parts.push(p.postcode);
+        }
+
+        // Filter out empty parts and join
+        const formatted = parts.filter(Boolean).join(', ');
+        return formatted;
       }).filter(Boolean);
+
+      // Remove duplicates
       setAddressSuggestions(Array.from(new Set(suggestions as string[])));
     } catch (error) {
       console.error('Address search error:', error);
@@ -226,7 +262,7 @@ export function EstimateForm() {
       if (location && showSuggestions) {
         searchAddress(location);
       }
-    }, 500);
+    }, 400); // Slightly faster debounce
     return () => clearTimeout(timeoutId);
   }, [form.watch('location'), searchAddress, showSuggestions]);
 
@@ -374,10 +410,10 @@ export function EstimateForm() {
                     <FormControl>
                       <div className="relative">
                         <Input 
-                          placeholder="Start typing your address..." 
+                          placeholder="Search your Australian address..." 
                           {...field} 
                           onFocus={() => setShowSuggestions(true)}
-                          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                          onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
                           autoComplete="off"
                         />
                         {isSearchingAddress && (
@@ -393,20 +429,20 @@ export function EstimateForm() {
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
-                          className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto"
+                          className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-72 overflow-auto"
                         >
                           {addressSuggestions.map((suggestion, index) => (
                             <li
                               key={index}
-                              className="px-4 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm flex items-center gap-2"
+                              className="px-4 py-3 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm flex items-start gap-2 border-b last:border-0"
                               onMouseDown={() => {
                                 field.onChange(suggestion);
                                 setAddressSuggestions([]);
                                 setShowSuggestions(false);
                               }}
                             >
-                              <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                              <span className="truncate">{suggestion}</span>
+                              <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                              <span className="leading-snug">{suggestion}</span>
                             </li>
                           ))}
                         </motion.ul>
