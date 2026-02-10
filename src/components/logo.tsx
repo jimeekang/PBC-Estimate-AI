@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useEffect, useState } from 'react';
-
+import logoImg from "../../logo-bg-remove.png";
 export function Logo({ className }: { className?: string }) {
   const [mounted, setMounted] = useState(false);
   const logo = PlaceHolderImages.find((img) => img.id === 'logo');
@@ -21,7 +21,7 @@ export function Logo({ className }: { className?: string }) {
           <div className="h-full w-full bg-muted rounded-full" />
         ) : logo ? (
           <Image
-            src={logo.imageUrl}
+            src={logoImg}
             alt="Paint Buddy & Co Logo"
             fill
             className="object-contain"

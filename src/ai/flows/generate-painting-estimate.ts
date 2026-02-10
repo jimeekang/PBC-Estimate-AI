@@ -157,8 +157,9 @@ const explanationPrompt = ai.definePrompt({
      - Be transparent and build trust.
      - Clearly state that this is an "indicative estimate" subject to site inspection.
   2. **priceRange**: 
-     - If priceMax >= 35,000, format as "From AUD {{priceMin}}+ (Site Inspection Required)".
-     - Otherwise, format as "AUD {{priceMin}} - {{priceMax}}".
+     - Format all numbers with commas as thousands separators (e.g., 10,000 instead of 10000).
+     - If priceMax >= 35,000, format as "From AUD {{priceMin}}+ (Site Inspection Required)". (Use commas in {{priceMin}})
+     - Otherwise, format as "AUD {{priceMin}} - {{priceMax}}". (Use commas in both numbers)
   3. **details**: Provide a bulleted list of 3-5 key factors specific to this job.
   `
 });
