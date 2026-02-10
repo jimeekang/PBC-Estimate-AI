@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/card';
 import {
   ArrowUpToLine,
   Baseline,
@@ -119,7 +119,7 @@ const estimateFormSchema = z.object({
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
 
 export function EstimateForm() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [state, setState] = useState<{data?: GeneratePaintingEstimateOutput, error?: string}>({});
   const [isPending, setIsPending] = useState(false);
   const [estimateCount, setEstimateCount] = useState(0);
@@ -158,7 +158,14 @@ export function EstimateForm() {
       const snapshot = await getCountFromServer(q);
       const count = snapshot.data().count;
       setEstimateCount(count);
-      setIsLimitReached(count >= 2);
+      
+      // 어드민이 아닐 때만 횟수 제한 적용
+      if (!isAdmin) {
+        setIsLimitReached(count >= 2);
+      } else {
+        setIsLimitReached(false);
+      }
+      
       return count;
     } catch (err) {
       console.error("Error fetching count:", err);
@@ -171,7 +178,7 @@ export function EstimateForm() {
       setIsCountLoading(true);
       fetchEstimateCount(user.uid).finally(() => setIsCountLoading(false));
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   const watchTypeOfWork = form.watch('typeOfWork') || [];
   const isInterior = watchTypeOfWork.includes('Interior Painting');
@@ -181,15 +188,18 @@ export function EstimateForm() {
   async function onSubmit(values: EstimateFormValues) {
     if (!user) return;
     
-    const currentCount = await fetchEstimateCount(user.uid);
-    if (currentCount >= 2) {
-        setIsLimitReached(true);
-        toast({
-            variant: "destructive",
-            title: "Limit Reached",
-            description: "You have already used your 2 free estimates.",
-        });
-        return;
+    // 어드민이 아닐 경우에만 횟수 체크
+    if (!isAdmin) {
+      const currentCount = await fetchEstimateCount(user.uid);
+      if (currentCount >= 2) {
+          setIsLimitReached(true);
+          toast({
+              variant: "destructive",
+              title: "Limit Reached",
+              description: "You have already used your 2 free estimates.",
+          });
+          return;
+      }
     }
 
     setIsPending(true);
@@ -210,14 +220,24 @@ export function EstimateForm() {
                 createdAt: serverTimestamp(),
             });
             
-            const newCount = currentCount + 1;
-            setEstimateCount(newCount);
-            setIsLimitReached(newCount >= 2);
+            if (!isAdmin) {
+              const currentCount = await fetchEstimateCount(user.uid);
+              const newCount = currentCount; // fetchEstimateCount updates state
+              setEstimateCount(newCount);
+              setIsLimitReached(newCount >= 2);
+              
+              toast({
+                title: "Success",
+                description: `Estimate generated! (${newCount}/2 used)`,
+              });
+            } else {
+              toast({
+                title: "Success (Admin)",
+                description: `Estimate generated! (Unlimited access)`,
+              });
+              await fetchEstimateCount(user.uid); // Refresh count for admin UI
+            }
             
-            toast({
-              title: "Success",
-              description: `Estimate generated! (${newCount}/2 used)`,
-            });
             setState(result);
         } catch (dbError: any) {
             console.error("Firestore Save Error:", dbError);
@@ -235,7 +255,7 @@ export function EstimateForm() {
   return (
     <>
       <AnimatePresence>
-        {isLimitReached && !isCountLoading && (
+        {isLimitReached && !isCountLoading && !isAdmin && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -782,14 +802,14 @@ export function EstimateForm() {
               type="submit" 
               size="lg" 
               className="w-full text-lg h-14" 
-              disabled={isPending || isLimitReached || isCountLoading}
+              disabled={isPending || (isLimitReached && !isAdmin) || isCountLoading}
             >
               {isPending ? (
                 <Loader2 className="mr-2 h-6 w-6 animate-spin" />
               ) : (
                 <WandSparkles className="mr-2 h-6 w-6" />
               )}
-              {isLimitReached ? 'Free Limit Reached' : isCountLoading ? 'Checking limits...' : 'Generate Estimate'}
+              {isLimitReached && !isAdmin ? 'Free Limit Reached' : isCountLoading ? 'Checking limits...' : 'Generate Estimate'}
             </Button>
             
             <div className="text-center text-sm font-medium p-2 rounded-lg bg-accent/10 border border-accent/20">
@@ -797,6 +817,8 @@ export function EstimateForm() {
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="h-3 w-3 animate-spin" /> Syncing with database...
                 </span>
+              ) : isAdmin ? (
+                <span className="text-primary font-bold">Unlimited access (Admin Dashboard Mode)</span>
               ) : (
                 <>Remaining free estimates: <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span></>
               )}
