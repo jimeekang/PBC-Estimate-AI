@@ -77,7 +77,7 @@ const exteriorAreaOptions = [
   { id: 'Wall', label: 'Wall', icon: Home },
   { id: 'Eaves', label: 'Eaves', icon: ArrowUpToLine },
   { id: 'Gutter', label: 'Gutter', icon: Droplets },
-  { id: 'Fasia', label: 'Fasia', icon: Sparkles },
+  { id: 'Fascia', label: 'Fascia', icon: Sparkles },
   { id: 'Exterior Trim', label: 'Exterior Trim', icon: Hammer },
 ];
 
