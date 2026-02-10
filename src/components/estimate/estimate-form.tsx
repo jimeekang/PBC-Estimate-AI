@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -36,10 +37,11 @@ import {
   Droplets,
   Hammer,
   Info,
+  MapPin,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
 import { useToast } from '@/hooks/use-toast';
@@ -49,6 +51,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, getCountFromServer } from 'firebase/firestore';
+import { cn } from '@/lib/utils';
 
 const trimItems = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
@@ -126,6 +129,11 @@ export function EstimateForm() {
   const [isLimitReached, setIsLimitReached] = useState(false);
   const { toast } = useToast();
 
+  // Address Suggestion State
+  const [addressSuggestions, setAddressSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+
   const form = useForm<EstimateFormValues>({
     resolver: zodResolver(estimateFormSchema),
     defaultValues: {
@@ -182,6 +190,39 @@ export function EstimateForm() {
   const isInterior = watchTypeOfWork.includes('Interior Painting');
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
+
+  // Debounced address search
+  const searchAddress = useCallback(async (query: string) => {
+    if (!query || query.length < 3) {
+      setAddressSuggestions([]);
+      return;
+    }
+
+    setIsSearchingAddress(true);
+    try {
+      const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`);
+      const data = await response.json();
+      const suggestions = data.features.map((f: any) => {
+        const p = f.properties;
+        return [p.name, p.street, p.city, p.state, p.country].filter(Boolean).join(', ');
+      });
+      setAddressSuggestions(Array.from(new Set(suggestions)));
+    } catch (error) {
+      console.error('Address search error:', error);
+    } finally {
+      setIsSearchingAddress(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      const location = form.getValues('location');
+      if (location && showSuggestions) {
+        searchAddress(location);
+      }
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [form.watch('location'), searchAddress, showSuggestions]);
 
   async function onSubmit(values: EstimateFormValues) {
     if (!user) return;
@@ -322,11 +363,49 @@ export function EstimateForm() {
                 control={form.control}
                 name="location"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="relative">
                     <FormLabel>Location</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Sydney Northern Beaches" {...field} />
+                      <div className="relative">
+                        <Input 
+                          placeholder="Start typing your address..." 
+                          {...field} 
+                          onFocus={() => setShowSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                          autoComplete="off"
+                        />
+                        {isSearchingAddress && (
+                          <div className="absolute right-3 top-2.5">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
                     </FormControl>
+                    <AnimatePresence>
+                      {showSuggestions && addressSuggestions.length > 0 && (
+                        <motion.ul
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto"
+                        >
+                          {addressSuggestions.map((suggestion, index) => (
+                            <li
+                              key={index}
+                              className="px-4 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm flex items-center gap-2"
+                              onMouseDown={() => {
+                                field.onChange(suggestion);
+                                setAddressSuggestions([]);
+                                setShowSuggestions(false);
+                              }}
+                            >
+                              <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="truncate">{suggestion}</span>
+                            </li>
+                          ))}
+                        </motion.ul>
+                      )}
+                    </AnimatePresence>
                     <FormMessage />
                   </FormItem>
                 )}
