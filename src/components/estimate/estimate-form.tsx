@@ -200,13 +200,19 @@ export function EstimateForm() {
 
     setIsSearchingAddress(true);
     try {
-      const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`);
+      // Append Australia to the query to restrict results to AU
+      const searchQuery = query.toLowerCase().includes('australia') ? query : `${query}, Australia`;
+      const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=5`);
       const data = await response.json();
       const suggestions = data.features.map((f: any) => {
         const p = f.properties;
+        // Filter by country just in case
+        if (p.countrycode && p.countrycode.toLowerCase() !== 'au' && p.country && p.country.toLowerCase() !== 'australia') {
+          return null;
+        }
         return [p.name, p.street, p.city, p.state, p.country].filter(Boolean).join(', ');
-      });
-      setAddressSuggestions(Array.from(new Set(suggestions)));
+      }).filter(Boolean);
+      setAddressSuggestions(Array.from(new Set(suggestions as string[])));
     } catch (error) {
       console.error('Address search error:', error);
     } finally {
