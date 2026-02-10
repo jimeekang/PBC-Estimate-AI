@@ -38,6 +38,7 @@ import {
   Info,
   MapPin,
   Calendar,
+  ExternalLink,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -902,17 +903,18 @@ export function EstimateForm() {
               {isLimitReached && !isAdmin ? 'Free Limit Reached' : isCountLoading ? 'Checking limits...' : 'Generate Estimate'}
             </Button>
 
-            <div className="text-center p-4 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm">
-              <p className="text-sm font-medium flex items-center justify-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" />
-                <span>If you want to book Quote? Click</span>
+            <div className="text-center p-6 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm space-y-2">
+              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Professional Services</p>
+              <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap">
+                <Calendar className="h-5 w-5 text-primary" />
+                <span>Ready for an expert on-site assessment?</span>
                 <a 
                   href={BOOKING_URL}
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="text-primary font-bold underline hover:text-primary/80 transition-colors inline-flex items-center gap-1"
+                  className="text-primary font-bold underline hover:text-primary/80 transition-all inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-primary/20 shadow-sm"
                 >
-                  here
+                  Book your free quote here <ExternalLink className="h-3 w-3" />
                 </a>
               </p>
             </div>
