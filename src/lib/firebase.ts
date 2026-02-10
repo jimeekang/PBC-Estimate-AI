@@ -24,11 +24,14 @@ googleProvider.setCustomParameters({
 });
 
 export const signInWithGoogle = async () => {
+    if (!firebaseConfig.authDomain) {
+        console.error("Firebase Auth Domain is missing! Check your .env file.");
+    }
     try {
         const result = await signInWithPopup(auth, googleProvider);
         return result;
-    } catch (error) {
-        console.error("Firebase Google Sign-In Error:", error);
+    } catch (error: any) {
+        console.error("Firebase Google Sign-In Detailed Error:", error);
         throw error;
     }
 }
