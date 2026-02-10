@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
@@ -8,7 +9,7 @@ import { usePathname, useRouter } from 'next/navigation';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  isAdmin: boolean; // Add isAdmin state
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({ user: null, loading: true, isAdmin: false });
@@ -16,19 +17,22 @@ const AuthContext = createContext<AuthContextType>({ user: null, loading: true, 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false); // State to hold admin status
+  const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // User is signed in, get their ID token and check for admin claim.
-        const idTokenResult = await user.getIdTokenResult();
-        setIsAdmin(!!idTokenResult.claims.admin);
-        setUser(user);
+        try {
+          const idTokenResult = await user.getIdTokenResult();
+          setIsAdmin(!!idTokenResult.claims.admin);
+          setUser(user);
+        } catch (error) {
+          console.error("Error getting token result:", error);
+          setUser(user);
+        }
       } else {
-        // User is signed out.
         setUser(null);
         setIsAdmin(false);
       }
@@ -41,16 +45,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (loading) return;
 
-    // If the user is logged in
     if (user) {
-      // and tries to access the login, register, or home page, redirect to estimate page
-      if (['/', '/login', '/register'].includes(pathname)) {
+      // '/register'를 '/signup'으로 수정하여 구글 로그인 후 정상 이동되도록 함
+      if (['/', '/login', '/signup'].includes(pathname)) {
         router.push('/estimate');
       }
-    }
-    // If the user is not logged in
-    else {
-      // and tries to access a protected page, redirect to login page
+    } else {
       if (pathname.startsWith('/estimate') || pathname.startsWith('/admin')) {
         router.push('/login');
       }
