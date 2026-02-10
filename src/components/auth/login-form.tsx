@@ -32,28 +32,24 @@ export function LoginForm() {
     try {
       setIsGooglePending(true);
       setErrors(null);
-      console.log("Starting Google Sign-In Process...");
-      const result = await signInWithGoogle();
-      if (result?.user) {
-        console.log("Google Sign-In Successful for user:", result.user.email);
-      }
+      await signInWithGoogle();
+      // AuthProvider handles redirection
     } catch (e: any) {
-      console.error("Google Sign-In Component Error:", e);
+      console.error("Google Sign-In Error Catch:", e);
       
       let errorMessage = [`오류 발생: ${e.message}`];
       
       if (e.code === 'auth/popup-closed-by-user') {
         errorMessage = [
-          '로그인 팝업창이 닫혔습니다.',
-          '1. 직접 창을 닫지 않았다면, 브라우저의 "팝업 차단" 설정을 확인해 주세요.',
-          '2. 광고 차단 프로그램(AdBlock 등)이 실행 중이라면 잠시 중지해 주세요.',
-          '3. 브라우저 설정에서 "타사 쿠키 허용"이 되어 있는지 확인해 주세요.',
-          '4. 계속 실패할 경우 시크릿 모드(Incognito)에서 시도해 보세요.'
+          '로그인 팝업이 비정상적으로 닫혔습니다.',
+          '1. 직접 창을 닫지 않았다면 브라우저의 "광고 차단기(AdBlock 등)"를 잠시 꺼주세요.',
+          '2. 브라우저 설정에서 "팝업 및 리디렉션"이 허용되어 있는지 확인해 주세요.',
+          '3. Firebase 콘솔의 Authorized Domains에 현재 주소가 등록되어 있는지 확인이 필요합니다.'
         ];
       } else if (e.code === 'auth/unauthorized-domain') {
         errorMessage = [
-          '현재 도메인이 Firebase 승인 도메인에 등록되어 있지 않습니다.',
-          'Firebase Console -> Authentication -> Settings -> Authorized Domains에 현재 주소를 추가해야 합니다.'
+          '승인되지 않은 도메인입니다.',
+          'Firebase Console -> Authentication -> Settings -> Authorized Domains에 현재 도메인을 추가해야 합니다.'
         ];
       }
       
