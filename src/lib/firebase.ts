@@ -14,14 +14,23 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-auth.useDeviceLanguage(); // Set auth to use the device's language
+auth.useDeviceLanguage(); 
 const db = getFirestore(app);
 
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
-export const signInWithGoogle = () => {
-    return signInWithPopup(auth, googleProvider);
+export const signInWithGoogle = async () => {
+    try {
+        const result = await signInWithPopup(auth, googleProvider);
+        return result;
+    } catch (error) {
+        console.error("Firebase Google Sign-In Error:", error);
+        throw error;
+    }
 }
 
 export const getEstimates = async () => {
