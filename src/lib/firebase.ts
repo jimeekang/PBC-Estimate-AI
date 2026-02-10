@@ -12,17 +12,9 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_APP_ID,
 };
 
-// Log config presence (but not secrets) for debugging
-console.log("Firebase Config Status:", {
-  apiKey: !!firebaseConfig.apiKey,
-  authDomain: firebaseConfig.authDomain,
-  projectId: firebaseConfig.projectId
-});
-
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-auth.useDeviceLanguage(); 
 const db = getFirestore(app);
 
 // Google Auth Provider
@@ -32,13 +24,7 @@ googleProvider.setCustomParameters({
 });
 
 export const signInWithGoogle = async () => {
-    if (!firebaseConfig.apiKey || !firebaseConfig.authDomain) {
-        console.error("Firebase configuration is missing in .env");
-        throw new Error("Firebase configuration is missing.");
-    }
-
     try {
-        console.log("Attempting Google Sign-In with Popup...");
         const result = await signInWithPopup(auth, googleProvider);
         return result;
     } catch (error: any) {
