@@ -36,21 +36,16 @@ export function LoginForm() {
     } catch (e: any) {
       console.error("Google Sign-In Error Catch:", e);
       
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
       let errorMessage = [`오류 발생: ${e.message}`];
       
-      if (e.code === 'auth/popup-closed-by-user') {
+      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/unauthorized-domain') {
         errorMessage = [
-          '로그인 팝업이 비정상적으로 닫혔습니다.',
-          '1. 직접 창을 닫지 않았다면 브라우저의 "광고 차단기(AdBlock 등)"를 잠시 꺼주세요.',
-          '2. 브라우저 설정에서 "팝업 및 리디렉션"이 허용되어 있는지 확인해 주세요.',
-          '3. Firebase 콘솔의 Authorized Domains에 현재 주소가 등록되어 있는지 확인이 필요합니다.'
-        ];
-      } else if (e.code === 'auth/unauthorized-domain') {
-        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
-        errorMessage = [
-          '승인되지 않은 도메인입니다.',
-          `Firebase Console -> Authentication -> Settings -> Authorized Domains에 다음 주소를 추가해 주세요:`,
-          `${currentDomain}`
+          '로그인 팝업이 비정상적으로 닫혔거나 승인되지 않은 도메인입니다.',
+          '1. 브라우저 설정에서 "팝업 및 리디렉션"을 허용해 주세요.',
+          '2. 광고 차단기(AdBlock 등)가 있다면 꺼주세요.',
+          '3. Firebase Console -> Authentication -> Settings -> Authorized Domains에 아래 주소를 복사해서 추가해 주세요:',
+          `👉 ${currentDomain}`
         ];
       }
       
