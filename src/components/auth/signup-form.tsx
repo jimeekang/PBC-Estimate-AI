@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { auth, signInWithGoogle } from '@/lib/firebase';
@@ -39,8 +39,8 @@ export function SignupForm() {
       
       if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/unauthorized-domain') {
         errorMessage = [
-          'Login popup closed unexpectedly or domain is unauthorized.',
-          'Please add this address to the Authorized Domains in Firebase Console:',
+          'The login popup was closed or this domain is unauthorized.',
+          'Please ensure popups are allowed and this address is authorized in Firebase Console:',
           `👉 ${currentDomain}`
         ];
       }
@@ -96,7 +96,7 @@ export function SignupForm() {
       if (e.code === 'auth/email-already-in-use') {
         return setErrors({ email: ['Email already in use.'] });
       }
-      return setErrors({ _form: ['Failed to send verification email. Please try again later.'] });
+      return setErrors({ _form: ['Failed to create account. Please try again later.'] });
     }
   };
 
@@ -164,7 +164,7 @@ export function SignupForm() {
         {errors?._form && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Signup Status</AlertTitle>
+            <AlertTitle>Signup Error</AlertTitle>
             <AlertDescription>
               <ul className="list-disc list-inside space-y-1 text-xs">
                 {errors._form.map((msg, i) => <li key={i}>{msg}</li>)}
@@ -191,6 +191,13 @@ export function SignupForm() {
         {isGooglePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.google className="mr-2 h-4 w-4" />}
         Google
       </Button>
+
+      <Alert className="bg-primary/5 border-primary/20">
+        <Info className="h-4 w-4 text-primary" />
+        <AlertDescription className="text-xs text-muted-foreground">
+          For the best experience, please use <b>Chrome</b> or <b>Safari</b>.
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }
