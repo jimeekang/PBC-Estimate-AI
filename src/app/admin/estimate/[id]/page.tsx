@@ -1,13 +1,30 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { getEstimate } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { 
+    ChevronLeft, 
+    User, 
+    Home, 
+    Calendar, 
+    MapPin, 
+    Phone, 
+    Mail, 
+    Layout, 
+    Sparkles, 
+    Info, 
+    Droplets, 
+    Hammer, 
+    ArrowUpToLine, 
+    Paintbrush, 
+    Palette 
+} from 'lucide-react';
 
-// Firestore 문서의 타입을 정의합니다.
 interface EstimateDocument {
     id: string;
     options: {
@@ -44,8 +61,9 @@ interface EstimateDocument {
     userId: string;
 }
 
-const EstimateDetailsPage = () => {
+export default function EstimateDetailsPage() {
     const params = useParams();
+    const router = useRouter();
     const id = params.id as string;
     const [estimate, setEstimate] = useState<EstimateDocument | null>(null);
     const [loading, setLoading] = useState(true);
@@ -70,107 +88,220 @@ const EstimateDetailsPage = () => {
     }, [id]);
 
     if (loading) {
-        return <div className="flex justify-center items-center h-screen">Loading estimate details...</div>;
+        return (
+            <div className="flex flex-col justify-center items-center h-screen space-y-4">
+                <Sparkles className="h-10 w-10 animate-pulse text-primary" />
+                <p className="text-muted-foreground animate-pulse">Loading project details...</p>
+            </div>
+        );
     }
 
     if (!estimate) {
-        return <div className="flex justify-center items-center h-screen">Estimate not found.</div>;
+        return (
+            <div className="flex flex-col justify-center items-center h-screen space-y-4">
+                <p className="text-xl font-semibold">Estimate not found.</p>
+                <Button onClick={() => router.push('/admin')}>Return to Dashboard</Button>
+            </div>
+        );
     }
 
     return (
-        <div className="container mx-auto p-4 max-w-4xl py-10">
-            <Card className="shadow-lg">
-                <CardHeader className="bg-primary/5">
-                    <div className="flex justify-between items-center">
-                        <CardTitle className="text-2xl font-bold">Estimate Details</CardTitle>
-                        <Badge variant="outline">{new Date(estimate.createdAt?.seconds * 1000).toLocaleDateString()}</Badge>
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-8 pt-6">
-                    {/* User Provided Information */}
-                    <div className="grid md:grid-cols-2 gap-8">
-                        <div className="space-y-3">
-                            <h3 className="text-lg font-semibold text-primary">Customer Info</h3>
-                            <p><strong>Name:</strong> {estimate.options.name}</p>
-                            <p><strong>Email:</strong> {estimate.options.email}</p>
-                            <p><strong>Phone:</strong> {estimate.options.phone || 'N/A'}</p>
-                            <p><strong>Location:</strong> {estimate.options.location || 'N/A'}</p>
-                        </div>
-                        <div className="space-y-3">
-                            <h3 className="text-lg font-semibold text-primary">Property Info</h3>
-                            <p><strong>Property:</strong> {estimate.options.propertyType}</p>
-                            <p><strong>Work Type:</strong> {estimate.options.typeOfWork?.join(', ')}</p>
-                            <p><strong>Scope:</strong> {estimate.options.scopeOfPainting}</p>
-                            <p><strong>Purpose:</strong> {estimate.options.timingPurpose}</p>
-                        </div>
-                    </div>
+        <div className="container mx-auto p-4 max-w-5xl py-10 space-y-6">
+            <Button variant="ghost" className="pl-0 hover:bg-transparent" onClick={() => router.push('/admin')}>
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                Back to Dashboard
+            </Button>
 
-                    <Separator />
-
-                    <div className="grid md:grid-cols-2 gap-8">
-                        <div className="space-y-3">
-                            <h3 className="text-lg font-semibold text-primary">Selection Details</h3>
-                            {estimate.options.roomsToPaint && estimate.options.roomsToPaint.length > 0 && (
-                                <p><strong>Rooms:</strong> {estimate.options.roomsToPaint.join(', ')}</p>
-                            )}
-                            {estimate.options.exteriorAreas && estimate.options.exteriorAreas.length > 0 && (
-                                <p><strong>Exterior Areas:</strong> {estimate.options.exteriorAreas.join(', ')}</p>
-                            )}
-                            <p><strong>Condition:</strong> {estimate.options.paintCondition || 'N/A'}</p>
-                            <p><strong>Size:</strong> {estimate.options.approxSize ? `${estimate.options.approxSize} sqm` : 'N/A'}</p>
-                        </div>
-                        <div className="space-y-3">
-                            <h3 className="text-lg font-semibold text-primary">Paint Areas</h3>
-                            <div className="flex gap-2 flex-wrap">
-                                {estimate.options.paintAreas.ceilingPaint && <Badge>Ceiling</Badge>}
-                                {estimate.options.paintAreas.wallPaint && <Badge>Wall</Badge>}
-                                {estimate.options.paintAreas.trimPaint && <Badge>Trim</Badge>}
+            <div className="grid lg:grid-cols-3 gap-6">
+                {/* Left Column: Customer & Project Specs */}
+                <div className="lg:col-span-2 space-y-6">
+                    <Card className="shadow-sm border-primary/5">
+                        <CardHeader className="bg-muted/30 pb-4">
+                            <div className="flex justify-between items-start">
+                                <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                                    <User className="h-5 w-5 text-primary" />
+                                    {estimate.options.name}
+                                </CardTitle>
+                                <Badge variant="outline" className="bg-background">
+                                    <Calendar className="mr-1 h-3 w-3" />
+                                    {new Date(estimate.createdAt?.seconds * 1000).toLocaleDateString()}
+                                </Badge>
                             </div>
-                            {estimate.options.trimPaintOptions && (
-                                <div className="text-sm bg-muted p-2 rounded">
-                                    <p><strong>Trim Type:</strong> {estimate.options.trimPaintOptions.paintType}</p>
-                                    <p><strong>Items:</strong> {estimate.options.trimPaintOptions.trimItems.join(', ')}</p>
+                        </CardHeader>
+                        <CardContent className="pt-6 space-y-8">
+                            <div className="grid md:grid-cols-2 gap-8">
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Contact Details</h3>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <Mail className="h-4 w-4 text-primary" />
+                                            <span>{estimate.options.email}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <Phone className="h-4 w-4 text-primary" />
+                                            <span>{estimate.options.phone || 'No phone provided'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <MapPin className="h-4 w-4 text-primary" />
+                                            <span>{estimate.options.location || 'No location specified'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Project Overview</h3>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <Home className="h-4 w-4 text-primary" />
+                                            <span><strong>Property:</strong> {estimate.options.propertyType}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <Layout className="h-4 w-4 text-primary" />
+                                            <span><strong>Scope:</strong> {estimate.options.scopeOfPainting}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <Info className="h-4 w-4 text-primary" />
+                                            <span><strong>Condition:</strong> {estimate.options.paintCondition || 'Fair'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            <div className="space-y-6">
+                                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Detailed Selection</h3>
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    {estimate.options.roomsToPaint && estimate.options.roomsToPaint.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-sm font-medium">Interior Rooms:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {estimate.options.roomsToPaint.map(room => (
+                                                    <Badge key={room} variant="secondary" className="text-[10px]">{room}</Badge>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {estimate.options.exteriorAreas && estimate.options.exteriorAreas.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-sm font-medium">Exterior Areas:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {estimate.options.exteriorAreas.map(area => (
+                                                    <Badge key={area} variant="outline" className="text-[10px]">{area}</Badge>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-muted/30 p-4 rounded-lg space-y-4">
+                                    <div className="flex items-center gap-4 text-sm">
+                                        <div className="flex items-center gap-1">
+                                            <Paintbrush className="h-4 w-4 text-primary" />
+                                            <span>{estimate.options.approxSize ? `${estimate.options.approxSize} sqm` : 'Size N/A'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Palette className="h-4 w-4 text-primary" />
+                                            <span>{estimate.options.existingWallColour || 'Current colour N/A'}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-semibold text-muted-foreground uppercase">Areas to Paint</p>
+                                        <div className="flex gap-2">
+                                            {estimate.options.paintAreas.ceilingPaint && <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">Ceiling</Badge>}
+                                            {estimate.options.paintAreas.wallPaint && <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">Walls</Badge>}
+                                            {estimate.options.paintAreas.trimPaint && <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">Trim</Badge>}
+                                        </div>
+                                    </div>
+
+                                    {estimate.options.trimPaintOptions && (
+                                        <div className="text-xs space-y-1 pt-2 border-t border-primary/5">
+                                            <p><strong>Trim Paint Type:</strong> {estimate.options.trimPaintOptions.paintType}</p>
+                                            <p><strong>Trim Items:</strong> {estimate.options.trimPaintOptions.trimItems.join(', ')}</p>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {estimate.options.jobDifficulty && estimate.options.jobDifficulty.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-medium">Complexity Factors:</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {estimate.options.jobDifficulty.map(diff => (
+                                                <div key={diff} className="flex items-center gap-1 text-xs text-muted-foreground bg-amber-50 px-2 py-1 rounded border border-amber-100">
+                                                    <Info className="h-3 w-3 text-amber-600" />
+                                                    {diff}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Right Column: AI Estimate Result */}
+                <div className="space-y-6">
+                    <Card className="shadow-md border-primary/20 bg-primary/[0.02]">
+                        <CardHeader className="bg-primary/10 border-b border-primary/10">
+                            <CardTitle className="text-lg font-bold flex items-center gap-2 text-primary">
+                                <Sparkles className="h-5 w-5" />
+                                AI Estimate Result
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-6 space-y-6">
+                            {estimate.estimate ? (
+                                <>
+                                    <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
+                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-widest mb-1">Estimated Range</p>
+                                        <p className="text-2xl font-black text-primary">
+                                            {estimate.estimate.priceRange || 'Calculating...'}
+                                        </p>
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                        <h4 className="text-sm font-bold flex items-center gap-2">
+                                            <Info className="h-4 w-4" /> Professional Breakdown
+                                        </h4>
+                                        <p className="text-sm text-muted-foreground leading-relaxed italic">
+                                            "{estimate.estimate.explanation}"
+                                        </p>
+                                    </div>
+
+                                    {estimate.estimate.details && (
+                                        <div className="space-y-3 pt-2">
+                                            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Key Pricing Factors</h4>
+                                            <ul className="space-y-2">
+                                                {estimate.estimate.details.map((detail, index) => (
+                                                    <li key={index} className="flex gap-2 text-xs">
+                                                        <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                                                        <span>{detail}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="text-center py-10 text-muted-foreground">
+                                    No AI data generated for this entry.
                                 </div>
                             )}
-                        </div>
-                    </div>
+                        </CardContent>
+                    </Card>
 
-                    {/* AI Generated Estimate */}
-                    {estimate.estimate ? (
-                        <div className="space-y-4 pt-6 border-t-2 border-primary/20 bg-primary/5 p-6 rounded-lg">
-                            <h3 className="text-xl font-bold text-primary flex items-center gap-2">
-                                AI Generated Result
-                            </h3>
-                            <div className="bg-white p-4 rounded-md border shadow-sm">
-                                <p className="text-2xl font-bold text-primary mb-2">
-                                    {estimate.estimate.priceRange || 'Price not generated'}
-                                </p>
-                                <p className="text-muted-foreground leading-relaxed italic">
-                                    "{estimate.estimate.explanation}"
-                                </p>
-                            </div>
-                            
-                            {estimate.estimate.details && (
-                                <div className="space-y-2">
-                                    <h4 className="font-semibold">Key Factors:</h4>
-                                    <ul className="list-disc pl-5 space-y-1">
-                                        {estimate.estimate.details.map((detail, index) => (
-                                            <li key={index} className="text-sm">{detail}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="pt-4 border-t text-center text-muted-foreground">
-                            No AI estimate result found in this document.
-                        </div>
-                    )}
-
-                </CardContent>
-            </Card>
+                    <Card className="bg-amber-50 border-amber-100">
+                        <CardContent className="p-4 space-y-3">
+                            <h4 className="text-sm font-bold flex items-center gap-2 text-amber-700">
+                                <Info className="h-4 w-4" /> Next Steps
+                            </h4>
+                            <p className="text-xs text-amber-800 leading-relaxed">
+                                Review the AI result against historical data. This estimate is indicative and serves as a conversation starter for the on-site inspection.
+                            </p>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
         </div>
     );
-};
-
-export default EstimateDetailsPage;
+}
