@@ -5,6 +5,8 @@ import { AuthProvider } from '@/providers/auth-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { cn } from '@/lib/utils';
+import logoImg from "../../logo-bg-remove.png";
+
 
 export const metadata: Metadata = {
   title: 'PBC Estimate AI | Professional Painting Quotes',
@@ -16,7 +18,7 @@ export const metadata: Metadata = {
     siteName: 'PBC Estimate AI',
     images: [
       {
-        url: '/logo-bg-remove.png',
+        url: '/PBCLOGO-Letter-removebg-preview.png',
         width: 1200,
         height: 630,
         alt: 'PBC Estimate AI Logo',
@@ -29,7 +31,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description: 'Instant AI-powered painting estimates for Australian homes and offices.',
-    images: ['/logo-bg-remove.png'],
+    images: ['/PBCLOGO-Letter-removebg-preview.png'],
   },
 };
 
