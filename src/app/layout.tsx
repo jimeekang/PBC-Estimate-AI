@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
   title: 'PBC Estimate AI | Professional Painting Quotes',
   description: 'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
+  icons: {
+    icon: './logo-bg-remove.png',
+    apple: './logo-bg-remove.png',
+  },
   openGraph: {
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description: 'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
