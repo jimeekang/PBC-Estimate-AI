@@ -49,8 +49,9 @@ export function LoginForm() {
         ];
       } else if (e.code === 'auth/unauthorized-domain') {
         errorMessage = [
-          'This domain is not authorized. Please add the following address to Firebase Console:',
-          `👉 ${currentDomain}`
+          'This domain is not authorized. Please add the following address to Firebase Console > Authentication > Settings > Authorized domains:',
+          `👉 ${currentDomain}`,
+          'Or use the production URL: https://pbc-estimate-ai.vercel.app'
         ];
       }
       
@@ -170,7 +171,7 @@ export function LoginForm() {
       <Alert className="bg-primary/5 border-primary/20">
         <Info className="h-4 w-4 text-primary" />
         <AlertDescription className="text-xs text-muted-foreground">
-          If the popup closes immediately, please <b>allow third-party cookies</b> in your browser settings.
+          If you are using an in-app browser (e.g. Kakao, LINE) and login fails, please open this link in <b>Chrome</b> or <b>Safari</b>.
         </AlertDescription>
       </Alert>
     </div>
