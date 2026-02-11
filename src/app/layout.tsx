@@ -5,10 +5,9 @@ import { AuthProvider } from '@/providers/auth-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { cn } from '@/lib/utils';
-import logoImg from "../../logo-bg-remove.png";
-
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
   title: 'PBC Estimate AI | Professional Painting Quotes',
   description: 'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
   openGraph: {
