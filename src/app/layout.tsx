@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description:
     'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
 
-  // 🔖 Icon configuration to resolve favicon.ico 404s
+  // 🔖 Icon configuration
   icons: {
     icon: '/logo-bg-remove.png',
     shortcut: '/logo-bg-remove.png',
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: 'https://pbc-estimate-ai.vercel.app/PBCLOGO-Letter-removebg-preview.png',
+        url: '/PBCLOGO-Letter-removebg-preview.png', // Relative path is resolved via metadataBase
         width: 1200,
         height: 630,
         alt: 'PBC Estimate AI – AI Painting Estimate',
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description:
       'Instant AI-powered painting estimates for Australian homes and offices.',
-    images: ['https://pbc-estimate-ai.vercel.app/PBCLOGO-Letter-removebg-preview.png'],
+    images: ['/PBCLOGO-Letter-removebg-preview.png'],
   },
 };
 
