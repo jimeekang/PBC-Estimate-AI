@@ -7,8 +7,30 @@ import Footer from '@/components/footer';
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  title: 'PBC Estimate AI',
-  description: 'Generate painting estimates with the power of AI',
+  title: 'PBC Estimate AI | Professional Painting Quotes',
+  description: 'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
+  openGraph: {
+    title: 'PBC Estimate AI | Professional Painting Quotes',
+    description: 'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
+    url: 'https://pbc-estimate-ai.vercel.app', // Replace with your actual domain when deployed
+    siteName: 'PBC Estimate AI',
+    images: [
+      {
+        url: '/logo-bg-remove.png',
+        width: 1200,
+        height: 630,
+        alt: 'PBC Estimate AI Logo',
+      },
+    ],
+    locale: 'en_AU',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'PBC Estimate AI | Professional Painting Quotes',
+    description: 'Instant AI-powered painting estimates for Australian homes and offices.',
+    images: ['/logo-bg-remove.png'],
+  },
 };
 
 export default function RootLayout({
