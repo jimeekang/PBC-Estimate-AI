@@ -24,6 +24,7 @@ export function Logo({ className }: { className?: string }) {
             src="/logo-bg-remove.png"
             alt="PBC Logo"
             fill
+            sizes="(max-width: 10rem) 100vw, 10rem"
             className="object-contain"
             data-ai-hint={logo?.imageHint || 'paint logo'}
             priority
