@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useEffect, useState } from 'react';
-import logoImg from "../../logo-bg-remove.png";
 
 export function Logo({ className }: { className?: string }) {
   const [mounted, setMounted] = useState(false);
@@ -22,7 +21,7 @@ export function Logo({ className }: { className?: string }) {
           <div className="h-full w-full bg-muted rounded-full" />
         ) : (
           <Image
-            src={logoImg}
+            src="/logo-bg-remove.png"
             alt="PBC Logo"
             fill
             className="object-contain"
