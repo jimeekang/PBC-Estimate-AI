@@ -7,31 +7,29 @@ import Footer from '@/components/footer';
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
+  metadataBase: new URL('https://studio--studio-2479003018-88f5c.us-central1.hosted.app'),
 
   title: 'PBC Estimate AI | Professional Painting Quotes',
   description:
     'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
 
-  // 🔖 Icon configuration
   icons: {
     icon: '/logo-bg-remove.png',
     shortcut: '/logo-bg-remove.png',
     apple: '/logo-bg-remove.png',
   },
 
-  // 🌐 Open Graph (Preview image for sharing)
   openGraph: {
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description:
       'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
-    url: 'https://pbc-estimate-ai.vercel.app',
+    url: 'https://studio--studio-2479003018-88f5c.us-central1.hosted.app',
     siteName: 'PBC Estimate AI',
     locale: 'en_AU',
     type: 'website',
     images: [
       {
-        url: '/PBCLOGO-Letter-removebg-preview.png', // Relative path is resolved via metadataBase
+        url: '/PBCLOGO-Letter-removebg-preview.png', // ✅ metadataBase가 절대 URL로 바꿔줌
         width: 1200,
         height: 630,
         alt: 'PBC Estimate AI – AI Painting Estimate',
@@ -39,7 +37,6 @@ export const metadata: Metadata = {
     ],
   },
 
-  // 🐦 Twitter(X) Card
   twitter: {
     card: 'summary_large_image',
     title: 'PBC Estimate AI | Professional Painting Quotes',
