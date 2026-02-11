@@ -13,23 +13,14 @@ export const metadata: Metadata = {
   description:
     'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
 
-  // 🔖 Favicon 설정
+  // 🔖 Icon configuration to resolve favicon.ico 404s
   icons: {
-    icon: [
-      {
-        url: '/logo-bg-remove.png',
-        type: 'image/png',
-      },
-    ],
-    apple: [
-      {
-        url: '/logo-bg-remove.png',
-        type: 'image/png',
-      },
-    ],
+    icon: '/logo-bg-remove.png',
+    shortcut: '/logo-bg-remove.png',
+    apple: '/logo-bg-remove.png',
   },
 
-  // 🌐 Open Graph (카카오톡 / WhatsApp / Facebook / iMessage)
+  // 🌐 Open Graph (Preview image for sharing)
   openGraph: {
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description:
@@ -47,7 +38,7 @@ export const metadata: Metadata = {
     ],
   },
 
-  // 🐦 Twitter(X) 카드
+  // 🐦 Twitter(X) Card
   twitter: {
     card: 'summary_large_image',
     title: 'PBC Estimate AI | Professional Painting Quotes',
@@ -56,7 +47,6 @@ export const metadata: Metadata = {
     images: ['/PBCLOGO-Letter-removebg-preview.png'],
   },
 };
-
 
 export default function RootLayout({
   children,
