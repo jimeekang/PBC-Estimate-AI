@@ -25,12 +25,13 @@ export const metadata: Metadata = {
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description:
       'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
+    url: 'https://pbc-estimate-ai.vercel.app',
     siteName: 'PBC Estimate AI',
     locale: 'en_AU',
     type: 'website',
     images: [
       {
-        url: '/PBCLOGO-Letter-removebg-preview.png',
+        url: 'https://pbc-estimate-ai.vercel.app/PBCLOGO-Letter-removebg-preview.png',
         width: 1200,
         height: 630,
         alt: 'PBC Estimate AI – AI Painting Estimate',
@@ -44,7 +45,7 @@ export const metadata: Metadata = {
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description:
       'Instant AI-powered painting estimates for Australian homes and offices.',
-    images: ['/PBCLOGO-Letter-removebg-preview.png'],
+    images: ['https://pbc-estimate-ai.vercel.app/PBCLOGO-Letter-removebg-preview.png'],
   },
 };
 
