@@ -8,35 +8,55 @@ import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
+
   title: 'PBC Estimate AI | Professional Painting Quotes',
-  description: 'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
+  description:
+    'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
+
+  // 🔖 Favicon 설정
   icons: {
-    icon: '/logo-bg-remove.png',
-    apple: '/logo-bg-remove.png',
+    icon: [
+      {
+        url: '/logo-bg-remove.png',
+        type: 'image/png',
+      },
+    ],
+    apple: [
+      {
+        url: '/logo-bg-remove.png',
+        type: 'image/png',
+      },
+    ],
   },
+
+  // 🌐 Open Graph (카카오톡 / WhatsApp / Facebook / iMessage)
   openGraph: {
     title: 'PBC Estimate AI | Professional Painting Quotes',
-    description: 'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
-    url: 'https://pbc-estimate-ai.vercel.app',
+    description:
+      'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
     siteName: 'PBC Estimate AI',
+    locale: 'en_AU',
+    type: 'website',
     images: [
       {
         url: '/PBCLOGO-Letter-removebg-preview.png',
         width: 1200,
         height: 630,
-        alt: 'PBC Estimate AI Logo',
+        alt: 'PBC Estimate AI – AI Painting Estimate',
       },
     ],
-    locale: 'en_AU',
-    type: 'website',
   },
+
+  // 🐦 Twitter(X) 카드
   twitter: {
     card: 'summary_large_image',
     title: 'PBC Estimate AI | Professional Painting Quotes',
-    description: 'Instant AI-powered painting estimates for Australian homes and offices.',
+    description:
+      'Instant AI-powered painting estimates for Australian homes and offices.',
     images: ['/PBCLOGO-Letter-removebg-preview.png'],
   },
 };
+
 
 export default function RootLayout({
   children,
