@@ -14,8 +14,8 @@ export const metadata: Metadata = {
     'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
 
   icons: {
-    icon: '/logo-bg-remove.png',
-    shortcut: '/logo-bg-remove.png',
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
     apple: '/logo-bg-remove.png',
   },
 
