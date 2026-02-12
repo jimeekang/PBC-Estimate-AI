@@ -45,7 +45,7 @@ export default function HomePage() {
             className="mx-auto shadow-sm rounded-full"
           />
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight">
-            Welcome to <span className="text-blue-600">PBC Estimate AI</span>
+            Welcome to <span className="text-primary">PBC Estimate AI</span>
           </h1>
           <p className="mt-4 max-w-2xl mx-auto text-xl text-gray-500">
             The smartest and fastest way to get a professional painting quote for
@@ -57,7 +57,8 @@ export default function HomePage() {
           <div className="mt-10">
             <Button
               onClick={() => router.push('/auth')}
-              className="w-full max-w-xs mx-auto flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 md:py-4 md:text-lg md:px-10 shadow-lg transform hover:scale-105 transition duration-300 ease-in-out"
+              size="lg"
+              className="w-full max-w-xs mx-auto shadow-lg transform hover:scale-105 transition duration-300 ease-in-out"
             >
               Get Started for Free
               <ArrowRight className="ml-2 -mr-1 h-5 w-5" />
