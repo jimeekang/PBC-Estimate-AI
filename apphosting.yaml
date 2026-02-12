@@ -5,18 +5,3 @@ runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
-
-
-env:
-  - variable: NEXT_PUBLIC_API_KEY
-    value: "AIzaSyD2qyDSXm1rmSSUqzFpD3ix198jc4Bh_iQ"
-  - variable: NEXT_PUBLIC_AUTH_DOMAIN
-    value: "studio-5245261553-378c8.firebaseapp.com"
-  - variable: NEXT_PUBLIC_PROJECT_ID
-    value: "studio-5245261553-378c8"
-  - variable: NEXT_PUBLIC_STORAGE_BUCKET
-    value: "studio-5245261553-378c8.firebasestorage.app"
-  - variable: NEXT_PUBLIC_MESSAGING_SENDER_ID
-    value: "176887759680"
-  - variable: NEXT_PUBLIC_APP_ID
-    value: "1:176887759680:web:2debce89454733ddb970a5"
