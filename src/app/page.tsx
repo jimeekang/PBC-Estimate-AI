@@ -56,7 +56,7 @@ export default function HomePage() {
         <main>
           <div className="mt-10">
             <Button
-              onClick={() => router.push('/auth')}
+              onClick={() => router.push('/login')}
               size="lg"
               className="w-full max-w-xs mx-auto shadow-lg transform hover:scale-105 transition duration-300 ease-in-out"
             >
