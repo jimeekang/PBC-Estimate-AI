@@ -34,7 +34,7 @@ export default function Header() {
     <header className="border-b bg-card">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center">
-          <Link href="/">
+          <Link href="/estimate">
             <Logo />
           </Link>
         </div>
