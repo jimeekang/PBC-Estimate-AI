@@ -8,7 +8,7 @@ runConfig:
 
 env:
   # This securely references the Gemini API key stored in Google Cloud Secret Manager.
-  - variable: GEMINI_API_KEY
+  - variable: GOOGLE_GENAI_API_KEY
     secret: gemini-api-key
 
   # These are your public Firebase config variables. It is safe for them to be here.
