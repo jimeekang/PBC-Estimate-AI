@@ -7,6 +7,11 @@ runConfig:
   maxInstances: 1
 
 env:
+  # This securely references the Gemini API key stored in Google Cloud Secret Manager.
+  - variable: GEMINI_API_KEY
+    secret: gemini-api-key
+
+  # These are your public Firebase config variables. It is safe for them to be here.
   - variable: NEXT_PUBLIC_API_KEY
     value: "AIzaSyD2qyDSXm1rmSSUqzFpD3ix198jc4Bh_iQ"
   - variable: NEXT_PUBLIC_AUTH_DOMAIN
