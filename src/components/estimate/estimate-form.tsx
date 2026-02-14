@@ -39,6 +39,7 @@ import {
   MapPin,
   Calendar,
   ExternalLink,
+  Search,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -194,7 +195,7 @@ export function EstimateForm() {
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
 
-  // Debounced address search focusing on detailed Australian addresses
+  // Enhanced Australian Address Search
   const searchAddress = useCallback(async (queryStr: string) => {
     if (!queryStr || queryStr.length < 3) {
       setAddressSuggestions([]);
@@ -203,6 +204,7 @@ export function EstimateForm() {
 
     setIsSearchingAddress(true);
     try {
+      // Prioritize Australian results by appending "Australia" to the query if not present
       const searchQuery = queryStr.toLowerCase().includes('australia') ? queryStr : `${queryStr}, Australia`;
       const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=8&lang=en`);
       const data = await response.json();
@@ -213,10 +215,12 @@ export function EstimateForm() {
         if (!isAustralia) return null;
 
         const parts = [];
+        // Handle street addresses with house numbers
         if (p.housenumber && p.street) parts.push(`${p.housenumber} ${p.street}`);
         else if (p.street) parts.push(p.street);
         else if (p.name && p.name !== p.city && p.name !== p.state) parts.push(p.name);
 
+        // Append Suburb/City, State and Postcode
         if (p.city || p.district) parts.push(p.city || p.district);
         if (p.state) parts.push(p.state);
         if (p.postcode) parts.push(p.postcode);
@@ -232,6 +236,7 @@ export function EstimateForm() {
     }
   }, []);
 
+  // Debounced search trigger
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       const location = form.getValues('location');
@@ -381,17 +386,19 @@ export function EstimateForm() {
                   <FormItem className="relative">
                     <FormLabel>Location</FormLabel>
                     <FormControl>
-                      <div className="relative">
+                      <div className="relative group">
                         <Input 
                           placeholder="Search your Australian address..." 
                           {...field} 
+                          className="pl-9 pr-10"
                           onFocus={() => setShowSuggestions(true)}
                           onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
                           autoComplete="off"
                         />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                         {isSearchingAddress && (
                           <div className="absolute right-3 top-2.5">
-                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
                           </div>
                         )}
                       </div>
@@ -402,12 +409,12 @@ export function EstimateForm() {
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
-                          className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-72 overflow-auto"
+                          className="absolute z-50 w-full mt-2 bg-background border rounded-lg shadow-xl max-h-72 overflow-auto py-2"
                         >
                           {addressSuggestions.map((suggestion, index) => (
                             <li
                               key={index}
-                              className="px-4 py-3 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm flex items-start gap-2 border-b last:border-0"
+                              className="px-4 py-3 hover:bg-primary/5 hover:text-primary cursor-pointer text-sm flex items-start gap-3 border-b border-muted last:border-0 transition-colors"
                               onMouseDown={() => {
                                 field.onChange(suggestion);
                                 setAddressSuggestions([]);
@@ -415,7 +422,7 @@ export function EstimateForm() {
                               }}
                             >
                               <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                              <span className="leading-snug">{suggestion}</span>
+                              <span className="leading-snug font-medium">{suggestion}</span>
                             </li>
                           ))}
                         </motion.ul>
