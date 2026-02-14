@@ -7,15 +7,13 @@ import Footer from '@/components/footer';
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://studio--studio-2479003018-88f5c.us-central1.hosted.app'),
-
   title: 'PBC Estimate AI | Professional Painting Quotes',
   description:
     'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
 
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
+    icon: '/logo-bg-remove.png',
+    shortcut: '/logo-bg-remove.png',
     apple: '/logo-bg-remove.png',
   },
 
@@ -23,13 +21,13 @@ export const metadata: Metadata = {
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description:
       'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
-    url: 'https://studio--studio-2479003018-88f5c.us-central1.hosted.app',
+    url: 'https://pbc-estimate-ai.vercel.app',
     siteName: 'PBC Estimate AI',
     locale: 'en_AU',
     type: 'website',
     images: [
       {
-        url: '/PBCLOGO-Letter-removebg-preview.png', // ✅ metadataBase가 절대 URL로 바꿔줌
+        url: '/PBCLOGO-Letter-removebg-preview.png',
         width: 1200,
         height: 630,
         alt: 'PBC Estimate AI – AI Painting Estimate',

@@ -1,3 +1,5 @@
+'use client';
+
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, browserLocalPersistence, setPersistence, Auth } from 'firebase/auth';
 import { getFirestore, collection, getDocs, doc, getDoc, Firestore } from 'firebase/firestore';
@@ -11,7 +13,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_APP_ID,
 };
 
-// Initialize Firebase
+// Initialize Firebase only if config is valid
 const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);
