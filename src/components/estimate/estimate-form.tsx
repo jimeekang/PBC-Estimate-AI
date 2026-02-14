@@ -195,43 +195,36 @@ export function EstimateForm() {
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchTrimPaint = form.watch('paintAreas.trimPaint');
 
-  // Enhanced Australian Address Search
+  // Enhanced Address Search using Google Maps Places API
   const searchAddress = useCallback(async (queryStr: string) => {
-    if (!queryStr || queryStr.length < 3) {
+    if (!queryStr || queryStr.length < 3 || typeof google === 'undefined') {
       setAddressSuggestions([]);
       return;
     }
 
     setIsSearchingAddress(true);
     try {
-      // Prioritize Australian results by appending "Australia" to the query if not present
-      const searchQuery = queryStr.toLowerCase().includes('australia') ? queryStr : `${queryStr}, Australia`;
-      const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=8&lang=en`);
-      const data = await response.json();
-      
-      const suggestions = data.features.map((f: any) => {
-        const p = f.properties;
-        const isAustralia = p.countrycode === 'AU' || p.country === 'Australia';
-        if (!isAustralia) return null;
-
-        const parts = [];
-        // Handle street addresses with house numbers
-        if (p.housenumber && p.street) parts.push(`${p.housenumber} ${p.street}`);
-        else if (p.street) parts.push(p.street);
-        else if (p.name && p.name !== p.city && p.name !== p.state) parts.push(p.name);
-
-        // Append Suburb/City, State and Postcode
-        if (p.city || p.district) parts.push(p.city || p.district);
-        if (p.state) parts.push(p.state);
-        if (p.postcode) parts.push(p.postcode);
-
-        return parts.filter(Boolean).join(', ');
-      }).filter(Boolean);
-
-      setAddressSuggestions(Array.from(new Set(suggestions as string[])));
+      const autocompleteService = new google.maps.places.AutocompleteService();
+      autocompleteService.getPlacePredictions(
+        {
+          input: queryStr,
+          componentRestrictions: { country: 'au' }, // Restricted to Australia
+          types: ['address'],
+        },
+        (predictions, status) => {
+          if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
+            setAddressSuggestions([]);
+            setIsSearchingAddress(false);
+            return;
+          }
+          
+          const suggestions = predictions.map(p => p.description);
+          setAddressSuggestions(suggestions);
+          setIsSearchingAddress(false);
+        }
+      );
     } catch (error) {
-      console.error('Address search error:', error);
-    } finally {
+      console.error('Google Address search error:', error);
       setIsSearchingAddress(false);
     }
   }, []);
