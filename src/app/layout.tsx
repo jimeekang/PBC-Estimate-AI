@@ -5,12 +5,13 @@ import { AuthProvider } from '@/providers/auth-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { cn } from '@/lib/utils';
+import Script from 'next/script';
 
 export const metadata: Metadata = {
   title: 'PBC Estimate AI | Professional Painting Quotes',
   description:
     'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
-
+  metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
   icons: {
     icon: '/logo-bg-remove.png',
     shortcut: '/logo-bg-remove.png',
@@ -60,6 +61,10 @@ export default function RootLayout({
         />
       </head>
       <body className={cn('font-body antialiased h-full')}>
+        <Script
+          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
+          strategy="beforeInteractive"
+        />
         <AuthProvider>
           <div className="flex flex-col min-h-full">
             <Header />
