@@ -1,31 +1,25 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
-import { Toaster } from '@/components/ui/toaster';
+import { cn } from '@/lib/utils';
 import { AuthProvider } from '@/providers/auth-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
-import { cn } from '@/lib/utils';
+import { Toaster } from '@/components/ui/toaster';
 import Script from 'next/script';
 
-export const metadata: Metadata = {
-  title: 'PBC Estimate AI | Professional Painting Quotes',
-  description:
-    'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
-  metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
-  icons: {
-    icon: '/logo-bg-remove.png',
-    shortcut: '/logo-bg-remove.png',
-    apple: '/logo-bg-remove.png',
-  },
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
+export const metadata: Metadata = {
+  metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
+  title: 'PBC Estimate AI | Professional Painting Quotes',
+  description: 'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
   openGraph: {
     title: 'PBC Estimate AI | Professional Painting Quotes',
-    description:
-      'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
+    description: 'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
     url: 'https://pbc-estimate-ai.vercel.app',
     siteName: 'PBC Estimate AI',
     locale: 'en_AU',
-    type: 'website',
     images: [
       {
         url: '/PBCLOGO-Letter-removebg-preview.png',
@@ -34,14 +28,18 @@ export const metadata: Metadata = {
         alt: 'PBC Estimate AI – AI Painting Estimate',
       },
     ],
+    type: 'website',
   },
-
   twitter: {
     card: 'summary_large_image',
     title: 'PBC Estimate AI | Professional Painting Quotes',
-    description:
-      'Instant AI-powered painting estimates for Australian homes and offices.',
+    description: 'Instant AI-powered painting estimates for Australian homes and offices.',
     images: ['/PBCLOGO-Letter-removebg-preview.png'],
+  },
+  icons: {
+    shortcut: '/logo-bg-remove.png',
+    icon: '/logo-bg-remove.png',
+    apple: '/logo-bg-remove.png',
   },
 };
 
@@ -60,7 +58,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className={cn('font-body antialiased h-full')}>
+      <body className={cn('font-body antialiased h-full', inter.variable)}>
         <Script
           src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
           strategy="beforeInteractive"
