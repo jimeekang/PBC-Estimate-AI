@@ -15,6 +15,12 @@ env:
       - BUILD
       - RUNTIME
 
+  # Securely reference the Google Maps API key from Secret Manager for the deployed app.
+  - variable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    secret: google-maps-api-key
+    availability:
+      - RUNTIME # This key is only needed in the browser, so RUNTIME is sufficient.
+
   # These are your public Firebase config variables. It is safe for them to be here.
   - variable: NEXT_PUBLIC_API_KEY
     value: "AIzaSyD2qyDSXm1rmSSUqzFpD3ix198jc4Bh_iQ"
