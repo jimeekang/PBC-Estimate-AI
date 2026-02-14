@@ -1,5 +1,6 @@
 # Settings to manage and configure a Firebase App Hosting backend.
 # https://firebase.google.com/docs/app-hosting/configure
+# Triggering a new build after fixing permissions.
 
 runConfig:
   # Increase this value if you'd like to automatically spin up
