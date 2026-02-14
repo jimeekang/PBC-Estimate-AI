@@ -7,9 +7,11 @@ runConfig:
   maxInstances: 1
 
 env:
-  # This is your Genkit API key. It is now stored as a regular environment variable.
+  # This securely references the Gemini API key stored in Google Cloud Secret Manager.
   - variable: GOOGLE_GENAI_API_KEY
-    value: "AIzaSyB2HmKmpT1H7Fb-y8mIEl-VHUYqerPaUtE"
+    secret: gemini-api-key
+    availability:
+      - RUNTIME
 
   # These are your public Firebase config variables. It is safe for them to be here.
   - variable: NEXT_PUBLIC_API_KEY
