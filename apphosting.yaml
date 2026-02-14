@@ -11,6 +11,7 @@ env:
   - variable: GOOGLE_GENAI_API_KEY
     secret: gemini-api-key
     availability:
+      - BUILD
       - RUNTIME
 
   # These are your public Firebase config variables. It is safe for them to be here.
