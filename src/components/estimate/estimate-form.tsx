@@ -241,7 +241,7 @@ export function EstimateForm() {
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
   const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
   
-  const hasAnyInteriorTrimSelected = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
+  const hasAnyInteriorTrimSelected = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint) || watchInteriorRooms?.some(r => r.roomName === 'Handrail');
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
 
   const showTrimOptions = (watchScope === 'Entire property' && watchGlobalTrimPaint) || 
@@ -255,9 +255,9 @@ export function EstimateForm() {
       append({
         roomName,
         paintAreas: {
-          ceilingPaint: false,
-          wallPaint: false,
-          trimPaint: false,
+          ceilingPaint: roomName === 'Handrail' ? false : false,
+          wallPaint: roomName === 'Handrail' ? false : false,
+          trimPaint: roomName === 'Handrail' ? true : false,
           ensuitePaint: roomName === 'Master Bedroom' ? false : undefined
         }
       });
@@ -541,7 +541,29 @@ export function EstimateForm() {
                   <SelectContent>{propertyTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
                 </Select><FormMessage /></FormItem>
               )} />
-              <FormField control={form.control} name="approxSize" render={({ field }) => (<FormItem><FormLabel>Approx. size (sqm)</FormLabel><FormControl><Input type="number" placeholder="e.g. 100" {...field} value={field.value ?? ''} onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} /></FormControl><FormMessage /></FormItem>)} />
+              
+              <AnimatePresence>
+                {watchScope === 'Entire property' && (
+                  <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}>
+                    <FormField control={form.control} name="approxSize" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Approx. size (sqm)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="e.g. 100" 
+                            {...field} 
+                            value={field.value ?? ''} 
+                            onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <FormField control={form.control} name="existingWallColour" render={({ field }) => (<FormItem><FormLabel>Existing Wall Colour</FormLabel><FormControl><Input placeholder="e.g. White, Dark Blue" {...field} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
