@@ -252,7 +252,7 @@ export function EstimateForm() {
           ceilingPaint: false,
           wallPaint: false,
           trimPaint: false,
-          ensuitePaint: roomName.toLowerCase().includes('bedroom') ? false : undefined
+          ensuitePaint: roomName === 'Master Bedroom' ? false : undefined
         }
       });
     }
@@ -459,7 +459,7 @@ export function EstimateForm() {
                           {interiorRoomList.map((roomName) => {
                             const roomIndex = fields.findIndex(f => f.roomName === roomName);
                             const isSelected = roomIndex > -1;
-                            const isBedroom = roomName.toLowerCase().includes('bedroom');
+                            const isMasterBedroom = roomName === 'Master Bedroom';
                             return (
                               <Card key={roomName} className={cn("transition-all border-2", isSelected ? "border-primary bg-primary/[0.02] shadow-sm" : "border-border opacity-60")}>
                                 <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
@@ -502,7 +502,7 @@ export function EstimateForm() {
                                           />
                                           <span className="text-xs">Trim</span>
                                         </div>
-                                        {isBedroom && (
+                                        {isMasterBedroom && (
                                           <div className="flex items-center gap-3 pt-2 border-t mt-2">
                                             <Checkbox 
                                               checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ensuitePaint`)} 
