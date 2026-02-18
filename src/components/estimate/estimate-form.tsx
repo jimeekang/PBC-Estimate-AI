@@ -245,13 +245,9 @@ export function EstimateForm() {
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
   
-  // Calculate if any room in the specific areas has trim selected
   const hasAnyInteriorTrimSelected = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
-  
-  // Watch top-level trim selection for "Entire property" mode
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
 
-  // Decide whether to show the trim options block
   const showTrimOptions = (watchScope === 'Entire property' && watchGlobalTrimPaint) || 
                           (watchScope === 'Specific areas only' && hasAnyInteriorTrimSelected);
 
@@ -265,7 +261,7 @@ export function EstimateForm() {
         paintAreas: {
           ceilingPaint: false,
           wallPaint: false,
-          trimPaint: false,
+          trimPaint: roomName === 'Handrail' ? true : false,
           ensuitePaint: roomName === 'Master Bedroom' ? false : undefined
         }
       });
@@ -492,29 +488,25 @@ export function EstimateForm() {
                                   </div>
                                   {isSelected && <Check className="h-4 w-4 text-primary" />}
                                 </CardHeader>
-                                {isSelected && (
+                                {isSelected && !isHandrail && (
                                   <CardContent className="p-4 pt-0 space-y-4">
                                     <div className="space-y-2">
                                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Paint Areas</p>
                                       <div className="space-y-2">
-                                        {!isHandrail && (
-                                          <>
-                                            <div className="flex items-center gap-3">
-                                              <Checkbox 
-                                                checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`)} 
-                                                onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`, !!checked)} 
-                                              />
-                                              <span className="text-xs">Ceiling</span>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                              <Checkbox 
-                                                checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.wallPaint`)} 
-                                                onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.wallPaint`, !!checked)} 
-                                              />
-                                              <span className="text-xs">Walls</span>
-                                            </div>
-                                          </>
-                                        )}
+                                        <div className="flex items-center gap-3">
+                                          <Checkbox 
+                                            checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`)} 
+                                            onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`, !!checked)} 
+                                          />
+                                          <span className="text-xs">Ceiling</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <Checkbox 
+                                            checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.wallPaint`)} 
+                                            onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.wallPaint`, !!checked)} 
+                                          />
+                                          <span className="text-xs">Walls</span>
+                                        </div>
                                         <div className="flex items-center gap-3">
                                           <Checkbox 
                                             checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.trimPaint`)} 
