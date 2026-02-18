@@ -239,7 +239,6 @@ export function EstimateForm() {
   const isInterior = watchTypeOfWork.includes('Interior Painting');
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
-  const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' }) || [];
 
   const handleToggleRoom = (roomName: typeof interiorRoomList[number]) => {
     const index = fields.findIndex(f => f.roomName === roomName);
@@ -252,7 +251,7 @@ export function EstimateForm() {
           ceilingPaint: false,
           wallPaint: false,
           trimPaint: false,
-          ensuitePaint: roomName.includes('Bedroom') ? false : undefined
+          ensuitePaint: roomName.toLowerCase().includes('bedroom') ? false : undefined
         }
       });
     }
@@ -459,6 +458,7 @@ export function EstimateForm() {
                           {interiorRoomList.map((roomName) => {
                             const roomIndex = fields.findIndex(f => f.roomName === roomName);
                             const isSelected = roomIndex > -1;
+                            const isBedroom = roomName.toLowerCase().includes('bedroom');
                             return (
                               <Card key={roomName} className={cn("transition-all border-2", isSelected ? "border-primary bg-primary/[0.02] shadow-sm" : "border-border opacity-60")}>
                                 <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
@@ -473,18 +473,36 @@ export function EstimateForm() {
                                     <div className="space-y-2">
                                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Paint Areas</p>
                                       <div className="space-y-2">
-                                        {['ceilingPaint', 'wallPaint', 'trimPaint', 'ensuitePaint'].map((area) => {
-                                          if (area === 'ensuitePaint' && !roomName.includes('Bedroom')) return null;
-                                          return (
-                                            <div key={area} className="flex items-center gap-3">
-                                              <Checkbox 
-                                                checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.${area as any}`)} 
-                                                onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.${area as any}`, checked)} 
-                                              />
-                                              <span className="text-xs capitalize">{area.replace('Paint', '')}</span>
-                                            </div>
-                                          );
-                                        })}
+                                        <div className="flex items-center gap-3">
+                                          <Checkbox 
+                                            checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`)} 
+                                            onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`, !!checked)} 
+                                          />
+                                          <span className="text-xs">Ceiling</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <Checkbox 
+                                            checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.wallPaint`)} 
+                                            onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.wallPaint`, !!checked)} 
+                                          />
+                                          <span className="text-xs">Walls</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <Checkbox 
+                                            checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.trimPaint`)} 
+                                            onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.trimPaint`, !!checked)} 
+                                          />
+                                          <span className="text-xs">Trim</span>
+                                        </div>
+                                        {isBedroom && (
+                                          <div className="flex items-center gap-3 pt-2 border-t mt-2">
+                                            <Checkbox 
+                                              checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ensuitePaint`)} 
+                                              onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.ensuitePaint`, !!checked)} 
+                                            />
+                                            <span className="text-xs font-semibold text-primary">Include Ensuite</span>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   </CardContent>
