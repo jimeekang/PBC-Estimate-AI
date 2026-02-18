@@ -146,7 +146,7 @@ function clampRange(min: number, max: number) {
 }
 
 // ---------------------------------------------
-// NEW: room line-item calculator (Specific scope)
+// room line-item calculator (Specific scope)
 // ---------------------------------------------
 function calcInteriorSpecificFromRooms(input: GeneratePaintingEstimateInput) {
   const rooms = input.interiorRooms ?? [];
@@ -167,15 +167,13 @@ function calcInteriorSpecificFromRooms(input: GeneratePaintingEstimateInput) {
     roomMin *= areaFactor;
     roomMax *= areaFactor;
 
-    // Use room-specific trim options or fallback to global trim options
-    const trimOptions = r.trimPaintOptions || input.trimPaintOptions;
-
-    if (r.paintAreas.trimPaint && trimOptions) {
-      const { paintType, trimItems } = trimOptions;
+    // Use global trim options if room has trim selected
+    if (r.paintAreas.trimPaint && input.trimPaintOptions) {
+      const { paintType, trimItems } = input.trimPaintOptions;
       let itemsBaseMin = 0;
       let itemsBaseMax = 0;
       (trimItems ?? []).forEach((item) => {
-        const rate = TRIM_ITEM_RATES[item];
+        const rate = TRIM_ITEM_RATES[item as keyof typeof TRIM_ITEM_RATES];
         if (rate) {
           itemsBaseMin += rate.min;
           itemsBaseMax += rate.max;
@@ -208,6 +206,7 @@ function calcInteriorWholeProperty(input: GeneratePaintingEstimateInput) {
   else roomFactor = 1.0;
   baseMin *= roomFactor;
   baseMax *= roomFactor;
+
   const areaFactor = calcAreaFactor(input.paintAreas);
   const iBand = getSizeBand(input.approxSize, INTERIOR_SIZE_BANDS);
   if (iBand) {
@@ -279,12 +278,6 @@ const InteriorRoomItemSchema = z.object({
     ensuitePaint: z.boolean().optional(),
   }),
   approxRoomSize: z.number().optional(),
-  trimPaintOptions: z
-    .object({
-      paintType: z.enum(['Oil-based', 'Water-based']),
-      trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
-    })
-    .optional(),
 });
 
 const GeneratePaintingEstimateInputSchema = z.object({
@@ -314,6 +307,12 @@ const GeneratePaintingEstimateInputSchema = z.object({
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
     })
   ),
+});
+
+const GeneratePaintingEstimateOutputSchema = z.object({
+  priceRange: z.string(),
+  explanation: z.string(),
+  details: z.array(z.string()),
 });
 
 export type GeneratePaintingEstimateInput = z.infer<typeof GeneratePaintingEstimateInputSchema>;
