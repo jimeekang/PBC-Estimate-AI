@@ -123,6 +123,7 @@ const InteriorRoomItemSchema = z.object({
     'Handrail',
     'Etc',
   ]),
+  otherRoomName: z.string().optional(),
   paintAreas: z.object({
     ceilingPaint: z.boolean(),
     wallPaint: z.boolean(),
@@ -464,7 +465,14 @@ export function EstimateForm() {
                                 <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
                                   <div className="flex items-center gap-2">
                                     <Checkbox checked={isSelected} onCheckedChange={() => handleToggleRoom(roomName)} />
-                                    <span className="font-bold text-sm">{roomName}</span>
+                                    <span className="font-bold text-sm shrink-0">{roomName}</span>
+                                    {roomName === 'Etc' && isSelected && (
+                                      <Input 
+                                        placeholder="Specify space..." 
+                                        className="h-7 text-xs ml-2 flex-1 min-w-[100px]"
+                                        {...form.register(`interiorRooms.${roomIndex}.otherRoomName`)}
+                                      />
+                                    )}
                                   </div>
                                   {isSelected && <Check className="h-4 w-4 text-primary" />}
                                 </CardHeader>
