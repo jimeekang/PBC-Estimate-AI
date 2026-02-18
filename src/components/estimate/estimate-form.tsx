@@ -40,7 +40,6 @@ import {
   ExternalLink,
   MapPin,
   Check,
-  ChevronDown,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -244,7 +243,17 @@ export function EstimateForm() {
   const isInterior = watchTypeOfWork.includes('Interior Painting');
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
-  const watchTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
+  const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
+  
+  // Calculate if any room in the specific areas has trim selected
+  const hasAnyInteriorTrimSelected = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
+  
+  // Watch top-level trim selection for "Entire property" mode
+  const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
+
+  // Decide whether to show the trim options block
+  const showTrimOptions = (watchScope === 'Entire property' && watchGlobalTrimPaint) || 
+                          (watchScope === 'Specific areas only' && hasAnyInteriorTrimSelected);
 
   const handleToggleRoom = (roomName: typeof interiorRoomList[number]) => {
     const index = fields.findIndex(f => f.roomName === roomName);
@@ -452,40 +461,6 @@ export function EstimateForm() {
                             <FormField control={form.control} name="paintAreas.trimPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><Palette className="h-5 w-5" /> Trim</FormLabel></div></FormItem>)} />
                           </div>
                         </div>
-
-                        <AnimatePresence>
-                          {watchTrimPaint && (
-                            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 border-2 border-primary/20 bg-primary/[0.03] rounded-xl space-y-6">
-                              <div className="space-y-3">
-                                <FormLabel className="text-primary font-bold flex items-center gap-2"><Sparkles className="h-4 w-4" /> Trim Paint Type</FormLabel>
-                                <FormField control={form.control} name="trimPaintOptions.paintType" render={({ field }) => (
-                                  <FormItem className="space-y-3">
-                                    <FormControl>
-                                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4">
-                                        <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Oil-based" /></FormControl><FormLabel className="font-normal cursor-pointer">Oil-based</FormLabel></FormItem>
-                                        <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Water-based" /></FormControl><FormLabel className="font-normal cursor-pointer">Water-based</FormLabel></FormItem>
-                                      </RadioGroup>
-                                    </FormControl>
-                                  </FormItem>
-                                )} />
-                              </div>
-
-                              <div className="space-y-3">
-                                <FormLabel className="text-primary font-bold">What trim items are being painted?</FormLabel>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                  {trimItems.map((item) => (
-                                    <FormField key={item.id} control={form.control} name="trimPaintOptions.trimItems" render={({ field }) => (
-                                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
-                                        <FormControl><Checkbox checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value?.filter((value) => value !== item.id))} /></FormControl>
-                                        <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs"><item.icon className="h-3.5 w-3.5" /> {item.label}</FormLabel>
-                                      </FormItem>
-                                    )} />
-                                  ))}
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
                       </>
                     ) : (
                       <div className="space-y-6">
@@ -499,7 +474,6 @@ export function EstimateForm() {
                             const isSelected = roomIndex > -1;
                             const isMasterBedroom = roomName === 'Master Bedroom';
                             const isHandrail = roomName === 'Handrail';
-                            const isTrimSelected = isSelected && form.watch(`interiorRooms.${roomIndex}.paintAreas.trimPaint`);
 
                             return (
                               <Card key={roomName} className={cn("transition-all border-2", isSelected ? "border-primary bg-primary/[0.02] shadow-sm" : "border-border opacity-60")}>
@@ -558,36 +532,6 @@ export function EstimateForm() {
                                         )}
                                       </div>
                                     </div>
-
-                                    {isTrimSelected && (
-                                      <div className="pt-3 border-t space-y-3 bg-white p-2 rounded border border-primary/10">
-                                        <p className="text-[9px] font-bold text-primary uppercase">Trim Options</p>
-                                        <RadioGroup 
-                                          defaultValue={form.watch(`interiorRooms.${roomIndex}.trimPaintOptions.paintType`) || 'Water-based'}
-                                          onValueChange={(val) => form.setValue(`interiorRooms.${roomIndex}.trimPaintOptions.paintType`, val as any)}
-                                          className="flex gap-2"
-                                        >
-                                          <div className="flex items-center space-x-1"><RadioGroupItem value="Oil-based" className="h-3 w-3"/><span className="text-[10px]">Oil</span></div>
-                                          <div className="flex items-center space-x-1"><RadioGroupItem value="Water-based" className="h-3 w-3"/><span className="text-[10px]">Water</span></div>
-                                        </RadioGroup>
-                                        <div className="grid grid-cols-1 gap-1">
-                                          {trimItems.map(item => (
-                                            <div key={item.id} className="flex items-center gap-2">
-                                              <Checkbox 
-                                                checked={form.watch(`interiorRooms.${roomIndex}.trimPaintOptions.trimItems`)?.includes(item.id)}
-                                                onCheckedChange={(checked) => {
-                                                  const current = form.getValues(`interiorRooms.${roomIndex}.trimPaintOptions.trimItems`) || [];
-                                                  if (checked) form.setValue(`interiorRooms.${roomIndex}.trimPaintOptions.trimItems`, [...current, item.id]);
-                                                  else form.setValue(`interiorRooms.${roomIndex}.trimPaintOptions.trimItems`, current.filter(i => i !== item.id));
-                                                }}
-                                                className="h-3 w-3"
-                                              />
-                                              <span className="text-[10px]">{item.label}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
                                   </CardContent>
                                 )}
                               </Card>
@@ -596,6 +540,40 @@ export function EstimateForm() {
                         </div>
                       </div>
                     )}
+
+                    <AnimatePresence>
+                      {showTrimOptions && (
+                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 border-2 border-primary/20 bg-primary/[0.03] rounded-xl space-y-6">
+                          <div className="space-y-3">
+                            <FormLabel className="text-primary font-bold flex items-center gap-2"><Sparkles className="h-4 w-4" /> Trim Paint Type</FormLabel>
+                            <FormField control={form.control} name="trimPaintOptions.paintType" render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormControl>
+                                  <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4">
+                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Oil-based" /></FormControl><FormLabel className="font-normal cursor-pointer">Oil-based</FormLabel></FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Water-based" /></FormControl><FormLabel className="font-normal cursor-pointer">Water-based</FormLabel></FormItem>
+                                  </RadioGroup>
+                                </FormControl>
+                              </FormItem>
+                            )} />
+                          </div>
+
+                          <div className="space-y-3">
+                            <FormLabel className="text-primary font-bold">What trim items are being painted?</FormLabel>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              {trimItems.map((item) => (
+                                <FormField key={item.id} control={form.control} name="trimPaintOptions.trimItems" render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
+                                    <FormControl><Checkbox checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value?.filter((value) => value !== item.id))} /></FormControl>
+                                    <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs"><item.icon className="h-3.5 w-3.5" /> {item.label}</FormLabel>
+                                  </FormItem>
+                                )} />
+                              ))}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 )}
               </AnimatePresence>
