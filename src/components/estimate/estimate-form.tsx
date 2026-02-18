@@ -460,6 +460,7 @@ export function EstimateForm() {
                             const roomIndex = fields.findIndex(f => f.roomName === roomName);
                             const isSelected = roomIndex > -1;
                             const isMasterBedroom = roomName === 'Master Bedroom';
+                            const isHandrail = roomName === 'Handrail';
                             return (
                               <Card key={roomName} className={cn("transition-all border-2", isSelected ? "border-primary bg-primary/[0.02] shadow-sm" : "border-border opacity-60")}>
                                 <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
@@ -481,20 +482,24 @@ export function EstimateForm() {
                                     <div className="space-y-2">
                                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Paint Areas</p>
                                       <div className="space-y-2">
-                                        <div className="flex items-center gap-3">
-                                          <Checkbox 
-                                            checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`)} 
-                                            onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`, !!checked)} 
-                                          />
-                                          <span className="text-xs">Ceiling</span>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                          <Checkbox 
-                                            checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.wallPaint`)} 
-                                            onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.wallPaint`, !!checked)} 
-                                          />
-                                          <span className="text-xs">Walls</span>
-                                        </div>
+                                        {!isHandrail && (
+                                          <>
+                                            <div className="flex items-center gap-3">
+                                              <Checkbox 
+                                                checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`)} 
+                                                onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`, !!checked)} 
+                                              />
+                                              <span className="text-xs">Ceiling</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                              <Checkbox 
+                                                checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.wallPaint`)} 
+                                                onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.wallPaint`, !!checked)} 
+                                              />
+                                              <span className="text-xs">Walls</span>
+                                            </div>
+                                          </>
+                                        )}
                                         <div className="flex items-center gap-3">
                                           <Checkbox 
                                             checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.trimPaint`)} 
