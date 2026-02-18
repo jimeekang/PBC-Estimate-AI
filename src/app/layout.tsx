@@ -6,7 +6,6 @@ import { AuthProvider } from '@/providers/auth-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { Toaster } from '@/components/ui/toaster';
-import Script from 'next/script';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -59,10 +58,6 @@ export default function RootLayout({
         />
       </head>
       <body className={cn('font-body antialiased h-full', inter.variable)}>
-        <Script
-          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
-          strategy="beforeInteractive"
-        />
         <AuthProvider>
           <div className="flex flex-col min-h-full">
             <Header />

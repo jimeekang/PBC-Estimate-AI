@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
 import { useToast } from '@/hooks/use-toast';
@@ -54,7 +54,6 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, getCountFromServer } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '../ui/scroll-area';
 
 const trimItems = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
@@ -130,12 +129,6 @@ const InteriorRoomItemSchema = z.object({
     ensuitePaint: z.boolean().optional(),
   }),
   approxRoomSize: z.number().optional(),
-  trimPaintOptions: z.optional(
-    z.object({
-      paintType: z.enum(['Oil-based', 'Water-based']),
-      trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
-    })
-  ),
 });
 
 const estimateFormSchema = z.object({
@@ -264,49 +257,11 @@ export function EstimateForm() {
         paintAreas: {
           ceilingPaint: false,
           wallPaint: false,
-          trimPaint: roomName === 'Handrail' ? true : false,
+          trimPaint: false,
           ensuitePaint: roomName === 'Master Bedroom' ? false : undefined
         }
       });
     }
-  };
-
-  const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleLocationChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    form.setValue('location', value);
-
-    if (value.length > 2 && typeof window !== 'undefined' && window.google) {
-      const service = new google.maps.places.AutocompleteService();
-      service.getPlacePredictions(
-        { input: value, componentRestrictions: { country: 'au' } },
-        (predictions) => {
-          setSuggestions(predictions || []);
-          setShowSuggestions(true);
-        }
-      );
-    } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
-    }
-  };
-
-  const handleSelectSuggestion = (description: string) => {
-    form.setValue('location', description);
-    setShowSuggestions(false);
   };
 
   async function onSubmit(values: EstimateFormValues) {
@@ -373,32 +328,7 @@ export function EstimateForm() {
               <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="e.g. John Doe" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" placeholder="e.g. john.doe@email.com" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number</FormLabel><FormControl><Input placeholder="e.g. 0412 345 678" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="location" render={({ field }) => (
-                <FormItem className="relative">
-                  <FormLabel>Location</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Input placeholder="Search your address..." {...field} onChange={handleLocationChange} className="pr-10" />
-                      <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </FormControl>
-                  <AnimatePresence>
-                    {showSuggestions && suggestions.length > 0 && (
-                      <motion.div ref={dropdownRef} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg overflow-hidden">
-                        <ScrollArea className="max-h-[200px]">
-                          {suggestions.map((s) => (
-                            <button key={s.place_id} type="button" onClick={() => handleSelectSuggestion(s.description)} className="w-full px-4 py-2 text-left text-sm hover:bg-primary/5 transition-colors border-b last:border-0 flex items-start gap-2">
-                              <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                              <span>{s.description}</span>
-                            </button>
-                          ))}
-                        </ScrollArea>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField control={form.control} name="location" render={({ field }) => (<FormItem><FormLabel>Location / Suburb</FormLabel><FormControl><Input placeholder="e.g. Sydney, NSW" {...field} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
 
