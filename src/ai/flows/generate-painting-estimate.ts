@@ -167,8 +167,11 @@ function calcInteriorSpecificFromRooms(input: GeneratePaintingEstimateInput) {
     roomMin *= areaFactor;
     roomMax *= areaFactor;
 
-    if (r.paintAreas.trimPaint && r.trimPaintOptions) {
-      const { paintType, trimItems } = r.trimPaintOptions;
+    // Use room-specific trim options or fallback to global trim options
+    const trimOptions = r.trimPaintOptions || input.trimPaintOptions;
+
+    if (r.paintAreas.trimPaint && trimOptions) {
+      const { paintType, trimItems } = trimOptions;
       let itemsBaseMin = 0;
       let itemsBaseMax = 0;
       (trimItems ?? []).forEach((item) => {
@@ -397,6 +400,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       }
     }
 
+    // Apply global trim premium if applicable (mostly for Entire Property)
     const isWhole = input.scopeOfPainting === 'Entire property';
     if (isWhole && input.paintAreas.trimPaint && input.trimPaintOptions) {
       const { paintType } = input.trimPaintOptions;
