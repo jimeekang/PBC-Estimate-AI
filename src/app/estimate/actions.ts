@@ -14,6 +14,9 @@ const InteriorRoomItemSchema = z.object({
     'Lounge',
     'Kitchen',
     'Laundry',
+    'Hallway',
+    'Foyer',
+    'Handrail',
     'Etc',
   ]),
   paintAreas: z.object({

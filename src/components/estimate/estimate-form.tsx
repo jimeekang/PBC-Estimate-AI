@@ -77,7 +77,19 @@ const jobDifficultyItems = [
 ] as const;
 
 const interiorRoomList = [
-  'Master Bedroom', 'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Bathroom', 'Living Room', 'Lounge', 'Kitchen', 'Laundry', 'Etc'
+  'Master Bedroom', 
+  'Bedroom 1', 
+  'Bedroom 2', 
+  'Bedroom 3', 
+  'Bathroom', 
+  'Living Room', 
+  'Lounge', 
+  'Kitchen', 
+  'Laundry', 
+  'Hallway',
+  'Foyer',
+  'Handrail',
+  'Etc'
 ] as const;
 
 const exteriorAreaOptions = [
@@ -106,6 +118,9 @@ const InteriorRoomItemSchema = z.object({
     'Lounge',
     'Kitchen',
     'Laundry',
+    'Hallway',
+    'Foyer',
+    'Handrail',
     'Etc',
   ]),
   paintAreas: z.object({
