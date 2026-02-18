@@ -468,6 +468,7 @@ export function EstimateForm() {
                           <FormLabel className="text-base font-bold">Select Rooms & Detail Areas</FormLabel>
                           <Button variant="ghost" size="sm" type="button" onClick={() => form.setValue('interiorRooms', [])} className="text-primary text-xs">Deselect all</Button>
                         </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {interiorRoomList.map((roomName) => {
                             const roomIndex = fields.findIndex(f => f.roomName === roomName);
