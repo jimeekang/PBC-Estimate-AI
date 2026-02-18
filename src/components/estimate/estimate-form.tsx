@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -38,10 +38,13 @@ import {
   Info,
   Calendar,
   ExternalLink,
+  MapPin,
+  Check,
+  ChevronDown,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
 import { useToast } from '@/hooks/use-toast';
@@ -51,6 +54,8 @@ import { useAuth } from '@/providers/auth-provider';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, getCountFromServer } from 'firebase/firestore';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '../ui/scroll-area';
 
 const trimItems = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
@@ -71,9 +76,9 @@ const jobDifficultyItems = [
   { id: 'Difficult access areas', label: 'Difficult access areas', icon: Construction },
 ] as const;
 
-const roomOptions = [
-  'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Bathroom', 'Livingroom', 'Lounge', 'Kitchen', 'Laundry', 'Etc'
-];
+const interiorRoomList = [
+  'Master Bedroom', 'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Bathroom', 'Living Room', 'Lounge', 'Kitchen', 'Laundry', 'Etc'
+] as const;
 
 const exteriorAreaOptions = [
   { id: 'Wall', label: 'Wall', icon: Home },
@@ -90,6 +95,34 @@ const typeOfWorkItems = [
   { id: 'Exterior Painting', label: 'Exterior Painting' },
 ] as const;
 
+const InteriorRoomItemSchema = z.object({
+  roomName: z.enum([
+    'Master Bedroom',
+    'Bedroom 1',
+    'Bedroom 2',
+    'Bedroom 3',
+    'Bathroom',
+    'Living Room',
+    'Lounge',
+    'Kitchen',
+    'Laundry',
+    'Etc',
+  ]),
+  paintAreas: z.object({
+    ceilingPaint: z.boolean(),
+    wallPaint: z.boolean(),
+    trimPaint: z.boolean(),
+    ensuitePaint: z.boolean().optional(),
+  }),
+  approxRoomSize: z.number().optional(),
+  trimPaintOptions: z.optional(
+    z.object({
+      paintType: z.enum(['Oil-based', 'Water-based']),
+      trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
+    })
+  ),
+});
+
 const estimateFormSchema = z.object({
   name: z.string().min(1, 'Name is required.'),
   email: z.string().email('Invalid email address.'),
@@ -98,6 +131,7 @@ const estimateFormSchema = z.object({
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
   roomsToPaint: z.array(z.string()).optional(),
+  interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
   approxSize: z.coerce.number().positive().optional(),
   existingWallColour: z.string().optional(),
@@ -145,6 +179,7 @@ export function EstimateForm() {
       scopeOfPainting: 'Entire property',
       propertyType: '',
       roomsToPaint: [],
+      interiorRooms: [],
       exteriorAreas: [],
       existingWallColour: '',
       location: '',
@@ -154,6 +189,11 @@ export function EstimateForm() {
     },
   });
 
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "interiorRooms"
+  });
+
   const fetchEstimateCount = async (uid: string) => {
     try {
       const estimatesRef = collection(db, 'estimates');
@@ -161,13 +201,11 @@ export function EstimateForm() {
       const snapshot = await getCountFromServer(q);
       const count = snapshot.data().count;
       setEstimateCount(count);
-      
       if (!isAdmin) {
         setIsLimitReached(count >= 2);
       } else {
         setIsLimitReached(false);
       }
-      
       return count;
     } catch (err) {
       console.error("Error fetching count:", err);
@@ -182,23 +220,75 @@ export function EstimateForm() {
     }
   }, [user, isAdmin]);
 
-  const watchTypeOfWork = form.watch('typeOfWork') || [];
+  const watchTypeOfWork = useWatch({ control: form.control, name: 'typeOfWork' }) || [];
   const isInterior = watchTypeOfWork.includes('Interior Painting');
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
-  const watchTrimPaint = form.watch('paintAreas.trimPaint');
+  const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
+  const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' }) || [];
+
+  const handleToggleRoom = (roomName: typeof interiorRoomList[number]) => {
+    const index = fields.findIndex(f => f.roomName === roomName);
+    if (index > -1) {
+      remove(index);
+    } else {
+      append({
+        roomName,
+        paintAreas: {
+          ceilingPaint: false,
+          wallPaint: false,
+          trimPaint: false,
+          ensuitePaint: roomName.includes('Bedroom') ? false : undefined
+        }
+      });
+    }
+  };
+
+  // Google Places Autocomplete
+  const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLocationChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    form.setValue('location', value);
+
+    if (value.length > 2 && typeof window !== 'undefined' && window.google) {
+      const service = new google.maps.places.AutocompleteService();
+      service.getPlacePredictions(
+        { input: value, componentRestrictions: { country: 'au' } },
+        (predictions) => {
+          setSuggestions(predictions || []);
+          setShowSuggestions(true);
+        }
+      );
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSelectSuggestion = (description: string) => {
+    form.setValue('location', description);
+    setShowSuggestions(false);
+  };
 
   async function onSubmit(values: EstimateFormValues) {
     if (!user) return;
-    
     if (!isAdmin) {
       const currentCount = await fetchEstimateCount(user.uid);
       if (currentCount >= 2) {
           setIsLimitReached(true);
-          toast({
-              variant: "destructive",
-              title: "Limit Reached",
-              description: "You have already used your 2 free estimates.",
-          });
+          toast({ variant: "destructive", title: "Limit Reached", description: "You have already used your 2 free estimates." });
           return;
       }
     }
@@ -207,11 +297,7 @@ export function EstimateForm() {
     const result = await submitEstimate(values);
     
     if(result.error) {
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: result.error,
-        });
+        toast({ variant: "destructive", title: "Error", description: result.error });
     } else if (result.data) {
         try {
             await addDoc(collection(db, 'estimates'), {
@@ -220,35 +306,21 @@ export function EstimateForm() {
                 estimate: result.data,
                 createdAt: serverTimestamp(),
             });
-            
             if (!isAdmin) {
               const currentCount = await fetchEstimateCount(user.uid);
               setEstimateCount(currentCount);
               setIsLimitReached(currentCount >= 2);
-              
-              toast({
-                title: "Success",
-                description: `Estimate generated! (${currentCount}/2 used)`,
-              });
+              toast({ title: "Success", description: `Estimate generated! (${currentCount}/2 used)` });
             } else {
-              toast({
-                title: "Success (Admin)",
-                description: `Estimate generated! (Unlimited access)`,
-              });
+              toast({ title: "Success (Admin)", description: `Estimate generated! (Unlimited access)` });
               await fetchEstimateCount(user.uid);
             }
-            
             setState(result);
         } catch (dbError: any) {
             console.error("Firestore Save Error:", dbError);
-            toast({
-                variant: "destructive",
-                title: "Storage Error",
-                description: "Failed to save estimate to database.",
-            });
+            toast({ variant: "destructive", title: "Storage Error", description: "Failed to save estimate to database." });
         }
     }
-    
     setIsPending(false);
   }
 
@@ -256,17 +328,11 @@ export function EstimateForm() {
     <>
       <AnimatePresence>
         {isLimitReached && !isCountLoading && !isAdmin && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <Alert variant="default" className="mb-6 border-primary bg-primary/5">
               <Info className="h-4 w-4 text-primary" />
               <AlertTitle className="text-primary">Free Limit Reached</AlertTitle>
-              <AlertDescription>
-                You have already used your 2 free AI estimates. For a more accurate quote, please contact us for an on-site inspection.
-              </AlertDescription>
+              <AlertDescription>You have already used your 2 free AI estimates. For a more accurate quote, please contact us for an on-site inspection.</AlertDescription>
             </Alert>
           </motion.div>
         )}
@@ -275,588 +341,226 @@ export function EstimateForm() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-6 w-6 text-primary" />
-                <span>Your Details</span>
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><User className="h-6 w-6 text-primary" /><span>Your Details</span></CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. John Doe" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email Address</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="e.g. john.doe@email.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone Number</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. 0412 345 678" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="location"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Location</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. Sydney, NSW" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="e.g. John Doe" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" placeholder="e.g. john.doe@email.com" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number</FormLabel><FormControl><Input placeholder="e.g. 0412 345 678" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="location" render={({ field }) => (
+                <FormItem className="relative">
+                  <FormLabel>Location</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Input placeholder="Search your address..." {...field} onChange={handleLocationChange} className="pr-10" />
+                      <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </FormControl>
+                  <AnimatePresence>
+                    {showSuggestions && suggestions.length > 0 && (
+                      <motion.div ref={dropdownRef} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg overflow-hidden">
+                        <ScrollArea className="max-h-[200px]">
+                          {suggestions.map((s) => (
+                            <button key={s.place_id} type="button" onClick={() => handleSelectSuggestion(s.description)} className="w-full px-4 py-2 text-left text-sm hover:bg-primary/5 transition-colors border-b last:border-0 flex items-start gap-2">
+                              <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                              <span>{s.description}</span>
+                            </button>
+                          ))}
+                        </ScrollArea>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <FormMessage />
+                </FormItem>
+              )} />
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Paintbrush className="h-6 w-6 text-primary" />
-                    <span>Job Details</span>
-                </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Paintbrush className="h-6 w-6 text-primary" /><span>Job Details</span></CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-8">
-              <FormField
-                control={form.control}
-                name="scopeOfPainting"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2 space-y-3">
-                    <FormLabel>What needs to be painted?</FormLabel>
-                    <FormControl>
-                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4 sm:gap-8">
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl><RadioGroupItem value="Entire property" /></FormControl>
-                          <FormLabel className="font-normal cursor-pointer">Entire property</FormLabel>
-                        </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl><RadioGroupItem value="Specific areas only" /></FormControl>
-                          <FormLabel className="font-normal cursor-pointer">Specific areas only</FormLabel>
-                        </FormItem>
-                      </RadioGroup>
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="scopeOfPainting" render={({ field }) => (
+                <FormItem className="sm:col-span-2 space-y-3">
+                  <FormLabel>What needs to be painted?</FormLabel>
+                  <FormControl>
+                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4 sm:gap-8">
+                      <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Entire property" /></FormControl><FormLabel className="font-normal cursor-pointer">Entire property</FormLabel></FormItem>
+                      <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Specific areas only" /></FormControl><FormLabel className="font-normal cursor-pointer">Specific areas only</FormLabel></FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                </FormItem>
+              )} />
 
-              <FormField
-                control={form.control}
-                name="typeOfWork"
-                render={() => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Type of Work</FormLabel>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-                      {typeOfWorkItems.map((item) => (
-                        <FormField
-                          key={item.id}
-                          control={form.control}
-                          name="typeOfWork"
-                          render={({ field }) => {
-                            return (
-                              <FormItem key={item.id} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value?.includes(item.id)}
-                                    onCheckedChange={(checked) => {
-                                      return checked
-                                        ? field.onChange([...(field.value || []), item.id])
-                                        : field.onChange(field.value?.filter((value) => value !== item.id))
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">{item.label}</FormLabel>
-                              </FormItem>
-                            )
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="typeOfWork" render={() => (
+                <FormItem className="sm:col-span-2">
+                  <FormLabel>Type of Work</FormLabel>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                    {typeOfWorkItems.map((item) => (
+                      <FormField key={item.id} control={form.control} name="typeOfWork" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                          <FormControl><Checkbox checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value?.filter((value) => value !== item.id))} /></FormControl>
+                          <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">{item.label}</FormLabel>
+                        </FormItem>
+                      )} />
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )} />
               
               <AnimatePresence>
                 {isInterior && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="sm:col-span-2 overflow-hidden space-y-8 pt-4"
-                  >
-                    <div className="space-y-4">
-                      <FormLabel>Rooms to Paint (Interior)</FormLabel>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                        {roomOptions.map((room) => (
-                          <FormField
-                            key={room}
-                            control={form.control}
-                            name="roomsToPaint"
-                            render={({ field }) => {
-                              return (
-                                <FormItem key={room} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors bg-background">
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(room)}
-                                      onCheckedChange={(checked) => {
-                                        return checked
-                                          ? field.onChange([...(field.value || []), room])
-                                          : field.onChange(field.value?.filter((value) => value !== room))
-                                      }}
-                                    />
-                                  </FormControl>
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="sm:col-span-2 overflow-hidden space-y-8 pt-4">
+                    {watchScope === 'Entire property' ? (
+                      <>
+                        <div className="space-y-4">
+                          <FormLabel>Rooms to Paint (Interior)</FormLabel>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                            {interiorRoomList.map((room) => (
+                              <FormField key={room} control={form.control} name="roomsToPaint" render={({ field }) => (
+                                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors bg-background">
+                                  <FormControl><Checkbox checked={field.value?.includes(room)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), room]) : field.onChange(field.value?.filter((value) => value !== room))} /></FormControl>
                                   <FormLabel className="font-normal cursor-pointer text-xs">{room}</FormLabel>
                                 </FormItem>
-                              )
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <FormLabel>Paint Areas (Interior)</FormLabel>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-md border p-4 bg-background">
-                        <FormField
-                          control={form.control}
-                          name="paintAreas.ceilingPaint"
-                          render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
-                              <FormControl>
-                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                              </FormControl>
-                              <div className="space-y-1 leading-none">
-                                <FormLabel className="flex items-center gap-2 cursor-pointer">
-                                  <PaintRoller className="h-5 w-5" /> Ceiling
-                                </FormLabel>
-                              </div>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="paintAreas.wallPaint"
-                          render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
-                              <FormControl>
-                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                              </FormControl>
-                              <div className="space-y-1 leading-none">
-                                <FormLabel className="flex items-center gap-2 cursor-pointer">
-                                  <Paintbrush className="h-5 w-5" /> Walls
-                                </FormLabel>
-                              </div>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="paintAreas.trimPaint"
-                          render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
-                              <FormControl>
-                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                              </FormControl>
-                              <div className="space-y-1 leading-none">
-                                <FormLabel className="flex items-center gap-2 cursor-pointer">
-                                  <Palette className="h-5 w-5" /> Trim
-                                </FormLabel>
-                              </div>
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    </div>
-
-                    <AnimatePresence>
-                      {watchTrimPaint && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.3 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="space-y-6 rounded-md border p-6 bg-accent/5">
-                            <div className="flex items-center gap-2 text-lg font-semibold border-b pb-2">
-                              <Palette className="h-5 w-5 text-primary" />
-                              <span>Trim Paint Options</span>
-                            </div>
-                            <FormField
-                              control={form.control}
-                              name="trimPaintOptions.paintType"
-                              render={({ field }) => (
-                                <FormItem className="space-y-3">
-                                  <FormLabel>Paint Type</FormLabel>
-                                  <FormControl>
-                                    <RadioGroup
-                                      onValueChange={field.onChange}
-                                      defaultValue={field.value}
-                                      className="flex flex-col space-y-1"
-                                    >
-                                      <FormItem className="flex items-center space-x-3 space-y-0">
-                                        <FormControl>
-                                          <RadioGroupItem value="Oil-based" />
-                                        </FormControl>
-                                        <FormLabel className="font-normal cursor-pointer">Oil-based</FormLabel>
-                                      </FormItem>
-                                      <FormItem className="flex items-center space-x-3 space-y-0">
-                                        <FormControl>
-                                          <RadioGroupItem value="Water-based" />
-                                        </FormControl>
-                                        <FormLabel className="font-normal cursor-pointer">Water-based</FormLabel>
-                                      </FormItem>
-                                    </RadioGroup>
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="trimPaintOptions.trimItems"
-                              render={() => (
-                                <FormItem>
-                                  <div className="mb-4">
-                                    <FormLabel className="text-base">Trim Items</FormLabel>
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    {trimItems.map((item) => (
-                                      <FormField
-                                        key={item.id}
-                                        control={form.control}
-                                        name="trimPaintOptions.trimItems"
-                                        render={({ field }) => {
-                                          return (
-                                            <FormItem
-                                              key={item.id}
-                                              className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors bg-background"
-                                            >
-                                              <FormControl>
-                                                <Checkbox
-                                                  checked={field.value?.includes(item.id)}
-                                                  onCheckedChange={(checked) => {
-                                                    return checked
-                                                      ? field.onChange([...(field.value || []), item.id])
-                                                      : field.onChange(
-                                                          field.value?.filter(
-                                                            (value) => value !== item.id
-                                                          )
-                                                        )
-                                                  }}
-                                                />
-                                              </FormControl>
-                                              <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">
-                                                <item.icon className="h-5 w-5" /> {item.label}
-                                              </FormLabel>
-                                            </FormItem>
-                                          )
-                                        }}
-                                      />
-                                    ))}
-                                  </div>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
+                              )} />
+                            ))}
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                        </div>
+                        <div className="space-y-4">
+                          <FormLabel>Paint Areas (Interior)</FormLabel>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-md border p-4 bg-background">
+                            <FormField control={form.control} name="paintAreas.ceilingPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><PaintRoller className="h-5 w-5" /> Ceiling</FormLabel></div></FormItem>)} />
+                            <FormField control={form.control} name="paintAreas.wallPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><Paintbrush className="h-5 w-5" /> Walls</FormLabel></div></FormItem>)} />
+                            <FormField control={form.control} name="paintAreas.trimPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><Palette className="h-5 w-5" /> Trim</FormLabel></div></FormItem>)} />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                          <FormLabel className="text-base font-bold">Select Rooms & Detail Areas</FormLabel>
+                          <Button variant="ghost" size="sm" type="button" onClick={() => form.setValue('interiorRooms', [])} className="text-primary text-xs">Deselect all</Button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {interiorRoomList.map((roomName) => {
+                            const roomIndex = fields.findIndex(f => f.roomName === roomName);
+                            const isSelected = roomIndex > -1;
+                            return (
+                              <Card key={roomName} className={cn("transition-all border-2", isSelected ? "border-primary bg-primary/[0.02] shadow-sm" : "border-border opacity-60")}>
+                                <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox checked={isSelected} onCheckedChange={() => handleToggleRoom(roomName)} />
+                                    <span className="font-bold text-sm">{roomName}</span>
+                                  </div>
+                                  {isSelected && <Check className="h-4 w-4 text-primary" />}
+                                </CardHeader>
+                                {isSelected && (
+                                  <CardContent className="p-4 pt-0 space-y-4">
+                                    <div className="space-y-2">
+                                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Paint Areas</p>
+                                      <div className="space-y-2">
+                                        {['ceilingPaint', 'wallPaint', 'trimPaint', 'ensuitePaint'].map((area) => {
+                                          if (area === 'ensuitePaint' && !roomName.includes('Bedroom')) return null;
+                                          return (
+                                            <div key={area} className="flex items-center gap-3">
+                                              <Checkbox 
+                                                checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.${area as any}`)} 
+                                                onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.${area as any}`, checked)} 
+                                              />
+                                              <span className="text-xs capitalize">{area.replace('Paint', '')}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                )}
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
 
               <AnimatePresence>
                 {isExterior && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="sm:col-span-2 overflow-hidden pt-4"
-                  >
-                    <FormField
-                      control={form.control}
-                      name="exteriorAreas"
-                      render={() => (
-                        <FormItem>
-                          <FormLabel>Exterior Areas</FormLabel>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                            {exteriorAreaOptions.map((item) => (
-                              <FormField
-                                key={item.id}
-                                control={form.control}
-                                name="exteriorAreas"
-                                render={({ field }) => {
-                                  return (
-                                    <FormItem key={item.id} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
-                                      <FormControl>
-                                        <Checkbox
-                                          checked={field.value?.includes(item.id)}
-                                          onCheckedChange={(checked) => {
-                                            return checked
-                                              ? field.onChange([...(field.value || []), item.id])
-                                              : field.onChange(field.value?.filter((value) => value !== item.id))
-                                          }}
-                                        />
-                                      </FormControl>
-                                      <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs">
-                                        <item.icon className="h-4 w-4" /> {item.label}
-                                      </FormLabel>
-                                    </FormItem>
-                                  )
-                                }}
-                              />
-                            ))}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="sm:col-span-2 overflow-hidden pt-4">
+                    <FormField control={form.control} name="exteriorAreas" render={() => (
+                      <FormItem><FormLabel>Exterior Areas</FormLabel><div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                        {exteriorAreaOptions.map((item) => (
+                          <FormField key={item.id} control={form.control} name="exteriorAreas" render={({ field }) => (
+                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                              <FormControl><Checkbox checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value?.filter((value) => value !== item.id))} /></FormControl>
+                              <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs"><item.icon className="h-4 w-4" /> {item.label}</FormLabel>
+                            </FormItem>
+                          )} />
+                        ))}
+                      </div><FormMessage /></FormItem>
+                    )} />
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              <FormField
-                  control={form.control}
-                  name="propertyType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Property Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a property type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {propertyTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              <FormField
-                control={form.control}
-                name="approxSize"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Approx. size (sqm)</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="e.g. 100" {...field} value={field.value ?? ''} onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="existingWallColour"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Existing Wall Colour</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. White, Dark Blue" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="propertyType" render={({ field }) => (
+                <FormItem><FormLabel>Property Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select a property type" /></SelectTrigger></FormControl>
+                  <SelectContent>{propertyTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
+                </Select><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="approxSize" render={({ field }) => (<FormItem><FormLabel>Approx. size (sqm)</FormLabel><FormControl><Input type="number" placeholder="e.g. 100" {...field} value={field.value ?? ''} onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="existingWallColour" render={({ field }) => (<FormItem><FormLabel>Existing Wall Colour</FormLabel><FormControl><Input placeholder="e.g. White, Dark Blue" {...field} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Layers className="h-6 w-6 text-primary" />
-                <span>Conditions &amp; Difficulty</span>
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Layers className="h-6 w-6 text-primary" /><span>Conditions &amp; Difficulty</span></CardTitle></CardHeader>
             <CardContent className="space-y-8">
-                <FormField
-                    control={form.control}
-                    name="timingPurpose"
-                    render={({ field }) => (
-                    <FormItem className="space-y-3">
-                        <FormLabel>Why are you painting?</FormLabel>
-                        <FormControl>
-                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                            <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="Maintenance or refresh" /></FormControl>
-                            <FormLabel className="font-normal cursor-pointer">Maintenance or refresh</FormLabel>
-                            </FormItem>
-                            <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="Preparing for sale or rental" /></FormControl>
-                            <FormLabel className="font-normal cursor-pointer">Preparing for sale or rental</FormLabel>
-                            </FormItem>
-                        </RadioGroup>
-                        </FormControl>
-                    </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="paintCondition"
-                    render={({ field }) => (
-                      <FormItem className="space-y-3">
-                        <FormLabel className="text-base flex items-center gap-2">
-                          <ShieldAlert className="h-5 w-5" /> Current paint condition
-                        </FormLabel>
-                        <FormControl>
-                          <RadioGroup
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                            className="flex flex-col space-y-1"
-                          >
-                            {paintConditionOptions.map((option) => (
-                              <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value={option.id} />
-                                </FormControl>
-                                <FormLabel className="font-normal cursor-pointer">
-                                  {option.label}
-                                </FormLabel>
-                              </FormItem>
-                            ))}
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="jobDifficulty"
-                    render={() => (
-                        <FormItem>
-                        <div className="mb-4">
-                            <FormLabel className="text-base flex items-center gap-2"><TrendingUp className="h-5 w-5" /> Job Difficulty</FormLabel>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {jobDifficultyItems.map((item) => (
-                            <FormField
-                            key={item.id}
-                            control={form.control}
-                            name="jobDifficulty"
-                            render={({ field }) => {
-                                return (
-                                <FormItem key={item.id} className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
-                                    <FormControl>
-                                    <Checkbox
-                                        checked={field.value?.includes(item.id)}
-                                        onCheckedChange={(checked) => {
-                                        return checked
-                                            ? field.onChange([...(field.value || []), item.id])
-                                            : field.onChange(field.value?.filter((value) => value !== item.id))
-                                        }}
-                                    />
-                                    </FormControl>
-                                    <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">
-                                      <item.icon className="h-5 w-5" /> {item.label}
-                                    </FormLabel>
-                                </FormItem>
-                                )
-                            }}
-                            />
-                        ))}
-                        </div>
-                        <FormMessage />
+                <FormField control={form.control} name="timingPurpose" render={({ field }) => (
+                  <FormItem className="space-y-3"><FormLabel>Why are you painting?</FormLabel><FormControl><RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Maintenance or refresh" /></FormControl><FormLabel className="font-normal cursor-pointer">Maintenance or refresh</FormLabel></FormItem>
+                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Preparing for sale or rental" /></FormControl><FormLabel className="font-normal cursor-pointer">Preparing for sale or rental</FormLabel></FormItem>
+                  </RadioGroup></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="paintCondition" render={({ field }) => (
+                  <FormItem className="space-y-3"><FormLabel className="text-base flex items-center gap-2"><ShieldAlert className="h-5 w-5" /> Current paint condition</FormLabel><FormControl><RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                    {paintConditionOptions.map((option) => (
+                      <FormItem key={option.id} className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value={option.id} /></FormControl><FormLabel className="font-normal cursor-pointer">{option.label}</FormLabel></FormItem>
+                    ))}
+                  </RadioGroup></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="jobDifficulty" render={() => (
+                    <FormItem><div className="mb-4"><FormLabel className="text-base flex items-center gap-2"><TrendingUp className="h-5 w-5" /> Job Difficulty</FormLabel></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {jobDifficultyItems.map((item) => (
+                      <FormField key={item.id} control={form.control} name="jobDifficulty" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                          <FormControl><Checkbox checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value?.filter((value) => value !== item.id))} /></FormControl>
+                          <FormLabel className="font-normal flex items-center gap-2 cursor-pointer"><item.icon className="h-5 w-5" /> {item.label}</FormLabel>
                         </FormItem>
-                    )}
-                />
-
+                      )} />
+                    ))}
+                    </div><FormMessage /></FormItem>
+                )} />
             </CardContent>
           </Card>
 
           <div className="space-y-4">
-            <Button 
-              type="submit" 
-              size="lg" 
-              className="w-full text-lg h-14" 
-              disabled={isPending || (isLimitReached && !isAdmin) || isCountLoading}
-            >
-              {isPending ? (
-                <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-              ) : (
-                <WandSparkles className="mr-2 h-6 w-6" />
-              )}
+            <Button type="submit" size="lg" className="w-full text-lg h-14" disabled={isPending || (isLimitReached && !isAdmin) || isCountLoading}>
+              {isPending ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <WandSparkles className="mr-2 h-6 w-6" />}
               {isLimitReached && !isAdmin ? 'Free Limit Reached' : isCountLoading ? 'Checking limits...' : 'Generate Estimate'}
             </Button>
-
             <div className="text-center p-6 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm space-y-2">
               <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Professional Services</p>
-              <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap">
-                <Calendar className="h-5 w-5 text-primary" />
-                <span>Ready for an expert on-site assessment?</span>
-                <a 
-                  href={BOOKING_URL}
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-primary font-bold underline hover:text-primary/80 transition-all inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-primary/20 shadow-sm"
-                >
-                  Book your free quote here <ExternalLink className="h-3 w-3" />
-                </a>
-              </p>
+              <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap"><Calendar className="h-5 w-5 text-primary" /><span>Ready for an expert on-site assessment?</span><a href={BOOKING_URL} target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80 transition-all inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-primary/20 shadow-sm">Book your free quote here <ExternalLink className="h-3 w-3" /></a></p>
             </div>
-            
             <div className="text-center text-sm font-medium p-2 rounded-lg bg-accent/10 border border-accent/20">
-              {isCountLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Syncing with database...
-                </span>
-              ) : isAdmin ? (
-                <span className="text-primary font-bold">Unlimited access (Admin Dashboard Mode)</span>
-              ) : (
-                <>Remaining free estimates: <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span></>
-              )}
+              {isCountLoading ? (<span className="flex items-center justify-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Syncing with database...</span>) : isAdmin ? (<span className="text-primary font-bold">Unlimited access (Admin Dashboard Mode)</span>) : (<>Remaining free estimates: <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span></>)}
             </div>
           </div>
         </form>
       </Form>
-
-      <AnimatePresence>
-        {isPending && (
-            <motion.div 
-                className="mt-8 text-center"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-            >
-                <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4"/>
-                <p className="text-muted-foreground">Our AI is crunching the numbers... This may take a few seconds.</p>
-            </motion.div>
-        )}
-      </AnimatePresence>
-      
+      <AnimatePresence>{isPending && (<motion.div className="mt-8 text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4"/><p className="text-muted-foreground">Our AI is crunching the numbers... This may take a few seconds.</p></motion.div>)}</AnimatePresence>
       {state.data && <EstimateResult result={state.data} />}
     </>
   );
