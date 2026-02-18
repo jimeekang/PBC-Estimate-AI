@@ -31,6 +31,9 @@ const ROOM_WEIGHT: Record<string, number> = {
   'Living Room': 1.4,
   'Lounge': 1.2,
   'Laundry': 0.7,
+  'Hallway': 0.8,
+  'Foyer': 0.9,
+  'Handrail': 0.5,
   'Etc': 0.6,
 };
 
@@ -260,6 +263,9 @@ const InteriorRoomItemSchema = z.object({
     'Lounge',
     'Kitchen',
     'Laundry',
+    'Hallway',
+    'Foyer',
+    'Handrail',
     'Etc',
   ]),
   paintAreas: z.object({
