@@ -19,6 +19,7 @@ const InteriorRoomItemSchema = z.object({
     'Handrail',
     'Etc',
   ]),
+  otherRoomName: z.string().optional(),
   paintAreas: z.object({
     ceilingPaint: z.boolean(),
     wallPaint: z.boolean(),
