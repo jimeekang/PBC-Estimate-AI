@@ -306,6 +306,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
     ceilingPaint: z.boolean(),
     wallPaint: z.boolean(),
     trimPaint: z.boolean(),
+    ensuitePaint: z.boolean().optional(),
   }),
   trimPaintOptions: z.optional(
     z.object({
@@ -313,12 +314,6 @@ const GeneratePaintingEstimateInputSchema = z.object({
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
     })
   ),
-});
-
-const GeneratePaintingEstimateOutputSchema = z.object({
-  priceRange: z.string(),
-  explanation: z.string(),
-  details: z.array(z.string()).optional(),
 });
 
 export type GeneratePaintingEstimateInput = z.infer<typeof GeneratePaintingEstimateInputSchema>;

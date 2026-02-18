@@ -159,6 +159,7 @@ const estimateFormSchema = z.object({
     ceilingPaint: z.boolean().default(false),
     wallPaint: z.boolean().default(false),
     trimPaint: z.boolean().default(false),
+    ensuitePaint: z.boolean().optional(),
   }).default({}),
   trimPaintOptions: z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
@@ -186,6 +187,7 @@ export function EstimateForm() {
         ceilingPaint: false,
         wallPaint: false,
         trimPaint: false,
+        ensuitePaint: false,
       },
       trimPaintOptions: {
         paintType: 'Water-based',
@@ -244,6 +246,7 @@ export function EstimateForm() {
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
+  const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
   
   const hasAnyInteriorTrimSelected = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
@@ -448,6 +451,18 @@ export function EstimateForm() {
                               )} />
                             ))}
                           </div>
+                          <AnimatePresence>
+                            {watchRoomsToPaint.includes('Master Bedroom') && (
+                              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="mt-4 p-4 border rounded-lg bg-primary/5 border-primary/20 flex items-center gap-3">
+                                <FormField control={form.control} name="paintAreas.ensuitePaint" render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                    <FormLabel className="font-bold text-primary cursor-pointer text-sm">Include Master Ensuite?</FormLabel>
+                                  </FormItem>
+                                )} />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                         <div className="space-y-4">
                           <FormLabel>Paint Areas (Interior)</FormLabel>

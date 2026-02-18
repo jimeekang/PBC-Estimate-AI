@@ -55,6 +55,7 @@ const estimateFormSchema = z.object({
     ceilingPaint: z.boolean().default(false),
     wallPaint: z.boolean().default(false),
     trimPaint: z.boolean().default(false),
+    ensuitePaint: z.boolean().optional(),
   }).default({}),
   trimPaintOptions: z.optional(
     z.object({
