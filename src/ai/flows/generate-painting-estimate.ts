@@ -40,7 +40,7 @@ const ROOM_WEIGHT: Record<string, number> = {
   Laundry: 0.7,
   Hallway: 0.6,
   Foyer: 0.6,
-  Handrail: 0.8, // Handrail is a significant trim job
+  Handrail: 0.8, 
   Etc: 0.6,
 };
 
@@ -244,7 +244,7 @@ Your role is to clearly explain why a specific price range was generated.
 CONTEXT
 - Property type: {{input.propertyType}}
 - Scope: {{input.scopeOfPainting}}
-- Bedrooms: {{#if input.bedroomCount}}{{input.bedroomCount}}{{else}}As selected{{/if}}
+- Total Bedrooms: {{#if input.bedroomCount}}{{input.bedroomCount}}{{else}}As selected{{/if}}
 - Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
 
 PRICE RANGE (AUD)
@@ -294,7 +294,9 @@ export const generatePaintingEstimate = ai.defineFlow(
         areaFactor = scored.reduce((a, b) => a + b.score * b.af, 0) / denom;
       }
 
-      const aptClass = inferApartmentClass(input.bedroomCount, toNumberOrUndefined(input.approxSize)) as keyof typeof APARTMENT_ANCHORS_OIL;
+      // Calculate total bedrooms: numeric input + Master Bedroom if selected
+      const totalBedrooms = (input.bedroomCount || 0) + (input.roomsToPaint?.includes('Master Bedroom') ? 1 : 0);
+      const aptClass = inferApartmentClass(totalBedrooms, toNumberOrUndefined(input.approxSize)) as keyof typeof APARTMENT_ANCHORS_OIL;
       const anchor = APARTMENT_ANCHORS_OIL[aptClass];
 
       if (isWhole && aptLike) {

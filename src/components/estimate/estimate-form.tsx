@@ -224,7 +224,7 @@ export function EstimateForm() {
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
-  const watchBedroomCount = useWatch({ control: form.control, name: 'bedroomCount' }) || 0;
+  const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
   
   const hasAnyInteriorTrimSelected = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint) || watchInteriorRooms?.some(r => r.roomName === 'Handrail');
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
@@ -355,19 +355,20 @@ export function EstimateForm() {
                         <div className="grid sm:grid-cols-2 gap-4">
                           <FormField control={form.control} name="bedroomCount" render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Number of Bedrooms</FormLabel>
+                              <FormLabel>Number of Other Bedrooms</FormLabel>
                               <FormControl>
                                 <Input type="number" min="0" {...field} />
                               </FormControl>
+                              <FormDescription>Excluding Master Bedroom</FormDescription>
                               <FormMessage />
                             </FormItem>
                           )} />
                         </div>
 
                         <div className="space-y-4">
-                          <FormLabel>Additional Areas to Paint (Interior)</FormLabel>
+                          <FormLabel>Areas to Paint (Interior)</FormLabel>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                            {interiorRoomList.filter(r => !r.includes('Bedroom')).map((room) => (
+                            {interiorRoomList.filter(r => r === 'Master Bedroom' || !r.includes('Bedroom')).map((room) => (
                               <FormField key={room} control={form.control} name="roomsToPaint" render={({ field }) => (
                                 <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors bg-background">
                                   <FormControl><Checkbox checked={field.value?.includes(room)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), room]) : field.onChange(field.value?.filter((value) => value !== room))} /></FormControl>
@@ -379,7 +380,7 @@ export function EstimateForm() {
                         </div>
 
                         <AnimatePresence>
-                          {watchBedroomCount >= 1 && (
+                          {watchRoomsToPaint.includes('Master Bedroom') && (
                             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-4 border rounded-lg bg-primary/5 border-primary/20">
                               <FormField control={form.control} name="paintAreas.ensuitePaint" render={({ field }) => (
                                 <FormItem className="flex flex-row items-center space-x-3 space-y-0">
