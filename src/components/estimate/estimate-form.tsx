@@ -39,7 +39,6 @@ import {
   Info,
   Calendar,
   ExternalLink,
-  MapPin,
   Check,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -226,12 +225,14 @@ export function EstimateForm() {
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
   const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
-  
-  const hasAnyInteriorTrimSelected = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint) || watchInteriorRooms?.some(r => r.roomName === 'Handrail');
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
 
+  // Consolidate trim options panel visibility logic
+  const hasAnyRoomTrim = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
+  const hasHandrail = watchInteriorRooms?.some(r => r.roomName === 'Handrail');
+  
   const showTrimOptions = (watchScope === 'Entire property' && watchGlobalTrimPaint) || 
-                          (watchScope === 'Specific areas only' && hasAnyInteriorTrimSelected);
+                          (watchScope === 'Specific areas only' && (hasAnyRoomTrim || hasHandrail));
 
   const handleToggleRoom = (roomName: string) => {
     const index = fields.findIndex(f => f.roomName === roomName);
@@ -247,6 +248,18 @@ export function EstimateForm() {
           ensuitePaint: false
         }
       });
+    }
+  };
+
+  const preventInvalidChars = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+      e.preventDefault();
+    }
+  };
+
+  const preventInvalidCharsNoDecimal = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (['e', 'E', '+', '-', '.'].includes(e.key)) {
+      e.preventDefault();
     }
   };
 
@@ -358,7 +371,15 @@ export function EstimateForm() {
                             <FormItem>
                               <FormLabel>Number of Other Bedrooms</FormLabel>
                               <FormControl>
-                                <Input type="number" min="0" {...field} />
+                                <Input 
+                                  type="number" 
+                                  min="0" 
+                                  placeholder="0"
+                                  onKeyDown={preventInvalidCharsNoDecimal}
+                                  {...field} 
+                                  value={field.value ?? ''}
+                                  onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))}
+                                />
                               </FormControl>
                               <FormDescription>Excluding Master Bedroom</FormDescription>
                               <FormMessage />
@@ -540,7 +561,14 @@ export function EstimateForm() {
                   <FormItem>
                     <FormLabel>Approx. size (sqm)</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g. 100" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} />
+                      <Input 
+                        type="number" 
+                        placeholder="e.g. 100" 
+                        onKeyDown={preventInvalidChars}
+                        {...field} 
+                        value={field.value ?? ''} 
+                        onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
