@@ -106,21 +106,7 @@ const typeOfWorkItems = [
 ] as const;
 
 const InteriorRoomItemSchema = z.object({
-  roomName: z.enum([
-    'Master Bedroom',
-    'Bedroom 1',
-    'Bedroom 2',
-    'Bedroom 3',
-    'Bathroom',
-    'Living Room',
-    'Lounge',
-    'Kitchen',
-    'Laundry',
-    'Hallway',
-    'Foyer',
-    'Handrail',
-    'Etc',
-  ]),
+  roomName: z.string(),
   otherRoomName: z.string().optional(),
   paintAreas: z.object({
     ceilingPaint: z.boolean(),
@@ -138,6 +124,7 @@ const estimateFormSchema = z.object({
   typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).min(1, 'Please select at least one type of work.'),
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
+  bedroomCount: z.coerce.number().min(0).optional(),
   roomsToPaint: z.array(z.string()).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
@@ -147,7 +134,6 @@ const estimateFormSchema = z.object({
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
   jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional(),
-
   paintAreas: z.object({
     ceilingPaint: z.boolean().default(false),
     wallPaint: z.boolean().default(false),
@@ -162,7 +148,7 @@ const estimateFormSchema = z.object({
 
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
 
-const BOOKING_URL = "https://clienthub.getjobber.com/booking/3a242065-0473-4039-ac49-e0a471328f15/?hl=en-AU&gei=ToaeaOX_Aemd4-EP8PLo4QQ&rwg_token=ACgRB3dTJDWOYboojrle3rI8gtbZw-AyOUJf57Jz7Mw9Y_ENGZMD4tsX753nFQ_jl26ENKc9X6ikq_w46rgHpuel-qj-sqpr8A%3D%3D";
+const BOOKING_URL = "https://clienthub.getjobber.com/booking/3a242065-0473-4039-ac49-e0a471328f15/";
 
 export function EstimateForm() {
   const { user, isAdmin } = useAuth();
@@ -192,6 +178,7 @@ export function EstimateForm() {
       typeOfWork: [],
       scopeOfPainting: 'Entire property',
       propertyType: '',
+      bedroomCount: 0,
       roomsToPaint: [],
       interiorRooms: [],
       exteriorAreas: [],
@@ -217,8 +204,6 @@ export function EstimateForm() {
       setEstimateCount(count);
       if (!isAdmin) {
         setIsLimitReached(count >= 2);
-      } else {
-        setIsLimitReached(false);
       }
       return count;
     } catch (err) {
@@ -239,7 +224,7 @@ export function EstimateForm() {
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
-  const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
+  const watchBedroomCount = useWatch({ control: form.control, name: 'bedroomCount' }) || 0;
   
   const hasAnyInteriorTrimSelected = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint) || watchInteriorRooms?.some(r => r.roomName === 'Handrail');
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
@@ -247,7 +232,7 @@ export function EstimateForm() {
   const showTrimOptions = (watchScope === 'Entire property' && watchGlobalTrimPaint) || 
                           (watchScope === 'Specific areas only' && hasAnyInteriorTrimSelected);
 
-  const handleToggleRoom = (roomName: typeof interiorRoomList[number]) => {
+  const handleToggleRoom = (roomName: string) => {
     const index = fields.findIndex(f => f.roomName === roomName);
     if (index > -1) {
       remove(index);
@@ -255,10 +240,10 @@ export function EstimateForm() {
       append({
         roomName,
         paintAreas: {
-          ceilingPaint: roomName === 'Handrail' ? false : false,
-          wallPaint: roomName === 'Handrail' ? false : false,
-          trimPaint: roomName === 'Handrail' ? true : false,
-          ensuitePaint: roomName === 'Master Bedroom' ? false : undefined
+          ceilingPaint: false,
+          wallPaint: false,
+          trimPaint: false,
+          ensuitePaint: false
         }
       });
     }
@@ -282,25 +267,23 @@ export function EstimateForm() {
         toast({ variant: "destructive", title: "Error", description: result.error });
     } else if (result.data) {
         try {
-            await addDoc(collection(db, 'estimates'), {
-                userId: user.uid,
-                options: values,
-                estimate: result.data,
-                createdAt: serverTimestamp(),
-            });
-            if (!isAdmin) {
-              const currentCount = await fetchEstimateCount(user.uid);
-              setEstimateCount(currentCount);
-              setIsLimitReached(currentCount >= 2);
-              toast({ title: "Success", description: `Estimate generated! (${currentCount}/2 used)` });
-            } else {
-              toast({ title: "Success (Admin)", description: `Estimate generated! (Unlimited access)` });
-              await fetchEstimateCount(user.uid);
-            }
-            setState(result);
+          await addDoc(collection(db, 'estimates'), {
+            userId: user.uid,
+            options: result.sanitizedOptions ?? values,
+            estimate: result.data,
+            createdAt: serverTimestamp(),
+          });
+          
+          if (!isAdmin) {
+            const currentCount = await fetchEstimateCount(user.uid);
+            setEstimateCount(currentCount);
+            setIsLimitReached(currentCount >= 2);
+          }
+          setState(result);
+          toast({ title: "Success", description: "Estimate generated!" });
         } catch (dbError: any) {
             console.error("Firestore Save Error:", dbError);
-            toast({ variant: "destructive", title: "Storage Error", description: "Failed to save estimate to database." });
+            toast({ variant: "destructive", title: "Storage Error", description: "Failed to save estimate." });
         }
     }
     setIsPending(false);
@@ -314,7 +297,7 @@ export function EstimateForm() {
             <Alert variant="default" className="mb-6 border-primary bg-primary/5">
               <Info className="h-4 w-4 text-primary" />
               <AlertTitle className="text-primary">Free Limit Reached</AlertTitle>
-              <AlertDescription>You have already used your 2 free AI estimates. For a more accurate quote, please contact us for an on-site inspection.</AlertDescription>
+              <AlertDescription>You have used your 2 free AI estimates. Please contact us for a professional on-site quote.</AlertDescription>
             </Alert>
           </motion.div>
         )}
@@ -325,9 +308,9 @@ export function EstimateForm() {
           <Card className="shadow-md">
             <CardHeader><CardTitle className="flex items-center gap-2"><User className="h-6 w-6 text-primary" /><span>Your Details</span></CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-6">
-              <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="e.g. John Doe" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" placeholder="e.g. john.doe@email.com" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number</FormLabel><FormControl><Input placeholder="e.g. 0412 345 678" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="John Doe" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number</FormLabel><FormControl><Input placeholder="0412 345 678" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="location" render={({ field }) => (<FormItem><FormLabel>Location / Suburb</FormLabel><FormControl><Input placeholder="e.g. Sydney, NSW" {...field} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
@@ -368,11 +351,23 @@ export function EstimateForm() {
                 {isInterior && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="sm:col-span-2 overflow-hidden space-y-8 pt-4">
                     {watchScope === 'Entire property' ? (
-                      <>
+                      <div className="space-y-6">
+                        <div className="grid sm:grid-cols-2 gap-4">
+                          <FormField control={form.control} name="bedroomCount" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Number of Bedrooms</FormLabel>
+                              <FormControl>
+                                <Input type="number" min="0" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </div>
+
                         <div className="space-y-4">
-                          <FormLabel>Rooms to Paint (Interior)</FormLabel>
+                          <FormLabel>Additional Areas to Paint (Interior)</FormLabel>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                            {interiorRoomList.map((room) => (
+                            {interiorRoomList.filter(r => !r.includes('Bedroom')).map((room) => (
                               <FormField key={room} control={form.control} name="roomsToPaint" render={({ field }) => (
                                 <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors bg-background">
                                   <FormControl><Checkbox checked={field.value?.includes(room)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), room]) : field.onChange(field.value?.filter((value) => value !== room))} /></FormControl>
@@ -381,28 +376,30 @@ export function EstimateForm() {
                               )} />
                             ))}
                           </div>
-                          <AnimatePresence>
-                            {watchRoomsToPaint.includes('Master Bedroom') && (
-                              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="mt-4 p-4 border rounded-lg bg-primary/5 border-primary/20 flex items-center gap-3">
-                                <FormField control={form.control} name="paintAreas.ensuitePaint" render={({ field }) => (
-                                  <FormItem className="flex flex-row items-center space-x-3 space-y-0">
-                                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                                    <FormLabel className="font-bold text-primary cursor-pointer text-sm">Include Master Ensuite?</FormLabel>
-                                  </FormItem>
-                                )} />
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
                         </div>
+
+                        <AnimatePresence>
+                          {watchBedroomCount >= 1 && (
+                            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-4 border rounded-lg bg-primary/5 border-primary/20">
+                              <FormField control={form.control} name="paintAreas.ensuitePaint" render={({ field }) => (
+                                <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                  <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                  <FormLabel className="font-bold text-primary cursor-pointer text-sm">Include Master Ensuite?</FormLabel>
+                                </FormItem>
+                              )} />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
                         <div className="space-y-4">
-                          <FormLabel>Paint Areas (Interior)</FormLabel>
+                          <FormLabel>Paint Surfaces (Global)</FormLabel>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-md border p-4 bg-background">
                             <FormField control={form.control} name="paintAreas.ceilingPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><PaintRoller className="h-5 w-5" /> Ceiling</FormLabel></div></FormItem>)} />
                             <FormField control={form.control} name="paintAreas.wallPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><Paintbrush className="h-5 w-5" /> Walls</FormLabel></div></FormItem>)} />
                             <FormField control={form.control} name="paintAreas.trimPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><Palette className="h-5 w-5" /> Trim</FormLabel></div></FormItem>)} />
                           </div>
                         </div>
-                      </>
+                      </div>
                     ) : (
                       <div className="space-y-6">
                         <div className="flex justify-between items-center">
@@ -425,18 +422,16 @@ export function EstimateForm() {
                                     <span className="font-bold text-sm shrink-0">{roomName}</span>
                                     {roomName === 'Etc' && isSelected && (
                                       <Input 
-                                        placeholder="Specify space..." 
-                                        className="h-7 text-xs ml-2 flex-1 min-w-[100px]"
+                                        placeholder="Specify..." 
+                                        className="h-7 text-xs ml-2 flex-1 min-w-[80px]"
                                         {...form.register(`interiorRooms.${roomIndex}.otherRoomName`)}
                                       />
                                     )}
                                   </div>
-                                  {isSelected && <Check className="h-4 w-4 text-primary" />}
                                 </CardHeader>
                                 {isSelected && !isHandrail && (
                                   <CardContent className="p-4 pt-0 space-y-4">
                                     <div className="space-y-2">
-                                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Paint Areas</p>
                                       <div className="space-y-2">
                                         <div className="flex items-center gap-3">
                                           <Checkbox 
@@ -483,22 +478,18 @@ export function EstimateForm() {
                       {showTrimOptions && (
                         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 border-2 border-primary/20 bg-primary/[0.03] rounded-xl space-y-6">
                           <div className="space-y-3">
-                            <FormLabel className="text-primary font-bold flex items-center gap-2"><Sparkles className="h-4 w-4" /> Trim Paint Type</FormLabel>
+                            <FormLabel className="text-primary font-bold flex items-center gap-2"><Sparkles className="h-4 w-4" /> Trim Options</FormLabel>
                             <FormField control={form.control} name="trimPaintOptions.paintType" render={({ field }) => (
                               <FormItem className="space-y-3">
                                 <FormControl>
                                   <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4">
-                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Oil-based" /></FormControl><FormLabel className="font-normal cursor-pointer">Oil-based</FormLabel></FormItem>
-                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Water-based" /></FormControl><FormLabel className="font-normal cursor-pointer">Water-based</FormLabel></FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Oil-based" /></FormControl><FormLabel className="font-normal cursor-pointer">Oil</FormLabel></FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Water-based" /></FormControl><FormLabel className="font-normal cursor-pointer">Water</FormLabel></FormItem>
                                   </RadioGroup>
                                 </FormControl>
                               </FormItem>
                             )} />
-                          </div>
-
-                          <div className="space-y-3">
-                            <FormLabel className="text-primary font-bold">What trim items are being painted?</FormLabel>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
                               {trimItems.map((item) => (
                                 <FormField key={item.id} control={form.control} name="trimPaintOptions.trimItems" render={({ field }) => (
                                   <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
@@ -537,34 +528,24 @@ export function EstimateForm() {
 
               <FormField control={form.control} name="propertyType" render={({ field }) => (
                 <FormItem><FormLabel>Property Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select a property type" /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
                   <SelectContent>{propertyTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
                 </Select><FormMessage /></FormItem>
               )} />
               
-              <AnimatePresence>
-                {watchScope === 'Entire property' && (
-                  <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}>
-                    <FormField control={form.control} name="approxSize" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Approx. size (sqm)</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="e.g. 100" 
-                            {...field} 
-                            value={field.value ?? ''} 
-                            onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {watchScope === 'Entire property' && (
+                <FormField control={form.control} name="approxSize" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Approx. size (sqm)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="e.g. 100" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
 
-              <FormField control={form.control} name="existingWallColour" render={({ field }) => (<FormItem><FormLabel>Existing Wall Colour</FormLabel><FormControl><Input placeholder="e.g. White, Dark Blue" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="existingWallColour" render={({ field }) => (<FormItem><FormLabel>Existing Wall Colour</FormLabel><FormControl><Input placeholder="e.g. White" {...field} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
 
@@ -578,14 +559,14 @@ export function EstimateForm() {
                   </RadioGroup></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="paintCondition" render={({ field }) => (
-                  <FormItem className="space-y-3"><FormLabel className="text-base flex items-center gap-2"><ShieldAlert className="h-5 w-5" /> Current paint condition</FormLabel><FormControl><RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                  <FormItem className="space-y-3"><FormLabel className="text-base flex items-center gap-2"><ShieldAlert className="h-5 w-5" /> Current condition</FormLabel><FormControl><RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
                     {paintConditionOptions.map((option) => (
                       <FormItem key={option.id} className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value={option.id} /></FormControl><FormLabel className="font-normal cursor-pointer">{option.label}</FormLabel></FormItem>
                     ))}
                   </RadioGroup></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="jobDifficulty" render={() => (
-                    <FormItem><div className="mb-4"><FormLabel className="text-base flex items-center gap-2"><TrendingUp className="h-5 w-5" /> Job Difficulty</FormLabel></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormItem><div className="mb-4"><FormLabel className="text-base flex items-center gap-2"><TrendingUp className="h-5 w-5" /> Complexity Factors</FormLabel></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {jobDifficultyItems.map((item) => (
                       <FormField key={item.id} control={form.control} name="jobDifficulty" render={({ field }) => (
                         <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
@@ -602,19 +583,20 @@ export function EstimateForm() {
           <div className="space-y-4">
             <Button type="submit" size="lg" className="w-full text-lg h-14" disabled={isPending || (isLimitReached && !isAdmin) || isCountLoading}>
               {isPending ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <WandSparkles className="mr-2 h-6 w-6" />}
-              {isLimitReached && !isAdmin ? 'Free Limit Reached' : isCountLoading ? 'Checking limits...' : 'Generate Estimate'}
+              {isLimitReached && !isAdmin ? 'Limit Reached' : isCountLoading ? 'Syncing...' : 'Generate AI Estimate'}
             </Button>
             <div className="text-center p-6 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm space-y-2">
-              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Professional Services</p>
-              <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap"><Calendar className="h-5 w-5 text-primary" /><span>Ready for an expert on-site assessment?</span><a href={BOOKING_URL} target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80 transition-all inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-primary/20 shadow-sm">Book your free quote here <ExternalLink className="h-3 w-3" /></a></p>
+              <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap"><Calendar className="h-5 w-5 text-primary" /><span>Need an on-site assessment?</span><a href={BOOKING_URL} target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80 transition-all inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-primary/20 shadow-sm">Book Free Quote <ExternalLink className="h-3 w-3" /></a></p>
             </div>
-            <div className="text-center text-sm font-medium p-2 rounded-lg bg-accent/10 border border-accent/20">
-              {isCountLoading ? (<span className="flex items-center justify-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Syncing with database...</span>) : isAdmin ? (<span className="text-primary font-bold">Unlimited access (Admin Dashboard Mode)</span>) : (<>Remaining free estimates: <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span></>)}
-            </div>
+            {!isAdmin && !isCountLoading && (
+              <div className="text-center text-xs font-medium text-muted-foreground">
+                Remaining free estimates: <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span>
+              </div>
+            )}
           </div>
         </form>
       </Form>
-      <AnimatePresence>{isPending && (<motion.div className="mt-8 text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4"/><p className="text-muted-foreground">Our AI is crunching the numbers... This may take a few seconds.</p></motion.div>)}</AnimatePresence>
+      <AnimatePresence>{isPending && (<motion.div className="mt-8 text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4"/><p className="text-muted-foreground">Analysing your data...</p></motion.div>)}</AnimatePresence>
       {state.data && <EstimateResult result={state.data} />}
     </>
   );
