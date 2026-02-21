@@ -6,6 +6,7 @@ import { AuthProvider } from '@/providers/auth-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { Toaster } from '@/components/ui/toaster';
+import Script from 'next/script';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -66,6 +67,10 @@ export default function RootLayout({
           </div>
           <Toaster />
         </AuthProvider>
+        <Script
+          src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDu13jPOIzxsL6XdlMMRR0-Nsm6CDyKIS8&libraries=places"
+          strategy="beforeInteractive"
+        />
       </body>
     </html>
   );
