@@ -40,6 +40,7 @@ import {
   Info,
   Calendar,
   ExternalLink,
+  History,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -102,7 +103,7 @@ const exteriorAreaOptions = [
   { id: 'Exterior Trim', label: 'Exterior Trim', icon: Hammer },
 ];
 
-const propertyTypes = ['Apartment', 'House', 'Townhouse', 'Office', 'Other'];
+const propertyTypes = ['Apartment', 'House / Townhouse', 'Office', 'Other'];
 
 const typeOfWorkItems = [
   { id: 'Interior Painting', label: 'Interior Painting' },
@@ -358,7 +359,7 @@ export function EstimateForm() {
               )} />
               
               <AnimatePresence>
-                {watchPropertyType === 'House' && (
+                {watchPropertyType === 'House / Townhouse' && (
                   <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="sm:col-span-2">
                     <FormField control={form.control} name="houseStories" render={({ field }) => (
                       <FormItem className="space-y-3">
@@ -684,7 +685,14 @@ export function EstimateForm() {
           </div>
         </form>
       </Form>
-      <AnimatePresence>{isPending && (<motion.div className="mt-8 text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4"/><p className="text-muted-foreground">Analysing your data...</p></motion.div>)}</AnimatePresence>
+      <AnimatePresence>
+        {isPending && (
+          <motion.div className="mt-8 text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4"/>
+            <p className="text-muted-foreground">Analysing your data...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {state.data && <EstimateResult result={state.data} />}
     </>
   );
