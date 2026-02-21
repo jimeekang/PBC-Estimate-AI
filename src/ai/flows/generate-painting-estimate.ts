@@ -218,7 +218,6 @@ const GeneratePaintingEstimateInputSchema = z.object({
     trimPaint: z.boolean(),
     ensuitePaint: z.boolean().optional(),
   }).optional(),
-  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
   approxSize: z.number().optional(),
@@ -257,15 +256,14 @@ const explanationPrompt = ai.definePrompt({
   output: { schema: GeneratePaintingEstimateOutputSchema },
   prompt: `
 You are a professional painting estimator in Australia for "Paint Buddy & Co".
-Explain why the price range was generated based strictly on the user's inputs.
+Your role is to clearly explain why a specific price range was generated.
 
 CONTEXT
 - Property type: {{input.propertyType}}
 - Scope: {{input.scopeOfPainting}}
 - Work type: {{#each input.typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
-- Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Not specified{{/if}}
+- Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Calculated from room selections{{/if}}
 - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
-- Ceiling Type: {{#if input.ceilingType}}{{input.ceilingType}}{{else}}Standard Flat{{/if}}
 
 GENERATED PRICE DATA (AUD)
 Min: {{priceMin}}
@@ -273,7 +271,7 @@ Max: {{priceMax}}
 
 INSTRUCTIONS
 1) explanation: 3–5 sentences, Australian English, professional tone.
-   Mention main cost drivers (scope, selected rooms/areas, condition, trim detail, and access complexity).
+   Focus on the main cost drivers: scope, condition, selected areas, and complexity factors.
 2) priceRange:
    - Use commas as thousands separators.
    - If priceMax >= 35,000 format: "From AUD {{priceMin}}+ (Site Inspection Required)"
@@ -397,12 +395,6 @@ export const generatePaintingEstimate = ai.defineFlow(
 
         intMin = Math.round(intMin * condMult.min);
         intMax = Math.round(intMax * condMult.max);
-      }
-
-      // Decorative Ceiling Modifier (+10%)
-      if (input.ceilingType === 'Decorative' && (input.paintAreas?.ceilingPaint || input.interiorRooms?.some(r => r.paintAreas?.ceilingPaint))) {
-        intMin = Math.round(intMin * 1.10);
-        intMax = Math.round(intMax * 1.10);
       }
 
       const diffs = input.jobDifficulty ?? [];
