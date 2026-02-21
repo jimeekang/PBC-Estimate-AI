@@ -12,7 +12,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/form';
+} from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -149,9 +149,6 @@ const estimateFormSchema = z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
     trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
   }).optional(),
-  ceilingOptions: z.object({
-    ceilingType: z.enum(['Flat', 'Decorative']),
-  }).optional(),
 });
 
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
@@ -182,9 +179,6 @@ export function EstimateForm() {
       trimPaintOptions: {
         paintType: 'Water-based',
         trimItems: [],
-      },
-      ceilingOptions: {
-        ceilingType: 'Flat',
       },
       name: '',
       email: user?.email || '',
@@ -256,10 +250,8 @@ export function EstimateForm() {
       }
     };
 
-    // Attempt to initialize immediately or when the script loads
     initAutocomplete();
 
-    // Secondary attempt to handle slow script loading
     const timer = setInterval(() => {
       if ((window as any).google?.maps?.places) {
         initAutocomplete();
@@ -277,18 +269,13 @@ export function EstimateForm() {
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
   const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
-  const watchGlobalCeilingPaint = useWatch({ control: form.control, name: 'paintAreas.ceilingPaint' });
   const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
 
   const hasAnyRoomTrim = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
-  const hasAnyRoomCeiling = watchInteriorRooms?.some(r => r.paintAreas?.ceilingPaint);
   const hasHandrail = watchInteriorRooms?.some(r => r.roomName === 'Handrail');
   
   const showTrimOptions = (watchScope === 'Entire property' && watchGlobalTrimPaint) || 
                           (watchScope === 'Specific areas only' && (hasAnyRoomTrim || hasHandrail));
-
-  const showCeilingOptions = (watchScope === 'Entire property' && watchGlobalCeilingPaint) ||
-                             (watchScope === 'Specific areas only' && hasAnyRoomCeiling);
 
   const handleToggleRoom = (roomName: string) => {
     const roomIndex = fields.findIndex(f => f.roomName === roomName);
@@ -616,24 +603,6 @@ export function EstimateForm() {
                         </div>
                       </div>
                     )}
-
-                    <AnimatePresence>
-                      {showCeilingOptions && (
-                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 border-2 border-primary/20 bg-primary/[0.03] rounded-xl space-y-4">
-                          <FormLabel className="text-primary font-bold flex items-center gap-2"><PaintRoller className="h-4 w-4" /> Ceiling Style</FormLabel>
-                          <FormField control={form.control} name="ceilingOptions.ceilingType" render={({ field }) => (
-                            <FormItem className="space-y-3">
-                              <FormControl>
-                                <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4">
-                                  <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Flat" /></FormControl><FormLabel className="font-normal cursor-pointer">Flat ceiling (standard)</FormLabel></FormItem>
-                                  <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Decorative" /></FormControl><FormLabel className="font-normal cursor-pointer">Decorative / patterned ceiling</FormLabel></FormItem>
-                                </RadioGroup>
-                              </FormControl>
-                            </FormItem>
-                          )} />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
 
                     <AnimatePresence>
                       {showTrimOptions && (
