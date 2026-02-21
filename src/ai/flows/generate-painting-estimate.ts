@@ -4,7 +4,7 @@
  * @fileOverview Data-driven AI agent to estimate painting price range.
  *
  * Anchors are calibrated to Sydney averages.
- * Includes house-specific modifiers for ceiling type, mould, age/patching, and room counts.
+ * Includes house-specific modifiers for room counts and condition.
  */
 
 import { ai } from '@/ai/genkit';
@@ -160,11 +160,12 @@ function sumAreaFactor(flags: { ceilingPaint?: boolean; wallPaint?: boolean; tri
   return f > 0 ? f : 1.0;
 }
 
-function sumAreaFactorWholeApartment(flags: { ceilingPaint?: boolean; wallPaint?: boolean; trimPaint?: boolean }) {
+function sumAreaFactorWholeApartment(flags: { ceilingPaint?: boolean; wallPaint?: boolean; trimPaint?: boolean; ensuitePaint?: boolean }) {
   let f = 0;
   if (flags.ceilingPaint) f += AREA_SHARE.ceilingPaint;
   if (flags.wallPaint) f += AREA_SHARE.wallPaint;
   if (flags.trimPaint) f += AREA_SHARE.trimPaint;
+  if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
   return f > 0 ? f : 1.0;
 }
 
@@ -202,14 +203,6 @@ const InteriorRoomItemSchema = z.object({
   approxRoomSize: z.number().optional(),
 });
 
-const HouseSpecificsSchema = z.object({
-  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
-  mouldStatus: z.enum(['None', 'Minor', 'Significant']).optional(),
-  propertyAge: z.enum(['Modern', 'Older', 'OldHeavyPatching']).optional(),
-  livingAreasCount: z.enum(['1', '2+']).optional(),
-  hallwayType: z.enum(['Short', 'Long/Multiple']).optional(),
-});
-
 const GeneratePaintingEstimateInputSchema = z.object({
   name: z.string(),
   email: z.string(),
@@ -237,7 +230,6 @@ const GeneratePaintingEstimateInputSchema = z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
     trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
   }).optional(),
-  houseSpecifics: HouseSpecificsSchema.optional(),
 });
 
 const GeneratePaintingEstimateOutputSchema = z.object({
@@ -272,11 +264,6 @@ CONTEXT
 - Work type: {{#each input.typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
 - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Not specified{{/if}}
 - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
-{{#if input.houseSpecifics}}
-- Ceiling: {{input.houseSpecifics.ceilingType}}
-- Mould: {{input.houseSpecifics.mouldStatus}}
-- Age/Patching: {{input.houseSpecifics.propertyAge}}
-{{/if}}
 
 GENERATED PRICE DATA (AUD)
 Min: {{priceMin}}
@@ -285,7 +272,6 @@ Max: {{priceMax}}
 INSTRUCTIONS
 1) explanation: 3–5 sentences, Australian English, professional tone.
    Mention main cost drivers (scope, selected rooms/areas, condition, trim detail, and access complexity).
-   If House specifics like mould, decorative ceilings, or age-related patching are present, mention them as significant factors.
 2) priceRange:
    - Use commas as thousands separators.
    - If priceMax >= 35,000 format: "From AUD {{priceMin}}+ (Site Inspection Required)"
@@ -326,7 +312,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       if (isWhole) {
         selectedRooms = (input.roomsToPaint ?? []).length ? (input.roomsToPaint ?? []) : [];
-        const globalAreas = input.paintAreas ?? { ceilingPaint: true, wallPaint: true, trimPaint: false };
+        const globalAreas = input.paintAreas ?? { ceilingPaint: true, wallPaint: true, trimPaint: false, ensuitePaint: false };
 
         if (aptLike) {
           areaFactor = sumAreaFactorWholeApartment(globalAreas);
@@ -409,47 +395,6 @@ export const generatePaintingEstimate = ai.defineFlow(
 
         intMin = Math.round(intMin * condMult.min);
         intMax = Math.round(intMax * condMult.max);
-      }
-
-      // House Specific Modifiers
-      if (input.propertyType === 'House' && input.houseSpecifics) {
-        const h = input.houseSpecifics;
-        
-        // Ceiling Type: Decorative (+10%)
-        if (h.ceilingType === 'Decorative') {
-          intMin *= 1.1;
-          intMax *= 1.1;
-        }
-
-        // Mould: Minor (+7%), Significant (+15%)
-        if (h.mouldStatus === 'Minor') {
-          intMin *= 1.07;
-          intMax *= 1.07;
-        } else if (h.mouldStatus === 'Significant') {
-          intMin *= 1.15;
-          intMax *= 1.15;
-        }
-
-        // Age: Older (+10%), OldHeavyPatching (+22%)
-        if (h.propertyAge === 'Older') {
-          intMin *= 1.10;
-          intMax *= 1.10;
-        } else if (h.propertyAge === 'OldHeavyPatching') {
-          intMin *= 1.22;
-          intMax *= 1.22;
-        }
-
-        // Living Areas: 2+ (+12% as house anchor baseline assumes 1 large living)
-        if (h.livingAreasCount === '2+') {
-          intMin *= 1.12;
-          intMax *= 1.12;
-        }
-
-        // Hallway: Long (+8%)
-        if (h.hallwayType === 'Long/Multiple') {
-          intMin *= 1.08;
-          intMax *= 1.08;
-        }
       }
 
       const diffs = input.jobDifficulty ?? [];
