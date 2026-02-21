@@ -12,7 +12,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
+} from '@/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -236,9 +236,10 @@ export function EstimateForm() {
 
   useEffect(() => {
     const initAutocomplete = () => {
-      if (typeof window !== 'undefined' && (window as any).google?.maps?.places && inputRef.current) {
+      const google = (window as any).google;
+      if (google?.maps?.places && inputRef.current && !autocompleteRef.current) {
         try {
-          autocompleteRef.current = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
+          autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
             componentRestrictions: { country: 'au' },
             fields: ['formatted_address'],
           });
@@ -250,17 +251,23 @@ export function EstimateForm() {
             }
           });
         } catch (err) {
-          console.warn("Google Places Autocomplete failed to initialize. Falling back to manual input.");
+          console.warn("Google Places Autocomplete initialization failed. Ensure the domain is authorized in GCP Console.");
         }
       }
     };
 
-    // Initial attempt
+    // Attempt to initialize immediately or when the script loads
     initAutocomplete();
 
-    // Check again in case script load order is staggered
-    const timer = setTimeout(initAutocomplete, 2000);
-    return () => clearTimeout(timer);
+    // Secondary attempt to handle slow script loading
+    const timer = setInterval(() => {
+      if ((window as any).google?.maps?.places) {
+        initAutocomplete();
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, [form]);
 
   const watchTypeOfWork = useWatch({ control: form.control, name: 'typeOfWork' }) || [];

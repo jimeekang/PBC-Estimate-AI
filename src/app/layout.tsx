@@ -68,6 +68,7 @@ export default function RootLayout({
           <Toaster />
         </AuthProvider>
         <Script
+          id="google-maps-places-api"
           src="https://maps.googleapis.com/maps/api/js?key=[REDACTED]&libraries=places"
           strategy="beforeInteractive"
         />
