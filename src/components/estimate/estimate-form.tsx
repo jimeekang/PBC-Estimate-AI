@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
 import { useToast } from '@/hooks/use-toast';
@@ -168,6 +168,9 @@ export function EstimateForm() {
   const [isLimitReached, setIsLimitReached] = useState(false);
   const { toast } = useToast();
 
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const autocompleteRef = useRef<any>(null);
+
   const form = useForm<EstimateFormValues>({
     resolver: zodResolver(estimateFormSchema),
     defaultValues: {
@@ -231,6 +234,22 @@ export function EstimateForm() {
       fetchEstimateCount(user.uid).finally(() => setIsCountLoading(false));
     }
   }, [user, isAdmin]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).google && inputRef.current) {
+      autocompleteRef.current = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
+        componentRestrictions: { country: 'au' },
+        fields: ['formatted_address'],
+      });
+
+      autocompleteRef.current.addListener('place_changed', () => {
+        const place = autocompleteRef.current.getPlace();
+        if (place && place.formatted_address) {
+          form.setValue('location', place.formatted_address);
+        }
+      });
+    }
+  }, [form]);
 
   const watchTypeOfWork = useWatch({ control: form.control, name: 'typeOfWork' }) || [];
   const isInterior = watchTypeOfWork.includes('Interior Painting');
@@ -343,7 +362,22 @@ export function EstimateForm() {
               <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="John Doe" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number</FormLabel><FormControl><Input placeholder="0412 345 678" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="location" render={({ field }) => (<FormItem><FormLabel>Location / Suburb</FormLabel><FormControl><Input placeholder="e.g. Sydney, NSW" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="location" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Location / Suburb</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="e.g. Sydney, NSW" 
+                      {...field} 
+                      ref={(e) => {
+                        field.ref(e);
+                        inputRef.current = e;
+                      }}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
             </CardContent>
           </Card>
 
