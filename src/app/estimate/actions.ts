@@ -36,6 +36,14 @@ const InteriorRoomItemSchema = z.object({
   approxRoomSize: z.number().optional(),
 });
 
+const HouseSpecificsSchema = z.object({
+  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
+  mouldStatus: z.enum(['None', 'Minor', 'Significant']).optional(),
+  propertyAge: z.enum(['Modern', 'Older', 'OldHeavyPatching']).optional(),
+  livingAreasCount: z.enum(['1', '2+']).optional(),
+  hallwayType: z.enum(['Short', 'Long/Multiple']).optional(),
+});
+
 const estimateFormSchema = z.object({
   name: z.string().min(1, 'Name is required.'),
   email: z.string().email('Invalid email address.'),
@@ -73,6 +81,7 @@ const estimateFormSchema = z.object({
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
     })
     .optional(),
+  houseSpecifics: HouseSpecificsSchema.optional(),
 });
 
 export async function submitEstimate(formData: any) {

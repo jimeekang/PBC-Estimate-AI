@@ -2,20 +2,22 @@
 
 /**
  * @fileOverview Data-driven AI agent to estimate painting price range.
+ *
+ * Anchors are calibrated to Sydney averages.
+ * Includes house-specific modifiers for ceiling type, mould, age/patching, and room counts.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
 // -----------------------------
-// Anchors (Sydney apartment averages)
+// Anchors (Sydney averages)
 // -----------------------------
 const APARTMENT_ANCHORS_OIL = {
   Studio: { min: 2700, max: 3300, median: 2900 },
   OneBed: { min: 3200, max: 3900, median: 3400 },
   TwoBed: { min: 4000, max: 5200, median: 4350 },
   ThreeBed: { min: 5200, max: 6800, median: 5500 },
-  FourPlus: { min: 6800, max: 9500, median: 7800 },
 } as const;
 
 const EXTERIOR_ANCHOR = { min: 6500, max: 16000, median: 10650 } as const;
@@ -31,7 +33,6 @@ const ROOM_WEIGHT: Record<string, number> = {
   'Bedroom 1': 1.0,
   'Bedroom 2': 1.0,
   'Bedroom 3': 1.0,
-  Bedroom: 1.0,
   Bathroom: 1.1,
   'Living Room': 1.35,
   Livingroom: 1.35,
@@ -40,17 +41,17 @@ const ROOM_WEIGHT: Record<string, number> = {
   Laundry: 0.7,
   Hallway: 0.6,
   Foyer: 0.6,
-  Handrail: 0.8, 
+  Handrail: 0.6,
   Etc: 0.6,
 };
 
-const BASE_FULL_APT_SCORE = 6.3; 
+const BASE_FULL_APT_SCORE = 6.3;
 
 const AREA_SHARE = {
   ceilingPaint: 0.25,
   wallPaint: 0.55,
   trimPaint: 0.20,
-  ensuitePaint: 0.12, 
+  ensuitePaint: 0.12,
 };
 
 const CONDITION_MULTIPLIER = {
@@ -67,6 +68,7 @@ const DIFFICULTY_ADDON = {
 } as const;
 
 const WATER_BASED_UPLIFT = { minPct: 0.08, maxPct: 0.12 } as const;
+
 const TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM = { min: 80, max: 180 } as const;
 
 const TRIM_PREMIUM_SPECIFIC_PER_ROOM = {
@@ -123,22 +125,30 @@ function formatMoney(n: number) {
   return n.toLocaleString('en-AU');
 }
 
-function inferApartmentClass(bedroomCount?: number, sqm?: number) {
-  if (bedroomCount !== undefined) {
-    if (bedroomCount <= 0) return 'Studio';
-    if (bedroomCount === 1) return 'OneBed';
-    if (bedroomCount === 2) return 'TwoBed';
-    if (bedroomCount === 3) return 'ThreeBed';
-    return 'FourPlus';
-  }
+function inferApartmentClassFromSqm(sqm?: number) {
+  if (!sqm) return undefined;
+  if (sqm <= 45) return 'Studio' as const;
+  if (sqm <= 70) return 'OneBed' as const;
+  if (sqm <= 110) return 'TwoBed' as const;
+  return 'ThreeBed' as const;
+}
 
-  if (sqm) {
-    if (sqm <= 45) return 'Studio';
-    if (sqm <= 70) return 'OneBed';
-    if (sqm <= 110) return 'TwoBed';
-    return 'ThreeBed';
-  }
-  return 'TwoBed'; // Default
+function roomScore(roomName: string) {
+  return ROOM_WEIGHT[roomName] ?? 0.6;
+}
+
+function pseudoSqmFromRooms(selectedRooms: string[]) {
+  const base = selectedRooms.length * 8;
+  const bonus =
+    (selectedRooms.includes('Bathroom') ? 4 : 0) +
+    (selectedRooms.includes('Kitchen') ? 3 : 0) +
+    (selectedRooms.includes('Living Room') || selectedRooms.includes('Livingroom') ? 3 : 0);
+  return base + bonus;
+}
+
+function isApartmentLike(propertyType?: string) {
+  const p = (propertyType ?? '').toLowerCase();
+  return p.includes('apartment') || p.includes('unit') || p.includes('flat');
 }
 
 function sumAreaFactor(flags: { ceilingPaint?: boolean; wallPaint?: boolean; trimPaint?: boolean; ensuitePaint?: boolean }) {
@@ -150,13 +160,22 @@ function sumAreaFactor(flags: { ceilingPaint?: boolean; wallPaint?: boolean; tri
   return f > 0 ? f : 1.0;
 }
 
-function roomScore(roomName: string) {
-  return ROOM_WEIGHT[roomName] ?? 0.6;
+function sumAreaFactorWholeApartment(flags: { ceilingPaint?: boolean; wallPaint?: boolean; trimPaint?: boolean }) {
+  let f = 0;
+  if (flags.ceilingPaint) f += AREA_SHARE.ceilingPaint;
+  if (flags.wallPaint) f += AREA_SHARE.wallPaint;
+  if (flags.trimPaint) f += AREA_SHARE.trimPaint;
+  return f > 0 ? f : 1.0;
 }
 
-function isApartmentLike(propertyType?: string) {
-  const p = (propertyType ?? '').toLowerCase();
-  return p.includes('apartment') || p.includes('unit') || p.includes('flat');
+function inferApartmentClassFromBedroomNumbers(bedroomCountInput?: number, hasMasterBedroom?: boolean) {
+  const extra = typeof bedroomCountInput === 'number' && Number.isFinite(bedroomCountInput) ? bedroomCountInput : 0;
+  const totalBedrooms = extra + (hasMasterBedroom ? 1 : 0);
+
+  if (totalBedrooms <= 0) return 'Studio' as const;
+  if (totalBedrooms === 1) return 'OneBed' as const;
+  if (totalBedrooms === 2) return 'TwoBed' as const;
+  return 'ThreeBed' as const;
 }
 
 function applyWaterBasedUpliftTrimShareWholeJob(minVal: number, maxVal: number) {
@@ -183,6 +202,14 @@ const InteriorRoomItemSchema = z.object({
   approxRoomSize: z.number().optional(),
 });
 
+const HouseSpecificsSchema = z.object({
+  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
+  mouldStatus: z.enum(['None', 'Minor', 'Significant']).optional(),
+  propertyAge: z.enum(['Modern', 'Older', 'OldHeavyPatching']).optional(),
+  livingAreasCount: z.enum(['1', '2+']).optional(),
+  hallwayType: z.enum(['Short', 'Long/Multiple']).optional(),
+});
+
 const GeneratePaintingEstimateInputSchema = z.object({
   name: z.string(),
   email: z.string(),
@@ -192,14 +219,12 @@ const GeneratePaintingEstimateInputSchema = z.object({
   propertyType: z.string(),
   bedroomCount: z.number().optional(),
   roomsToPaint: z.array(z.string()).optional(),
-  paintAreas: z
-    .object({
-      ceilingPaint: z.boolean(),
-      wallPaint: z.boolean(),
-      trimPaint: z.boolean(),
-      ensuitePaint: z.boolean().optional(),
-    })
-    .optional(),
+  paintAreas: z.object({
+    ceilingPaint: z.boolean(),
+    wallPaint: z.boolean(),
+    trimPaint: z.boolean(),
+    ensuitePaint: z.boolean().optional(),
+  }).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
   approxSize: z.number().optional(),
@@ -207,15 +232,12 @@ const GeneratePaintingEstimateInputSchema = z.object({
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
-  jobDifficulty: z
-    .array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas']))
-    .optional(),
-  trimPaintOptions: z
-    .object({
-      paintType: z.enum(['Oil-based', 'Water-based']),
-      trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
-    })
-    .optional(),
+  jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional(),
+  trimPaintOptions: z.object({
+    paintType: z.enum(['Oil-based', 'Water-based']),
+    trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
+  }).optional(),
+  houseSpecifics: HouseSpecificsSchema.optional(),
 });
 
 const GeneratePaintingEstimateOutputSchema = z.object({
@@ -227,6 +249,9 @@ const GeneratePaintingEstimateOutputSchema = z.object({
 export type GeneratePaintingEstimateInput = z.infer<typeof GeneratePaintingEstimateInputSchema>;
 export type GeneratePaintingEstimateOutput = z.infer<typeof GeneratePaintingEstimateOutputSchema>;
 
+// -----------------------------
+// AI explanation prompt
+// -----------------------------
 const explanationPrompt = ai.definePrompt({
   name: 'explanationPrompt',
   input: {
@@ -239,25 +264,39 @@ const explanationPrompt = ai.definePrompt({
   output: { schema: GeneratePaintingEstimateOutputSchema },
   prompt: `
 You are a professional painting estimator in Australia for "Paint Buddy & Co".
-Your role is to clearly explain why a specific price range was generated.
+Explain why the price range was generated based strictly on the user's inputs.
 
 CONTEXT
 - Property type: {{input.propertyType}}
 - Scope: {{input.scopeOfPainting}}
-- Total Bedrooms: {{#if input.bedroomCount}}{{input.bedroomCount}}{{else}}As selected{{/if}}
-- Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
+- Work type: {{#each input.typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+- Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Not specified{{/if}}
+- Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
+{{#if input.houseSpecifics}}
+- Ceiling: {{input.houseSpecifics.ceilingType}}
+- Mould: {{input.houseSpecifics.mouldStatus}}
+- Age/Patching: {{input.houseSpecifics.propertyAge}}
+{{/if}}
 
-PRICE RANGE (AUD)
+GENERATED PRICE DATA (AUD)
 Min: {{priceMin}}
 Max: {{priceMax}}
 
 INSTRUCTIONS
-1) explanation: Professional tone, Australian English. Mention condition, complexity, and scope.
-2) priceRange: Format with commas.
-3) details: Key value-driven points.
+1) explanation: 3–5 sentences, Australian English, professional tone.
+   Mention main cost drivers (scope, selected rooms/areas, condition, trim detail, and access complexity).
+   If House specifics like mould, decorative ceilings, or age-related patching are present, mention them as significant factors.
+2) priceRange:
+   - Use commas as thousands separators.
+   - If priceMax >= 35,000 format: "From AUD {{priceMin}}+ (Site Inspection Required)"
+   - Else: "AUD {{priceMin}} - {{priceMax}}"
+3) details: 3–5 bullet points, specific to this job.
 `,
 });
 
+// -----------------------------
+// Core flow
+// -----------------------------
 export const generatePaintingEstimate = ai.defineFlow(
   {
     name: 'generatePaintingEstimateFlow',
@@ -272,6 +311,9 @@ export const generatePaintingEstimate = ai.defineFlow(
     const condition = input.paintCondition ?? 'Fair';
     const condMult = CONDITION_MULTIPLIER[condition];
 
+    // -------------------------
+    // 1) Interior
+    // -------------------------
     let intMin = 0;
     let intMax = 0;
 
@@ -279,13 +321,21 @@ export const generatePaintingEstimate = ai.defineFlow(
       const isWhole = input.scopeOfPainting === 'Entire property';
       const aptLike = isApartmentLike(input.propertyType);
 
+      let selectedRooms: string[] = [];
       let areaFactor = 1.0;
 
       if (isWhole) {
+        selectedRooms = (input.roomsToPaint ?? []).length ? (input.roomsToPaint ?? []) : [];
         const globalAreas = input.paintAreas ?? { ceilingPaint: true, wallPaint: true, trimPaint: false };
-        areaFactor = sumAreaFactor(globalAreas);
+
+        if (aptLike) {
+          areaFactor = sumAreaFactorWholeApartment(globalAreas);
+        } else {
+          areaFactor = sumAreaFactor(globalAreas);
+        }
       } else {
         const rooms = input.interiorRooms ?? [];
+        selectedRooms = rooms.map((r) => r.roomName);
         const scored = rooms.map((r) => ({
           score: roomScore(r.roomName),
           af: sumAreaFactor(r.paintAreas),
@@ -294,16 +344,27 @@ export const generatePaintingEstimate = ai.defineFlow(
         areaFactor = scored.reduce((a, b) => a + b.score * b.af, 0) / denom;
       }
 
-      // Calculate total bedrooms: numeric input + Master Bedroom if selected
-      const totalBedrooms = (input.bedroomCount || 0) + (input.roomsToPaint?.includes('Master Bedroom') ? 1 : 0);
-      const aptClass = inferApartmentClass(totalBedrooms, toNumberOrUndefined(input.approxSize)) as keyof typeof APARTMENT_ANCHORS_OIL;
+      if (!selectedRooms.length) {
+        selectedRooms = isWhole ? ['Bedroom 1', 'Bathroom', 'Living Room', 'Kitchen'] : ['Bedroom 1'];
+      }
+
+      const hasMaster = selectedRooms.includes('Master Bedroom');
+      const classFromBedrooms = inferApartmentClassFromBedroomNumbers(input.bedroomCount, hasMaster);
+
+      const aptClass =
+        (typeof input.bedroomCount === 'number' ? classFromBedrooms : undefined) ??
+        inferApartmentClassFromSqm(toNumberOrUndefined(input.approxSize)) ??
+        classFromBedrooms;
+
       const anchor = APARTMENT_ANCHORS_OIL[aptClass];
 
       if (isWhole && aptLike) {
         const band = ENTIRE_APT_BAND[condition];
         const mid = anchor.median * areaFactor;
+
         let baseMin = mid * band.min;
         let baseMax = mid * band.max;
+
         const scaledAnchorMin = anchor.min * areaFactor;
         const scaledAnchorMax = anchor.max * areaFactor;
 
@@ -316,9 +377,9 @@ export const generatePaintingEstimate = ai.defineFlow(
         intMin = anchor.min * areaFactor;
         intMax = anchor.max * areaFactor;
       } else {
-        const rooms = input.interiorRooms ?? [];
-        const totalRoomScore = rooms.reduce((sum, r) => sum + roomScore(r.roomName), 0);
+        const totalRoomScore = selectedRooms.reduce((sum, r) => sum + roomScore(r), 0);
         const partialRatio = clamp(totalRoomScore / BASE_FULL_APT_SCORE, 0.22, 0.9);
+
         const baseMid = anchor.median * partialRatio;
 
         let baseMin = baseMid * 0.88;
@@ -327,7 +388,16 @@ export const generatePaintingEstimate = ai.defineFlow(
         baseMin *= areaFactor;
         baseMax *= areaFactor;
 
-        const roomCount = rooms.length;
+        const pseudoSqm = pseudoSqmFromRooms(selectedRooms);
+        if (pseudoSqm >= 24) {
+          baseMin *= 1.08;
+          baseMax *= 1.15;
+        } else if (pseudoSqm >= 16) {
+          baseMin *= 1.04;
+          baseMax *= 1.10;
+        }
+
+        const roomCount = selectedRooms.length;
         const hardFloor =
           roomCount <= 1 ? 1100 :
           roomCount === 2 ? 1700 :
@@ -336,11 +406,50 @@ export const generatePaintingEstimate = ai.defineFlow(
 
         intMin = Math.max(Math.round(baseMin), hardFloor);
         intMax = Math.max(Math.round(baseMax), Math.round(hardFloor * 1.55));
-      }
 
-      if (!(isWhole && aptLike)) {
         intMin = Math.round(intMin * condMult.min);
         intMax = Math.round(intMax * condMult.max);
+      }
+
+      // House Specific Modifiers
+      if (input.propertyType === 'House' && input.houseSpecifics) {
+        const h = input.houseSpecifics;
+        
+        // Ceiling Type: Decorative (+10%)
+        if (h.ceilingType === 'Decorative') {
+          intMin *= 1.1;
+          intMax *= 1.1;
+        }
+
+        // Mould: Minor (+7%), Significant (+15%)
+        if (h.mouldStatus === 'Minor') {
+          intMin *= 1.07;
+          intMax *= 1.07;
+        } else if (h.mouldStatus === 'Significant') {
+          intMin *= 1.15;
+          intMax *= 1.15;
+        }
+
+        // Age: Older (+10%), OldHeavyPatching (+22%)
+        if (h.propertyAge === 'Older') {
+          intMin *= 1.10;
+          intMax *= 1.10;
+        } else if (h.propertyAge === 'OldHeavyPatching') {
+          intMin *= 1.22;
+          intMax *= 1.22;
+        }
+
+        // Living Areas: 2+ (+12% as house anchor baseline assumes 1 large living)
+        if (h.livingAreasCount === '2+') {
+          intMin *= 1.12;
+          intMax *= 1.12;
+        }
+
+        // Hallway: Long (+8%)
+        if (h.hallwayType === 'Long/Multiple') {
+          intMin *= 1.08;
+          intMax *= 1.08;
+        }
       }
 
       const diffs = input.jobDifficulty ?? [];
@@ -354,25 +463,30 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       if (input.trimPaintOptions) {
         const paintType = input.trimPaintOptions.paintType;
+
         if (isWhole) {
-          if (input.paintAreas?.trimPaint) {
-            if (paintType === 'Water-based') {
-              const itemCount = input.trimPaintOptions.trimItems?.length ?? 0;
+          const globalTrimOn = !!input.paintAreas?.trimPaint;
+
+          if (globalTrimOn && paintType === 'Water-based') {
+            const itemCount = input.trimPaintOptions.trimItems?.length ?? 0;
+            if (itemCount > 0) {
               intMin += TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM.min * itemCount;
               intMax += TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM.max * itemCount;
-              const uplifted = applyWaterBasedUpliftTrimShareWholeJob(intMin, intMax);
-              intMin = uplifted.min;
-              intMax = uplifted.max;
             }
+            const uplifted = applyWaterBasedUpliftTrimShareWholeJob(intMin, intMax);
+            intMin = uplifted.min;
+            intMax = uplifted.max;
           }
         } else {
           const rooms = input.interiorRooms ?? [];
           const roomsWithTrim = rooms.filter((r) => r.paintAreas?.trimPaint).length;
-          const scale = clamp(roomsWithTrim, 0, 10);
+          const scale = clamp(roomsWithTrim || 0, 0, 10);
+
           if (scale > 0) {
             const p = TRIM_PREMIUM_SPECIFIC_PER_ROOM[paintType];
             intMin += p.min * scale;
             intMax += p.max * scale;
+
             if (paintType === 'Water-based') {
               const premMin = p.min * scale;
               const premMax = p.max * scale;
@@ -393,12 +507,16 @@ export const generatePaintingEstimate = ai.defineFlow(
       }
     }
 
+    // -------------------------
+    // 2) Exterior
+    // -------------------------
     let extMin = 0;
     let extMax = 0;
 
     if (isExt) {
       let sumMin = 0;
       let sumMax = 0;
+
       (input.exteriorAreas ?? []).forEach((area) => {
         const base = EXTERIOR_ITEM_BASE[area];
         if (base) {
@@ -406,22 +524,48 @@ export const generatePaintingEstimate = ai.defineFlow(
           sumMax += base.max;
         }
       });
-      if (sumMin === 0) { sumMin = 1800; sumMax = 5200; }
+
+      if (sumMin === 0 && sumMax === 0) {
+        sumMin = 1800;
+        sumMax = 5200;
+      }
+
       let rMin = sumMin * EXTERIOR_RISK_MULTIPLIER.min;
       let rMax = sumMax * EXTERIOR_RISK_MULTIPLIER.max;
-      const band = pickExteriorBand(input.approxSize);
-      rMin *= band.minMult; rMax *= band.maxMult;
-      rMin *= condMult.min; rMax *= condMult.max;
+
+      const band = pickExteriorBand(toNumberOrUndefined(input.approxSize));
+      rMin *= band.minMult;
+      rMax *= band.maxMult;
+
+      const requiredItems = ['Wall', 'Eaves', 'Gutter', 'Fascia', 'Exterior Trim'];
+      const isFullExt = requiredItems.every((it) => (input.exteriorAreas ?? []).includes(it));
+      if (isFullExt) {
+        rMin = Math.max(rMin, EXTERIOR_ANCHOR.min);
+        rMax = Math.max(rMax, Math.round(EXTERIOR_ANCHOR.min * 1.3));
+      }
+
+      rMin = rMin * condMult.min;
+      rMax = rMax * condMult.max;
+
       const diffs = input.jobDifficulty ?? [];
       for (const d of diffs) {
         const a = DIFFICULTY_ADDON[d];
-        if (a) { rMin += a.min; rMax += a.max; }
+        if (a) {
+          rMin += a.min;
+          rMax += a.max;
+        }
       }
-      extMin = Math.round(rMin); extMax = Math.round(rMax);
+
+      extMin = Math.round(rMin);
+      extMax = Math.round(rMax);
       extMin = clamp(extMin, 900, MAX_PRICE_CAP);
       extMax = clamp(extMax, 1500, MAX_PRICE_CAP);
+      if (extMax < extMin) extMax = Math.round(extMin * 1.25);
     }
 
+    // -------------------------
+    // 3) Combine + cap
+    // -------------------------
     let totalMin = intMin + extMin;
     let totalMax = intMax + extMax;
 
@@ -432,9 +576,31 @@ export const generatePaintingEstimate = ai.defineFlow(
 
     totalMin = Math.round(totalMin);
     totalMax = Math.round(totalMax);
-    if (totalMax > MAX_PRICE_CAP) totalMax = MAX_PRICE_CAP;
 
-    const { output } = await explanationPrompt({ input, priceMin: totalMin, priceMax: totalMax });
-    return output!;
+    if (totalMax > MAX_PRICE_CAP) totalMax = MAX_PRICE_CAP;
+    if (totalMin > MAX_PRICE_CAP - 1000) totalMin = MAX_PRICE_CAP - 5000;
+
+    // -------------------------
+    // 4) Explanation
+    // -------------------------
+    const { output } = await explanationPrompt({
+      input,
+      priceMin: totalMin,
+      priceMax: totalMax,
+    });
+
+    if (output?.priceRange) return output;
+
+    const priceRange =
+      totalMax >= MAX_PRICE_CAP
+        ? `From AUD ${formatMoney(totalMin)}+ (Site Inspection Required)`
+        : `AUD ${formatMoney(totalMin)} - ${formatMoney(totalMax)}`;
+
+    return {
+      priceRange,
+      explanation:
+        'This is an indicative estimate based on the information provided and is subject to site inspection for a final quote.',
+      details: [],
+    };
   }
 );

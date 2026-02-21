@@ -40,6 +40,9 @@ import {
   Calendar,
   ExternalLink,
   Check,
+  History,
+  Bug,
+  Scaling,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -117,6 +120,14 @@ const InteriorRoomItemSchema = z.object({
   approxRoomSize: z.number().optional(),
 });
 
+const HouseSpecificsSchema = z.object({
+  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
+  mouldStatus: z.enum(['None', 'Minor', 'Significant']).optional(),
+  propertyAge: z.enum(['Modern', 'Older', 'OldHeavyPatching']).optional(),
+  livingAreasCount: z.enum(['1', '2+']).optional(),
+  hallwayType: z.enum(['Short', 'Long/Multiple']).optional(),
+});
+
 const estimateFormSchema = z.object({
   name: z.string().min(1, 'Name is required.'),
   email: z.string().email('Invalid email address.'),
@@ -144,6 +155,7 @@ const estimateFormSchema = z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
     trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
   }).optional(),
+  houseSpecifics: HouseSpecificsSchema.optional(),
 });
 
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
@@ -171,6 +183,13 @@ export function EstimateForm() {
       trimPaintOptions: {
         paintType: 'Water-based',
         trimItems: [],
+      },
+      houseSpecifics: {
+        ceilingType: 'Flat',
+        mouldStatus: 'None',
+        propertyAge: 'Modern',
+        livingAreasCount: '1',
+        hallwayType: 'Short',
       },
       name: '',
       email: user?.email || '',
@@ -223,11 +242,11 @@ export function EstimateForm() {
   const isInterior = watchTypeOfWork.includes('Interior Painting');
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
+  const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
   const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
 
-  // Consolidate trim options panel visibility logic
   const hasAnyRoomTrim = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
   const hasHandrail = watchInteriorRooms?.some(r => r.roomName === 'Handrail');
   
@@ -456,6 +475,15 @@ export function EstimateForm() {
                                   <CardContent className="p-4 pt-0 space-y-4">
                                     <div className="space-y-2">
                                       <div className="space-y-2">
+                                        {isMasterBedroom && (
+                                          <div className="flex items-center gap-3 pb-2 border-b mb-2">
+                                            <Checkbox 
+                                              checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ensuitePaint`)} 
+                                              onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.ensuitePaint`, !!checked)} 
+                                            />
+                                            <span className="text-xs font-semibold text-primary">Include Ensuite</span>
+                                          </div>
+                                        )}
                                         <div className="flex items-center gap-3">
                                           <Checkbox 
                                             checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ceilingPaint`)} 
@@ -477,15 +505,6 @@ export function EstimateForm() {
                                           />
                                           <span className="text-xs">Trim</span>
                                         </div>
-                                        {isMasterBedroom && (
-                                          <div className="flex items-center gap-3 pt-2 border-t mt-2">
-                                            <Checkbox 
-                                              checked={form.watch(`interiorRooms.${roomIndex}.paintAreas.ensuitePaint`)} 
-                                              onCheckedChange={(checked) => form.setValue(`interiorRooms.${roomIndex}.paintAreas.ensuitePaint`, !!checked)} 
-                                            />
-                                            <span className="text-xs font-semibold text-primary">Include Ensuite</span>
-                                          </div>
-                                        )}
                                       </div>
                                     </div>
                                   </CardContent>
@@ -526,6 +545,128 @@ export function EstimateForm() {
                         </motion.div>
                       )}
                     </AnimatePresence>
+
+                    {/* House Specific Interior Modifiers */}
+                    <AnimatePresence>
+                      {watchPropertyType === 'House' && (
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="space-y-6 pt-6 border-t">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Home className="h-5 w-5 text-primary" />
+                            <h3 className="font-bold text-lg text-primary">House Interior Specifics</h3>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Ceiling Type */}
+                            <FormField control={form.control} name="houseSpecifics.ceilingType" render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel className="font-bold">Ceiling Type</FormLabel>
+                                <FormControl>
+                                  <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="Flat" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer">Flat ceiling (Standard)</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="Decorative" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer flex items-center gap-2">
+                                        Decorative / Patterned <Badge variant="secondary" className="text-[10px]">+10%</Badge>
+                                      </FormLabel>
+                                    </FormItem>
+                                  </RadioGroup>
+                                </FormControl>
+                              </FormItem>
+                            )} />
+
+                            {/* Moisture / Mould */}
+                            <FormField control={form.control} name="houseSpecifics.mouldStatus" render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel className="font-bold">Moisture / Mould Status</FormLabel>
+                                <FormControl>
+                                  <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="None" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer">No mould visible</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="Minor" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer">Minor mould spots</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="Significant" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer flex items-center gap-2">
+                                        Visible / Recurring <Badge variant="destructive" className="text-[10px]">Treatment Req.</Badge>
+                                      </FormLabel>
+                                    </FormItem>
+                                  </RadioGroup>
+                                </FormControl>
+                              </FormItem>
+                            )} />
+
+                            {/* Age / Patching */}
+                            <FormField control={form.control} name="houseSpecifics.propertyAge" render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel className="font-bold">Property Age & Condition</FormLabel>
+                                <FormControl>
+                                  <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="Modern" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer">Modern / Recent</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="Older" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer">Older home (More patching likely)</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="OldHeavyPatching" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer flex items-center gap-2">
+                                        Old + Heavy patching required <History className="h-3 w-3" />
+                                      </FormLabel>
+                                    </FormItem>
+                                  </RadioGroup>
+                                </FormControl>
+                              </FormItem>
+                            )} />
+
+                            {/* Room Counts */}
+                            <div className="space-y-4">
+                              <FormField control={form.control} name="houseSpecifics.livingAreasCount" render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                  <FormLabel className="font-bold">Living Areas Count</FormLabel>
+                                  <FormControl>
+                                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-4">
+                                      <FormItem className="flex items-center space-x-2 space-y-0">
+                                        <FormControl><RadioGroupItem value="1" /></FormControl>
+                                        <FormLabel className="font-normal">1</FormLabel>
+                                      </FormItem>
+                                      <FormItem className="flex items-center space-x-2 space-y-0">
+                                        <FormControl><RadioGroupItem value="2+" /></FormControl>
+                                        <FormLabel className="font-normal">2+</FormLabel>
+                                      </FormItem>
+                                    </RadioGroup>
+                                  </FormControl>
+                                </FormItem>
+                              )} />
+                              <FormField control={form.control} name="houseSpecifics.hallwayType" render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                  <FormLabel className="font-bold">Hallway Configuration</FormLabel>
+                                  <FormControl>
+                                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-4">
+                                      <FormItem className="flex items-center space-x-2 space-y-0">
+                                        <FormControl><RadioGroupItem value="Short" /></FormControl>
+                                        <FormLabel className="font-normal">Short</FormLabel>
+                                      </FormItem>
+                                      <FormItem className="flex items-center space-x-2 space-y-0">
+                                        <FormControl><RadioGroupItem value="Long/Multiple" /></FormControl>
+                                        <FormLabel className="font-normal">Long / Multiple</FormLabel>
+                                      </FormItem>
+                                    </RadioGroup>
+                                  </FormControl>
+                                </FormItem>
+                              )} />
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -556,24 +697,28 @@ export function EstimateForm() {
                 </Select><FormMessage /></FormItem>
               )} />
               
-              {watchScope === 'Entire property' && (
-                <FormField control={form.control} name="approxSize" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Approx. size (sqm)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        placeholder="e.g. 100" 
-                        onKeyDown={preventInvalidChars}
-                        {...field} 
-                        value={field.value ?? ''} 
-                        onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} 
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              )}
+              <AnimatePresence>
+                {watchScope === 'Entire property' && (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+                    <FormField control={form.control} name="approxSize" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Approx. size (sqm)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="e.g. 100" 
+                            onKeyDown={preventInvalidChars}
+                            {...field} 
+                            value={field.value ?? ''} 
+                            onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <FormField control={form.control} name="existingWallColour" render={({ field }) => (<FormItem><FormLabel>Existing Wall Colour</FormLabel><FormControl><Input placeholder="e.g. White" {...field} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
