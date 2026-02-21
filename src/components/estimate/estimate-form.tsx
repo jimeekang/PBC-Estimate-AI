@@ -40,7 +40,6 @@ import {
   Info,
   Calendar,
   ExternalLink,
-  History,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -236,19 +235,32 @@ export function EstimateForm() {
   }, [user, isAdmin]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).google && inputRef.current) {
-      autocompleteRef.current = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
-        componentRestrictions: { country: 'au' },
-        fields: ['formatted_address'],
-      });
+    const initAutocomplete = () => {
+      if (typeof window !== 'undefined' && (window as any).google?.maps?.places && inputRef.current) {
+        try {
+          autocompleteRef.current = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
+            componentRestrictions: { country: 'au' },
+            fields: ['formatted_address'],
+          });
 
-      autocompleteRef.current.addListener('place_changed', () => {
-        const place = autocompleteRef.current.getPlace();
-        if (place && place.formatted_address) {
-          form.setValue('location', place.formatted_address);
+          autocompleteRef.current.addListener('place_changed', () => {
+            const place = autocompleteRef.current.getPlace();
+            if (place && place.formatted_address) {
+              form.setValue('location', place.formatted_address);
+            }
+          });
+        } catch (err) {
+          console.warn("Google Places Autocomplete failed to initialize. Falling back to manual input.");
         }
-      });
-    }
+      }
+    };
+
+    // Initial attempt
+    initAutocomplete();
+
+    // Check again in case script load order is staggered
+    const timer = setTimeout(initAutocomplete, 2000);
+    return () => clearTimeout(timer);
   }, [form]);
 
   const watchTypeOfWork = useWatch({ control: form.control, name: 'typeOfWork' }) || [];
@@ -391,24 +403,6 @@ export function EstimateForm() {
                   <SelectContent>{propertyTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
                 </Select><FormMessage /></FormItem>
               )} />
-              
-              <AnimatePresence>
-                {watchPropertyType === 'House / Townhouse' && (
-                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="sm:col-span-2">
-                    <FormField control={form.control} name="houseStories" render={({ field }) => (
-                      <FormItem className="space-y-3">
-                        <FormLabel>Number of Stories</FormLabel>
-                        <FormControl>
-                          <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4 sm:gap-8">
-                            <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Single story" /></FormControl><FormLabel className="font-normal cursor-pointer">Single story</FormLabel></FormItem>
-                            <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Double story or more" /></FormControl><FormLabel className="font-normal cursor-pointer">Double story or more</FormLabel></FormItem>
-                          </RadioGroup>
-                        </FormControl>
-                      </FormItem>
-                    )} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
 
               <AnimatePresence>
                 {watchScope === 'Entire property' && (
@@ -427,6 +421,24 @@ export function EstimateForm() {
                           />
                         </FormControl>
                         <FormMessage />
+                      </FormItem>
+                    )} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              
+              <AnimatePresence>
+                {watchPropertyType === 'House / Townhouse' && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="sm:col-span-2">
+                    <FormField control={form.control} name="houseStories" render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel>Number of Stories</FormLabel>
+                        <FormControl>
+                          <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4 sm:gap-8">
+                            <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Single story" /></FormControl><FormLabel className="font-normal cursor-pointer">Single story</FormLabel></FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Double story or more" /></FormControl><FormLabel className="font-normal cursor-pointer">Double story or more</FormLabel></FormItem>
+                          </RadioGroup>
+                        </FormControl>
                       </FormItem>
                     )} />
                   </motion.div>
