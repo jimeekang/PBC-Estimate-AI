@@ -240,6 +240,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
     trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
   }).optional(),
+  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
 });
 
 const GeneratePaintingEstimateOutputSchema = z.object({
@@ -275,6 +276,7 @@ CONTEXT
 - Work type: {{#each input.typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
 - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Calculated from room selections{{/if}}
 - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
+- Ceiling Style: {{#if input.ceilingType}}{{input.ceilingType}}{{else}}Flat{{/if}}
 
 GENERATED PRICE DATA (AUD)
 Min: {{priceMin}}
@@ -282,7 +284,7 @@ Max: {{priceMax}}
 
 INSTRUCTIONS
 1) explanation: 3–5 sentences, Australian English, professional tone.
-   Focus on the main cost drivers: scope, condition, selected areas, stories, and complexity factors.
+   Focus on the main cost drivers: scope, condition, selected areas, stories, and complexity factors (like decorative ceilings or trim).
 2) priceRange:
    - Use commas as thousands separators.
    - If priceMax >= 35,000 format: "From AUD {{priceMin}}+ (Site Inspection Required)"
@@ -421,6 +423,12 @@ export const generatePaintingEstimate = ai.defineFlow(
       // Apply story uplift for interior (stairs/voids)
       intMin = Math.round(intMin * storyMult);
       intMax = Math.round(intMax * storyMult);
+
+      // Decorative ceiling modifier
+      if (input.ceilingType === 'Decorative') {
+        intMin = Math.round(intMin * 1.10);
+        intMax = Math.round(intMax * 1.10);
+      }
 
       if (input.trimPaintOptions) {
         const paintType = input.trimPaintOptions.paintType;
