@@ -4,7 +4,13 @@
  * @fileOverview Data-driven AI agent to estimate painting price range.
  *
  * Anchors are calibrated to Sydney averages.
- * Includes house-specific modifiers for room counts and condition.
+ * - Apartment interior uses apartment anchors + room scoring model.
+ * - House interior uses HOUSE anchors (bed/bath-based) + calibrated whole-house band + modifiers.
+ *
+ * Update (House calibration):
+ * 1) House + Entire property uses MEDIAN-based band (ENTIRE_HOUSE_BAND) to prevent wide range swings
+ *    when users toggle small spaces (e.g., Hallway/Foyer).
+ * 2) Range width increases by ~3% per selected complexity factor (jobDifficulty length).
  */
 
 import { ai } from '@/ai/genkit';
@@ -20,6 +26,17 @@ const APARTMENT_ANCHORS_OIL = {
   ThreeBed: { min: 5200, max: 6800, median: 5500 },
 } as const;
 
+/**
+ * House interior anchors (EX GST).
+ * Calibrated to land ~10.5k–12.2k for a 3B2B old/heavy prep case once modifiers apply.
+ */
+const HOUSE_INTERIOR_ANCHORS = {
+  '2B1B': { min: 6200, max: 8500, median: 7200 },
+  '3B2B': { min: 7800, max: 10200, median: 8900 },
+  '4B2B': { min: 9500, max: 12500, median: 10800 },
+  '5B3B': { min: 12500, max: 16500, median: 14200 },
+} as const;
+
 const EXTERIOR_ANCHOR = { min: 6500, max: 16000, median: 10650 } as const;
 const COMBINED_ANCHOR = { min: 12000, max: 30000, median: 19000 } as const;
 
@@ -33,14 +50,18 @@ const ROOM_WEIGHT: Record<string, number> = {
   'Bedroom 1': 1.0,
   'Bedroom 2': 1.0,
   'Bedroom 3': 1.0,
+
   Bathroom: 1.1,
   'Living Room': 1.35,
   Livingroom: 1.35,
   Lounge: 1.2,
   Kitchen: 1.3,
   Laundry: 0.7,
-  Hallway: 0.6,
-  Foyer: 0.6,
+
+  // slightly reduced weights to stop range volatility
+  Hallway: 0.45,
+  Foyer: 0.4,
+
   Handrail: 0.6,
   Dining: 1.0,
   'Study / Office': 1.0,
@@ -49,7 +70,11 @@ const ROOM_WEIGHT: Record<string, number> = {
   Etc: 0.6,
 };
 
+// Apartment baseline “full repaint” score used by partial-room model
 const BASE_FULL_APT_SCORE = 6.3;
+
+// House baseline (bigger + more variety), used by partial-room model for houses
+const BASE_FULL_HOUSE_SCORE = 8.8;
 
 const AREA_SHARE = {
   ceilingPaint: 0.25,
@@ -62,6 +87,25 @@ const CONDITION_MULTIPLIER = {
   Excellent: { min: 0.95, max: 1.05 },
   Fair: { min: 1.08, max: 1.22 },
   Poor: { min: 1.22, max: 1.55 },
+} as const;
+
+/**
+ * House condition multipliers (used for PARTIAL house scopes; whole-house uses ENTIRE_HOUSE_BAND instead).
+ */
+const HOUSE_CONDITION_MULTIPLIER = {
+  Excellent: { min: 1.00, max: 1.08 },
+  Fair: { min: 1.10, max: 1.24 },
+  Poor: { min: 1.22, max: 1.40 },
+} as const;
+
+/**
+ * House whole-property band (median-based) to keep the estimate range tight and stable.
+ * You can fine-tune these to hit a target range for 3B2B/Fair/Single story.
+ */
+const ENTIRE_HOUSE_BAND = {
+  Excellent: { min: 0.96, max: 1.04 },
+  Fair: { min: 0.97, max: 1.06 },
+  Poor: { min: 0.97, max: 1.10 },
 } as const;
 
 const STORY_MODIFIER = {
@@ -142,6 +186,11 @@ function inferApartmentClassFromSqm(sqm?: number) {
   return 'ThreeBed' as const;
 }
 
+function isApartmentLike(propertyType?: string) {
+  const p = (propertyType ?? '').toLowerCase();
+  return p.includes('apartment') || p.includes('unit') || p.includes('flat');
+}
+
 function roomScore(roomName: string) {
   return ROOM_WEIGHT[roomName] ?? 0.6;
 }
@@ -153,11 +202,6 @@ function pseudoSqmFromRooms(selectedRooms: string[]) {
     (selectedRooms.includes('Kitchen') ? 3 : 0) +
     (selectedRooms.includes('Living Room') || selectedRooms.includes('Livingroom') ? 3 : 0);
   return base + bonus;
-}
-
-function isApartmentLike(propertyType?: string) {
-  const p = (propertyType ?? '').toLowerCase();
-  return p.includes('apartment') || p.includes('unit') || p.includes('flat');
 }
 
 function sumAreaFactor(flags: { ceilingPaint?: boolean; wallPaint?: boolean; trimPaint?: boolean; ensuitePaint?: boolean }) {
@@ -197,6 +241,47 @@ function applyWaterBasedUpliftTrimShareWholeJob(minVal: number, maxVal: number) 
   };
 }
 
+/**
+ * Range width increases by ~3% per selected complexity factor.
+ * We widen the gap (max-min) while keeping min stable.
+ */
+function widenRangeByComplexity(minVal: number, maxVal: number, complexityCount: number) {
+  if (complexityCount <= 0) return { minVal, maxVal };
+  const gap = Math.max(0, maxVal - minVal);
+  const widenFactor = 1 + 0.03 * complexityCount; // 3% per selection
+  const widenedMax = Math.round(minVal + gap * widenFactor);
+  return { minVal, maxVal: widenedMax };
+}
+
+/**
+ * Infer house bed/bath key from the existing inputs.
+ * - bedrooms: master(1 if selected) + bedroomCount(extra)
+ * - bathrooms: presence of Bathroom + (ensuitePaint ? 1 : 0)
+ */
+function inferHouseKey(opts: {
+  bedroomsTotal?: number;
+  bathroomsTotal?: number;
+  approxSizeSqm?: number;
+}): keyof typeof HOUSE_INTERIOR_ANCHORS {
+  const b = opts.bedroomsTotal ?? 0;
+  const ba = opts.bathroomsTotal ?? 0;
+  const sqm = opts.approxSizeSqm;
+
+  if (b >= 5 || ba >= 3) return '5B3B';
+  if (b === 4) return '4B2B';
+  if (b === 3) return '3B2B';
+  if (b === 2) return '2B1B';
+
+  if (sqm) {
+    if (sqm <= 105) return '2B1B';
+    if (sqm <= 140) return '3B2B';
+    if (sqm <= 190) return '4B2B';
+    return '5B3B';
+  }
+
+  return '3B2B';
+}
+
 // -----------------------------
 // Schemas
 // -----------------------------
@@ -220,14 +305,16 @@ const GeneratePaintingEstimateInputSchema = z.object({
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string(),
   houseStories: z.enum(['Single story', 'Double story or more']).optional(),
-  bedroomCount: z.number().optional(),
+  bedroomCount: z.number().optional(), // other bedrooms excluding master
   roomsToPaint: z.array(z.string()).optional(),
-  paintAreas: z.object({
-    ceilingPaint: z.boolean(),
-    wallPaint: z.boolean(),
-    trimPaint: z.boolean(),
-    ensuitePaint: z.boolean().optional(),
-  }).optional(),
+  paintAreas: z
+    .object({
+      ceilingPaint: z.boolean(),
+      wallPaint: z.boolean(),
+      trimPaint: z.boolean(),
+      ensuitePaint: z.boolean().optional(),
+    })
+    .optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
   approxSize: z.number().optional(),
@@ -235,11 +322,15 @@ const GeneratePaintingEstimateInputSchema = z.object({
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
-  jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional(),
-  trimPaintOptions: z.object({
-    paintType: z.enum(['Oil-based', 'Water-based']),
-    trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
-  }).optional(),
+  jobDifficulty: z
+    .array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas']))
+    .optional(),
+  trimPaintOptions: z
+    .object({
+      paintType: z.enum(['Oil-based', 'Water-based']),
+      trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
+    })
+    .optional(),
   ceilingType: z.enum(['Flat', 'Decorative']).optional(),
 });
 
@@ -309,6 +400,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
     const condition = input.paintCondition ?? 'Fair';
     const condMult = CONDITION_MULTIPLIER[condition];
+    const houseCondMult = HOUSE_CONDITION_MULTIPLIER[condition];
     const storyMult = input.houseStories ? (STORY_MODIFIER[input.houseStories] || 1.0) : 1.0;
 
     // -------------------------
@@ -326,13 +418,14 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       if (isWhole) {
         selectedRooms = (input.roomsToPaint ?? []).length ? (input.roomsToPaint ?? []) : [];
-        const globalAreas = input.paintAreas ?? { ceilingPaint: true, wallPaint: true, trimPaint: false, ensuitePaint: false };
+        const globalAreas = input.paintAreas ?? {
+          ceilingPaint: true,
+          wallPaint: true,
+          trimPaint: false,
+          ensuitePaint: false,
+        };
 
-        if (aptLike) {
-          areaFactor = sumAreaFactorWholeApartment(globalAreas);
-        } else {
-          areaFactor = sumAreaFactor(globalAreas);
-        }
+        areaFactor = aptLike ? sumAreaFactorWholeApartment(globalAreas) : sumAreaFactor(globalAreas);
       } else {
         const rooms = input.interiorRooms ?? [];
         selectedRooms = rooms.map((r) => r.roomName);
@@ -349,68 +442,145 @@ export const generatePaintingEstimate = ai.defineFlow(
       }
 
       const hasMaster = selectedRooms.includes('Master Bedroom');
-      const classFromBedrooms = inferApartmentClassFromBedroomNumbers(input.bedroomCount, hasMaster);
 
-      const aptClass =
-        (typeof input.bedroomCount === 'number' ? classFromBedrooms : undefined) ??
-        inferApartmentClassFromSqm(toNumberOrUndefined(input.approxSize)) ??
-        classFromBedrooms;
+      // -------------------------
+      // Apartment Interior
+      // -------------------------
+      if (aptLike) {
+        const classFromBedrooms = inferApartmentClassFromBedroomNumbers(input.bedroomCount, hasMaster);
 
-      const anchor = APARTMENT_ANCHORS_OIL[aptClass];
+        const aptClass =
+          (typeof input.bedroomCount === 'number' ? classFromBedrooms : undefined) ??
+          inferApartmentClassFromSqm(toNumberOrUndefined(input.approxSize)) ??
+          classFromBedrooms;
 
-      if (isWhole && aptLike) {
-        const band = ENTIRE_APT_BAND[condition];
-        const mid = anchor.median * areaFactor;
+        const anchor = APARTMENT_ANCHORS_OIL[aptClass];
 
-        let baseMin = mid * band.min;
-        let baseMax = mid * band.max;
+        if (isWhole) {
+          const band = ENTIRE_APT_BAND[condition];
+          const mid = anchor.median * areaFactor;
 
-        const scaledAnchorMin = anchor.min * areaFactor;
-        const scaledAnchorMax = anchor.max * areaFactor;
+          let baseMin = mid * band.min;
+          let baseMax = mid * band.max;
 
-        baseMin = Math.max(baseMin, scaledAnchorMin);
-        baseMax = Math.min(baseMax, scaledAnchorMax);
+          const scaledAnchorMin = anchor.min * areaFactor;
+          const scaledAnchorMax = anchor.max * areaFactor;
 
-        intMin = Math.round(baseMin);
-        intMax = Math.round(baseMax);
-      } else if (isWhole) {
-        intMin = anchor.min * areaFactor;
-        intMax = anchor.max * areaFactor;
-      } else {
-        const totalRoomScore = selectedRooms.reduce((sum, r) => sum + roomScore(r), 0);
-        const partialRatio = clamp(totalRoomScore / BASE_FULL_APT_SCORE, 0.22, 0.9);
+          baseMin = Math.max(baseMin, scaledAnchorMin);
+          baseMax = Math.min(baseMax, scaledAnchorMax);
 
-        const baseMid = anchor.median * partialRatio;
+          intMin = Math.round(baseMin);
+          intMax = Math.round(baseMax);
+        } else {
+          const totalRoomScore = selectedRooms.reduce((sum, r) => sum + roomScore(r), 0);
+          const partialRatio = clamp(totalRoomScore / BASE_FULL_APT_SCORE, 0.22, 0.9);
 
-        let baseMin = baseMid * 0.88;
-        let baseMax = baseMid * 1.22;
+          const baseMid = anchor.median * partialRatio;
 
-        baseMin *= areaFactor;
-        baseMax *= areaFactor;
+          let baseMin = baseMid * 0.88;
+          let baseMax = baseMid * 1.22;
 
-        const pseudoSqm = pseudoSqmFromRooms(selectedRooms);
-        if (pseudoSqm >= 24) {
-          baseMin *= 1.08;
-          baseMax *= 1.15;
-        } else if (pseudoSqm >= 16) {
-          baseMin *= 1.04;
-          baseMax *= 1.10;
+          baseMin *= areaFactor;
+          baseMax *= areaFactor;
+
+          const pseudoSqm = pseudoSqmFromRooms(selectedRooms);
+          if (pseudoSqm >= 24) {
+            baseMin *= 1.08;
+            baseMax *= 1.15;
+          } else if (pseudoSqm >= 16) {
+            baseMin *= 1.04;
+            baseMax *= 1.10;
+          }
+
+          const roomCount = selectedRooms.length;
+          const hardFloor =
+            roomCount <= 1 ? 1100 :
+            roomCount === 2 ? 1700 :
+            roomCount === 3 ? 2300 :
+            2900;
+
+          intMin = Math.max(Math.round(baseMin), hardFloor);
+          intMax = Math.max(Math.round(baseMax), Math.round(hardFloor * 1.55));
+
+          intMin = Math.round(intMin * condMult.min);
+          intMax = Math.round(intMax * condMult.max);
         }
-
-        const roomCount = selectedRooms.length;
-        const hardFloor =
-          roomCount <= 1 ? 1100 :
-          roomCount === 2 ? 1700 :
-          roomCount === 3 ? 2300 :
-          2900;
-
-        intMin = Math.max(Math.round(baseMin), hardFloor);
-        intMax = Math.max(Math.round(baseMax), Math.round(hardFloor * 1.55));
-
-        intMin = Math.round(intMin * condMult.min);
-        intMax = Math.round(intMax * condMult.max);
       }
 
+      // -------------------------
+      // House Interior (calibrated)
+      // -------------------------
+      if (!aptLike) {
+        const bedroomsTotal =
+          (typeof input.bedroomCount === 'number' && Number.isFinite(input.bedroomCount) ? input.bedroomCount : 0) +
+          (hasMaster ? 1 : 0);
+
+        const bathroomsTotal =
+          (selectedRooms.includes('Bathroom') ? 1 : 0) + (input.paintAreas?.ensuitePaint ? 1 : 0);
+
+        const houseKey = inferHouseKey({
+          bedroomsTotal,
+          bathroomsTotal,
+          approxSizeSqm: toNumberOrUndefined(input.approxSize),
+        });
+
+        const houseAnchor = HOUSE_INTERIOR_ANCHORS[houseKey];
+
+        if (isWhole) {
+          // Whole-house: MEDIAN-based band to keep range stable
+          const band = ENTIRE_HOUSE_BAND[condition];
+          const mid = houseAnchor.median * areaFactor;
+
+          intMin = Math.round(mid * band.min);
+          intMax = Math.round(mid * band.max);
+
+          // gentle floor/ceiling to stay inside anchor envelope
+          const floorMin = Math.round((houseAnchor.min * areaFactor) * 0.98);
+          const ceilMax = Math.round((houseAnchor.max * areaFactor) * 1.02);
+
+          intMin = Math.max(intMin, floorMin);
+          intMax = Math.min(intMax, ceilMax);
+        } else {
+          // Partial rooms in a house: roomScore ratio against house baseline
+          const totalRoomScore = selectedRooms.reduce((sum, r) => sum + roomScore(r), 0);
+          const partialRatio = clamp(totalRoomScore / BASE_FULL_HOUSE_SCORE, 0.18, 0.85);
+
+          const baseMid = houseAnchor.median * partialRatio;
+
+          let baseMin = baseMid * 0.86;
+          let baseMax = baseMid * 1.24;
+
+          baseMin *= areaFactor;
+          baseMax *= areaFactor;
+
+          const pseudoSqm = pseudoSqmFromRooms(selectedRooms);
+          if (pseudoSqm >= 28) {
+            baseMin *= 1.08;
+            baseMax *= 1.16;
+          } else if (pseudoSqm >= 18) {
+            baseMin *= 1.04;
+            baseMax *= 1.10;
+          }
+
+          const roomCount = selectedRooms.length;
+          const hardFloor =
+            roomCount <= 1 ? 1400 :
+            roomCount === 2 ? 2200 :
+            roomCount === 3 ? 3000 :
+            roomCount === 4 ? 3600 :
+            4200;
+
+          intMin = Math.max(Math.round(baseMin), hardFloor);
+          intMax = Math.max(Math.round(baseMax), Math.round(hardFloor * 1.60));
+
+          intMin = Math.round(intMin * houseCondMult.min);
+          intMax = Math.round(intMax * houseCondMult.max);
+        }
+      }
+
+      // -------------------------
+      // Shared modifiers (apartment + house)
+      // -------------------------
       const diffs = input.jobDifficulty ?? [];
       for (const d of diffs) {
         const a = DIFFICULTY_ADDON[d];
@@ -430,6 +600,7 @@ export const generatePaintingEstimate = ai.defineFlow(
         intMax = Math.round(intMax * 1.10);
       }
 
+      // Trim options
       if (input.trimPaintOptions) {
         const paintType = input.trimPaintOptions.paintType;
 
@@ -466,10 +637,20 @@ export const generatePaintingEstimate = ai.defineFlow(
         }
       }
 
+      // Complexity-based RANGE widening (+3% width per selected factor)
+      {
+        const complexityCount = (input.jobDifficulty ?? []).length;
+        const widened = widenRangeByComplexity(intMin, intMax, complexityCount);
+        intMin = widened.minVal;
+        intMax = widened.maxVal;
+      }
+
+      // Caps + sanity
       intMin = clamp(intMin, 800, MAX_PRICE_CAP);
       intMax = clamp(intMax, 1200, MAX_PRICE_CAP);
       if (intMax < intMin) intMax = Math.round(intMin * 1.18);
 
+      // Keep apartment whole-property band tight (existing behaviour)
       if (isWhole && aptLike) {
         const maxAllowed = Math.round(intMin * 1.18);
         if (intMax > maxAllowed) intMax = maxAllowed;
@@ -515,7 +696,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       rMin = rMin * condMult.min;
       rMax = rMax * condMult.max;
-      
+
       // Apply story uplift for exterior (scaffolding/ladders)
       rMin = rMin * storyMult;
       rMax = rMax * storyMult;
@@ -531,6 +712,15 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       extMin = Math.round(rMin);
       extMax = Math.round(rMax);
+
+      // Complexity-based RANGE widening (+3% width per selected factor)
+      {
+        const complexityCount = (input.jobDifficulty ?? []).length;
+        const widened = widenRangeByComplexity(extMin, extMax, complexityCount);
+        extMin = widened.minVal;
+        extMax = widened.maxVal;
+      }
+
       extMin = clamp(extMin, 900, MAX_PRICE_CAP);
       extMax = clamp(extMax, 1500, MAX_PRICE_CAP);
       if (extMax < extMin) extMax = Math.round(extMin * 1.25);
