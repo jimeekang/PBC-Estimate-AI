@@ -74,6 +74,11 @@ const estimateFormSchema = z.object({
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
     })
     .optional(),
+  ceilingOptions: z
+    .object({
+      ceilingType: z.enum(['Flat', 'Decorative']),
+    })
+    .optional(),
 });
 
 export async function submitEstimate(formData: any) {
@@ -91,10 +96,15 @@ export async function submitEstimate(formData: any) {
     const aiPayload: any = stripUndefined({
       ...rawData,
       approxSize,
+      ceilingType: rawData.ceilingOptions?.ceilingType,
     });
 
     if (aiPayload.scopeOfPainting === 'Entire property' && !aiPayload.paintAreas?.trimPaint) {
       delete aiPayload.trimPaintOptions;
+    }
+    
+    if (!aiPayload.paintAreas?.ceilingPaint && !rawData.interiorRooms?.some(r => r.paintAreas?.ceilingPaint)) {
+      delete aiPayload.ceilingType;
     }
 
     const estimate = await generatePaintingEstimate(aiPayload);
