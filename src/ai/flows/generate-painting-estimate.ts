@@ -42,6 +42,10 @@ const ROOM_WEIGHT: Record<string, number> = {
   Hallway: 0.6,
   Foyer: 0.6,
   Handrail: 0.6,
+  Dining: 1.0,
+  'Study / Office': 1.0,
+  Stairwell: 1.2,
+  'Walk-in robe': 0.5,
   Etc: 0.6,
 };
 
@@ -59,6 +63,11 @@ const CONDITION_MULTIPLIER = {
   Fair: { min: 1.08, max: 1.22 },
   Poor: { min: 1.22, max: 1.55 },
 } as const;
+
+const STORY_MODIFIER = {
+  'Single story': 1.0,
+  'Double story or more': 1.18,
+};
 
 const DIFFICULTY_ADDON = {
   Stairs: { min: 300, max: 900 },
@@ -210,6 +219,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
   typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])),
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string(),
+  houseStories: z.enum(['Single story', 'Double story or more']).optional(),
   bedroomCount: z.number().optional(),
   roomsToPaint: z.array(z.string()).optional(),
   paintAreas: z.object({
@@ -260,6 +270,7 @@ Your role is to clearly explain why a specific price range was generated.
 
 CONTEXT
 - Property type: {{input.propertyType}}
+- Stories: {{#if input.houseStories}}{{input.houseStories}}{{else}}N/A{{/if}}
 - Scope: {{input.scopeOfPainting}}
 - Work type: {{#each input.typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
 - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Calculated from room selections{{/if}}
@@ -271,7 +282,7 @@ Max: {{priceMax}}
 
 INSTRUCTIONS
 1) explanation: 3–5 sentences, Australian English, professional tone.
-   Focus on the main cost drivers: scope, condition, selected areas, and complexity factors.
+   Focus on the main cost drivers: scope, condition, selected areas, stories, and complexity factors.
 2) priceRange:
    - Use commas as thousands separators.
    - If priceMax >= 35,000 format: "From AUD {{priceMin}}+ (Site Inspection Required)"
@@ -296,6 +307,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
     const condition = input.paintCondition ?? 'Fair';
     const condMult = CONDITION_MULTIPLIER[condition];
+    const storyMult = input.houseStories ? (STORY_MODIFIER[input.houseStories] || 1.0) : 1.0;
 
     // -------------------------
     // 1) Interior
@@ -406,6 +418,10 @@ export const generatePaintingEstimate = ai.defineFlow(
         }
       }
 
+      // Apply story uplift for interior (stairs/voids)
+      intMin = Math.round(intMin * storyMult);
+      intMax = Math.round(intMax * storyMult);
+
       if (input.trimPaintOptions) {
         const paintType = input.trimPaintOptions.paintType;
 
@@ -491,6 +507,10 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       rMin = rMin * condMult.min;
       rMax = rMax * condMult.max;
+      
+      // Apply story uplift for exterior (scaffolding/ladders)
+      rMin = rMin * storyMult;
+      rMax = rMax * storyMult;
 
       const diffs = input.jobDifficulty ?? [];
       for (const d of diffs) {

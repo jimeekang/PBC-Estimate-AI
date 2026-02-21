@@ -82,11 +82,15 @@ const interiorRoomList = [
   'Bathroom', 
   'Living Room', 
   'Lounge', 
+  'Dining',
   'Kitchen', 
+  'Study / Office',
   'Laundry', 
+  'Stairwell',
   'Hallway',
   'Foyer',
   'Handrail',
+  'Walk-in robe',
   'Etc'
 ] as const;
 
@@ -124,6 +128,7 @@ const estimateFormSchema = z.object({
   typeOfWork: z.array(z.enum(['Interior Painting', 'Exterior Painting'])).min(1, 'Please select at least one type of work.'),
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
+  houseStories: z.enum(['Single story', 'Double story or more']).optional(),
   bedroomCount: z.coerce.number().min(0).optional(),
   roomsToPaint: z.array(z.string()).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
@@ -178,6 +183,7 @@ export function EstimateForm() {
       typeOfWork: [],
       scopeOfPainting: 'Entire property',
       propertyType: '',
+      houseStories: 'Single story',
       bedroomCount: 0,
       roomsToPaint: [],
       interiorRooms: [],
@@ -340,6 +346,24 @@ export function EstimateForm() {
                 </Select><FormMessage /></FormItem>
               )} />
               
+              <AnimatePresence>
+                {watchPropertyType === 'House' && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="sm:col-span-2">
+                    <FormField control={form.control} name="houseStories" render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel>Number of Stories</FormLabel>
+                        <FormControl>
+                          <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4 sm:gap-8">
+                            <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Single story" /></FormControl><FormLabel className="font-normal cursor-pointer">Single story</FormLabel></FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Double story or more" /></FormControl><FormLabel className="font-normal cursor-pointer">Double story or more</FormLabel></FormItem>
+                          </RadioGroup>
+                        </FormControl>
+                      </FormItem>
+                    )} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <AnimatePresence>
                 {watchScope === 'Entire property' && (
                   <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>

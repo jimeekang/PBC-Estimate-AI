@@ -45,6 +45,7 @@ const estimateFormSchema = z.object({
     .min(1, 'Please select at least one type of work.'),
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string().min(1, 'Property type is required.'),
+  houseStories: z.enum(['Single story', 'Double story or more']).optional(),
   bedroomCount: z.coerce.number().min(0).optional(),
   roomsToPaint: z.array(z.string()).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
