@@ -133,6 +133,7 @@ const estimateFormSchema = z.object({
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
+  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
   jobDifficulty: z.array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])).optional(),
   paintAreas: z.object({
     ceilingPaint: z.boolean().default(false),
@@ -172,6 +173,7 @@ export function EstimateForm() {
         paintType: 'Water-based',
         trimItems: [],
       },
+      ceilingType: 'Flat',
       name: '',
       email: user?.email || '',
       phone: '',
@@ -226,12 +228,19 @@ export function EstimateForm() {
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
   const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
+  const watchGlobalCeilingPaint = useWatch({ control: form.control, name: 'paintAreas.ceilingPaint' });
+  const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
 
   const hasAnyRoomTrim = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
   const hasHandrail = watchInteriorRooms?.some(r => r.roomName === 'Handrail');
+  const hasAnyRoomCeiling = watchInteriorRooms?.some(r => r.paintAreas?.ceilingPaint);
   
   const showTrimOptions = (watchScope === 'Entire property' && watchGlobalTrimPaint) || 
                           (watchScope === 'Specific areas only' && (hasAnyRoomTrim || hasHandrail));
+
+  const showCeilingTypeOptions = watchPropertyType === 'House' && 
+                                 ((watchScope === 'Entire property' && watchGlobalCeilingPaint) || 
+                                  (watchScope === 'Specific areas only' && hasAnyRoomCeiling));
 
   const handleToggleRoom = (roomName: string) => {
     const roomIndex = fields.findIndex(f => f.roomName === roomName);
@@ -241,9 +250,9 @@ export function EstimateForm() {
       append({
         roomName,
         paintAreas: {
-          ceilingPaint: roomName === 'Handrail' ? false : false,
-          wallPaint: roomName === 'Handrail' ? false : false,
-          trimPaint: roomName === 'Handrail' ? true : false,
+          ceilingPaint: false,
+          wallPaint: false,
+          trimPaint: false,
           ensuitePaint: false
         }
       });
@@ -331,18 +340,7 @@ export function EstimateForm() {
           <Card className="shadow-md">
             <CardHeader><CardTitle className="flex items-center gap-2"><Paintbrush className="h-6 w-6 text-primary" /><span>Job Details</span></CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-8">
-              <FormField control={form.control} name="scopeOfPainting" render={({ field }) => (
-                <FormItem className="sm:col-span-2 space-y-3">
-                  <FormLabel>What needs to be painted?</FormLabel>
-                  <FormControl>
-                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4 sm:gap-8">
-                      <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Entire property" /></FormControl><FormLabel className="font-normal cursor-pointer">Entire property</FormLabel></FormItem>
-                      <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Specific areas only" /></FormControl><FormLabel className="font-normal cursor-pointer">Specific areas only</FormLabel></FormItem>
-                    </RadioGroup>
-                  </FormControl>
-                </FormItem>
-              )} />
-
+              
               <FormField control={form.control} name="propertyType" render={({ field }) => (
                 <FormItem><FormLabel>Property Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
@@ -387,6 +385,18 @@ export function EstimateForm() {
                     ))}
                   </div>
                   <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="scopeOfPainting" render={({ field }) => (
+                <FormItem className="sm:col-span-2 space-y-3">
+                  <FormLabel>What needs to be painted?</FormLabel>
+                  <FormControl>
+                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4 sm:gap-8">
+                      <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Entire property" /></FormControl><FormLabel className="font-normal cursor-pointer">Entire property</FormLabel></FormItem>
+                      <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Specific areas only" /></FormControl><FormLabel className="font-normal cursor-pointer">Specific areas only</FormLabel></FormItem>
+                    </RadioGroup>
+                  </FormControl>
                 </FormItem>
               )} />
               
@@ -446,7 +456,39 @@ export function EstimateForm() {
                         <div className="space-y-4">
                           <FormLabel>Paint Surfaces (Global)</FormLabel>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-md border p-4 bg-background">
-                            <FormField control={form.control} name="paintAreas.ceilingPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><PaintRoller className="h-5 w-5" /> Ceiling</FormLabel></div></FormItem>)} />
+                            <FormField control={form.control} name="paintAreas.ceilingPaint" render={({ field }) => (
+                              <FormItem className="flex flex-col space-y-3 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                                <div className="flex flex-row items-center space-x-3 space-y-0">
+                                  <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                  <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><PaintRoller className="h-5 w-5" /> Ceiling</FormLabel></div>
+                                </div>
+                                <AnimatePresence>
+                                  {field.value && watchPropertyType === 'House' && (
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="pl-7 pt-2 space-y-3">
+                                      <FormField control={form.control} name="ceilingType" render={({ field: ceilingField }) => (
+                                        <FormItem className="space-y-1">
+                                          <FormLabel className="text-[10px] text-muted-foreground uppercase font-bold">Ceiling Style</FormLabel>
+                                          <FormControl>
+                                            <RadioGroup onValueChange={ceilingField.onChange} defaultValue={ceilingField.value || 'Flat'} className="flex flex-col gap-2">
+                                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                                <FormControl><RadioGroupItem value="Flat" /></FormControl>
+                                                <FormLabel className="font-normal cursor-pointer text-xs">Flat ceiling (standard)</FormLabel>
+                                              </FormItem>
+                                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                                <FormControl><RadioGroupItem value="Decorative" /></FormControl>
+                                                <FormLabel className="font-normal cursor-pointer text-xs flex items-center gap-2">
+                                                  Decorative / Patterned <Badge variant="secondary" className="text-[10px]">+10%</Badge>
+                                                </FormLabel>
+                                              </FormItem>
+                                            </RadioGroup>
+                                          </FormControl>
+                                        </FormItem>
+                                      )} />
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </FormItem>
+                            )} />
                             <FormField control={form.control} name="paintAreas.wallPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><Paintbrush className="h-5 w-5" /> Walls</FormLabel></div></FormItem>)} />
                             <FormField control={form.control} name="paintAreas.trimPaint" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2 cursor-pointer"><Palette className="h-5 w-5" /> Trim</FormLabel></div></FormItem>)} />
                           </div>
@@ -525,6 +567,34 @@ export function EstimateForm() {
                         </div>
                       </div>
                     )}
+
+                    <AnimatePresence>
+                      {showCeilingTypeOptions && (
+                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 border-2 border-primary/20 bg-primary/[0.03] rounded-xl space-y-6">
+                           <div className="space-y-3">
+                            <FormLabel className="text-primary font-bold flex items-center gap-2"><PaintRoller className="h-4 w-4" /> Ceiling Type (House)</FormLabel>
+                            <FormField control={form.control} name="ceilingType" render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormControl>
+                                  <RadioGroup onValueChange={field.onChange} defaultValue={field.value || 'Flat'} className="flex flex-col sm:flex-row gap-6">
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="Flat" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer">Flat ceiling (standard)</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl><RadioGroupItem value="Decorative" /></FormControl>
+                                      <FormLabel className="font-normal cursor-pointer flex items-center gap-2">
+                                        Decorative / Patterned <Badge variant="secondary" className="text-[10px]">+10%</Badge>
+                                      </FormLabel>
+                                    </FormItem>
+                                  </RadioGroup>
+                                </FormControl>
+                              </FormItem>
+                            )} />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
                     <AnimatePresence>
                       {showTrimOptions && (

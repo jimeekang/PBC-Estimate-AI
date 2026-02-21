@@ -54,6 +54,7 @@ const estimateFormSchema = z.object({
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
+  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
   jobDifficulty: z
     .array(
       z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])

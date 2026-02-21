@@ -218,6 +218,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
     trimPaint: z.boolean(),
     ensuitePaint: z.boolean().optional(),
   }).optional(),
+  ceilingType: z.enum(['Flat', 'Decorative']).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
   approxSize: z.number().optional(),
@@ -264,6 +265,7 @@ CONTEXT
 - Work type: {{#each input.typeOfWork}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
 - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Not specified{{/if}}
 - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
+- Ceiling Type: {{#if input.ceilingType}}{{input.ceilingType}}{{else}}Standard Flat{{/if}}
 
 GENERATED PRICE DATA (AUD)
 Min: {{priceMin}}
@@ -395,6 +397,12 @@ export const generatePaintingEstimate = ai.defineFlow(
 
         intMin = Math.round(intMin * condMult.min);
         intMax = Math.round(intMax * condMult.max);
+      }
+
+      // Decorative Ceiling Modifier (+10%)
+      if (input.ceilingType === 'Decorative' && (input.paintAreas?.ceilingPaint || input.interiorRooms?.some(r => r.paintAreas?.ceilingPaint))) {
+        intMin = Math.round(intMin * 1.10);
+        intMax = Math.round(intMax * 1.10);
       }
 
       const diffs = input.jobDifficulty ?? [];
