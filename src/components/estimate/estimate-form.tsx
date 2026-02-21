@@ -234,16 +234,16 @@ export function EstimateForm() {
                           (watchScope === 'Specific areas only' && (hasAnyRoomTrim || hasHandrail));
 
   const handleToggleRoom = (roomName: string) => {
-    const index = fields.findIndex(f => f.roomName === roomName);
-    if (index > -1) {
-      remove(index);
+    const roomIndex = fields.findIndex(f => f.roomName === roomName);
+    if (roomIndex > -1) {
+      remove(roomIndex);
     } else {
       append({
         roomName,
         paintAreas: {
-          ceilingPaint: false,
-          wallPaint: false,
-          trimPaint: false,
+          ceilingPaint: roomName === 'Handrail' ? false : false,
+          wallPaint: roomName === 'Handrail' ? false : false,
+          trimPaint: roomName === 'Handrail' ? true : false,
           ensuitePaint: false
         }
       });
@@ -342,6 +342,36 @@ export function EstimateForm() {
                   </FormControl>
                 </FormItem>
               )} />
+
+              <FormField control={form.control} name="propertyType" render={({ field }) => (
+                <FormItem><FormLabel>Property Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
+                  <SelectContent>{propertyTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
+                </Select><FormMessage /></FormItem>
+              )} />
+              
+              <AnimatePresence>
+                {watchScope === 'Entire property' && (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+                    <FormField control={form.control} name="approxSize" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Approx. size (sqm)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="e.g. 100" 
+                            onKeyDown={preventInvalidChars}
+                            {...field} 
+                            value={field.value ?? ''} 
+                            onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <FormField control={form.control} name="typeOfWork" render={() => (
                 <FormItem className="sm:col-span-2">
@@ -543,36 +573,6 @@ export function EstimateForm() {
                           )} />
                         ))}
                       </div><FormMessage /></FormItem>
-                    )} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <FormField control={form.control} name="propertyType" render={({ field }) => (
-                <FormItem><FormLabel>Property Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
-                  <SelectContent>{propertyTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
-                </Select><FormMessage /></FormItem>
-              )} />
-              
-              <AnimatePresence>
-                {watchScope === 'Entire property' && (
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
-                    <FormField control={form.control} name="approxSize" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Approx. size (sqm)</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="e.g. 100" 
-                            onKeyDown={preventInvalidChars}
-                            {...field} 
-                            value={field.value ?? ''} 
-                            onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
                     )} />
                   </motion.div>
                 )}
