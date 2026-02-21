@@ -16,6 +16,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   ArrowUpToLine,
   Baseline,
@@ -546,7 +547,6 @@ export function EstimateForm() {
                       )}
                     </AnimatePresence>
 
-                    {/* House Specific Interior Modifiers */}
                     <AnimatePresence>
                       {watchPropertyType === 'House' && (
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="space-y-6 pt-6 border-t">
@@ -555,7 +555,6 @@ export function EstimateForm() {
                             <h3 className="font-bold text-lg text-primary">House Interior Specifics</h3>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Ceiling Type */}
                             <FormField control={form.control} name="houseSpecifics.ceilingType" render={({ field }) => (
                               <FormItem className="space-y-3">
                                 <FormLabel className="font-bold">Ceiling Type</FormLabel>
@@ -576,7 +575,6 @@ export function EstimateForm() {
                               </FormItem>
                             )} />
 
-                            {/* Moisture / Mould */}
                             <FormField control={form.control} name="houseSpecifics.mouldStatus" render={({ field }) => (
                               <FormItem className="space-y-3">
                                 <FormLabel className="font-bold">Moisture / Mould Status</FormLabel>
@@ -601,7 +599,6 @@ export function EstimateForm() {
                               </FormItem>
                             )} />
 
-                            {/* Age / Patching */}
                             <FormField control={form.control} name="houseSpecifics.propertyAge" render={({ field }) => (
                               <FormItem className="space-y-3">
                                 <FormLabel className="font-bold">Property Age & Condition</FormLabel>
@@ -626,7 +623,6 @@ export function EstimateForm() {
                               </FormItem>
                             )} />
 
-                            {/* Room Counts */}
                             <div className="space-y-4">
                               <FormField control={form.control} name="houseSpecifics.livingAreasCount" render={({ field }) => (
                                 <FormItem className="space-y-3">
