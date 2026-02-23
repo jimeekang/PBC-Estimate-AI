@@ -482,7 +482,7 @@ export function EstimateForm() {
                                   onKeyDown={preventInvalidCharsNoDecimal}
                                   {...field} 
                                   value={field.value ?? ''}
-                                  onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))}
+                                  onChange={e => field.onChange(e.target.value === ' ' ? undefined : parseInt(e.target.value))}
                                 />
                               </FormControl>
                               <FormDescription>Excluding Master Bedroom</FormDescription>

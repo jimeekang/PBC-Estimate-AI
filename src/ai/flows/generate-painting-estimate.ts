@@ -374,6 +374,7 @@ CONTEXT
 - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Calculated from room selections{{/if}}
 - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
 - Ceiling Style: {{#if input.ceilingType}}{{input.ceilingType}}{{else}}Flat{{/if}}
+- Exterior Custom Area: {{#if input.otherExteriorArea}}{{input.otherExteriorArea}}{{else}}N/A{{/if}}
 
 GENERATED PRICE DATA (AUD)
 Min: {{priceMin}}
