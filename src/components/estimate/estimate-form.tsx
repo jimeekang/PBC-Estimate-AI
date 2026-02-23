@@ -389,7 +389,7 @@ export function EstimateForm() {
             <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-8">
               
               <FormField control={form.control} name="propertyType" render={({ field }) => (
-                <FormItem><FormLabel>Property Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormItem className="sm:col-span-1"><FormLabel>Property Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
                   <SelectContent>{propertyTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
                 </Select><FormMessage /></FormItem>
@@ -548,11 +548,14 @@ export function EstimateForm() {
                                     <Checkbox checked={isSelected} onCheckedChange={() => handleToggleRoom(roomName)} />
                                     <span className="font-bold text-sm shrink-0">{roomName}</span>
                                     {roomName === 'Etc' && isSelected && (
-                                      <Input 
-                                        placeholder="Specify..." 
-                                        className="h-7 text-xs ml-2 flex-1 min-w-[80px]"
-                                        {...form.register(`interiorRooms.${roomIndex}.otherRoomName`)}
-                                      />
+                                      <div className="flex-1 ml-2 space-y-1">
+                                        <p className="text-[10px] text-muted-foreground font-medium">Please specify:</p>
+                                        <Input 
+                                          placeholder="e.g. Storage, Attic" 
+                                          className="h-7 text-xs flex-1 min-w-[80px]"
+                                          {...form.register(`interiorRooms.${roomIndex}.otherRoomName`)}
+                                        />
+                                      </div>
                                     )}
                                   </div>
                                 </CardHeader>
@@ -665,17 +668,20 @@ export function EstimateForm() {
                                         </FormLabel>
                                       </FormItem>
                                       {isEtc && isSelected && (
-                                        <FormField
-                                          control={form.control}
-                                          name="otherExteriorArea"
-                                          render={({ field: otherField }) => (
-                                            <Input 
-                                              {...otherField}
-                                              placeholder="Specify other area..." 
-                                              className="h-8 text-xs"
-                                            />
-                                          )}
-                                        />
+                                        <div className="pl-9 space-y-1">
+                                          <p className="text-[10px] text-muted-foreground font-medium italic">Please specify:</p>
+                                          <FormField
+                                            control={form.control}
+                                            name="otherExteriorArea"
+                                            render={({ field: otherField }) => (
+                                              <Input 
+                                                {...otherField}
+                                                placeholder="e.g. Garden shed, Fence, Pergola" 
+                                                className="h-8 text-xs"
+                                              />
+                                            )}
+                                          />
+                                        </div>
                                       )}
                                     </div>
                                   );
