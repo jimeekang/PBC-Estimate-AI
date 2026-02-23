@@ -16,7 +16,6 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
   ArrowUpToLine,
   Baseline,
@@ -144,7 +143,6 @@ const estimateFormSchema = z.object({
   exteriorAreas: z.array(z.string()).optional(),
   otherExteriorArea: z.string().optional(),
   approxSize: z.coerce.number().positive().optional(),
-  existingWallColour: z.string().optional(),
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
@@ -238,7 +236,6 @@ export function EstimateForm() {
       interiorRooms: [],
       exteriorAreas: [],
       otherExteriorArea: '',
-      existingWallColour: '',
       location: '',
       timingPurpose: 'Maintenance or refresh',
       paintCondition: undefined,
@@ -727,8 +724,6 @@ export function EstimateForm() {
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              <FormField control={form.control} name="existingWallColour" render={({ field }) => (<FormItem><FormLabel>Existing Wall Colour</FormLabel><FormControl><Input placeholder="e.g. White" {...field} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
 
