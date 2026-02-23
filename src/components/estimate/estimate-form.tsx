@@ -308,6 +308,7 @@ export function EstimateForm() {
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
   const watchGlobalCeilingPaint = useWatch({ control: form.control, name: 'paintAreas.ceilingPaint' });
   const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
+  const watchExteriorAreas = useWatch({ control: form.control, name: 'exteriorAreas' }) || [];
 
   const hasAnyRoomTrim = watchInteriorRooms?.some((r) => r.paintAreas?.trimPaint);
   const hasAnyRoomCeiling = watchInteriorRooms?.some((r) => r.paintAreas?.ceilingPaint);
@@ -662,46 +663,34 @@ export function EstimateForm() {
                             {interiorRoomList
                               .filter((r) => r === 'Master Bedroom' || !r.includes('Bedroom'))
                               .map((room) => (
-                                <FormField
-                                  key={room}
-                                  control={form.control}
-                                  name="roomsToPaint"
-                                  render={({ field }) => {
-                                    const isSelected = field.value?.includes(room);
-                                    return (
-                                      <div className="space-y-2">
-                                        <FormItem className={cn(
-                                          'flex flex-row items-center gap-3 rounded-md border p-3 transition-colors bg-background',
-                                          isSelected ? 'bg-primary/10 border-primary' : ''
-                                        )}>
-                                          <FormControl>
-                                            <Checkbox
-                                              checked={isSelected}
-                                              onCheckedChange={(checked) => {
-                                                const next = checked
-                                                  ? [...(field.value || []), room]
-                                                  : (field.value || []).filter((v) => v !== room);
-                                                field.onChange(next);
-                                                if (room === 'Etc' && !checked) form.setValue('otherInteriorArea', '');
-                                              }}
-                                            />
-                                          </FormControl>
-                                          <FormLabel className="font-normal cursor-pointer text-xs flex-1">{room}</FormLabel>
-                                        </FormItem>
-                                        {room === 'Etc' && isSelected && (
-                                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-2">
-                                            <FormLabel className="text-[10px] text-primary font-bold">Please specify:</FormLabel>
-                                            <Input
-                                              {...form.register('otherInteriorArea')}
-                                              placeholder="e.g. Garden shed, Attic"
-                                              className="h-8 text-xs mt-1"
-                                            />
-                                          </motion.div>
-                                        )}
+                                <div key={room} className="space-y-2">
+                                  <div className={cn(
+                                    'flex flex-row items-center gap-3 rounded-md border p-3 transition-colors bg-background',
+                                    watchRoomsToPaint.includes(room) ? 'bg-primary/10 border-primary' : ''
+                                  )}>
+                                    <Checkbox
+                                      checked={watchRoomsToPaint.includes(room)}
+                                      onCheckedChange={(checked) => {
+                                        const current = form.getValues('roomsToPaint') || [];
+                                        const next = checked
+                                          ? [...current, room]
+                                          : current.filter((v) => v !== room);
+                                        form.setValue('roomsToPaint', next);
+                                        if (room === 'Etc' && !checked) form.setValue('otherInteriorArea', '');
+                                      }}
+                                    />
+                                    <FormLabel className="font-normal cursor-pointer text-xs flex-1">{room}</FormLabel>
+                                    {room === 'Etc' && watchRoomsToPaint.includes('Etc') && (
+                                      <div className="ml-2 flex-1">
+                                        <Input
+                                          {...form.register('otherInteriorArea')}
+                                          placeholder="Specify room"
+                                          className="h-7 text-xs"
+                                        />
                                       </div>
-                                    );
-                                  }}
-                                />
+                                    )}
+                                  </div>
+                                </div>
                               ))}
                           </div>
                           <FormField
@@ -974,52 +963,45 @@ export function EstimateForm() {
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="sm:col-span-2 overflow-hidden pt-4">
                     <div className="space-y-4">
                       <FormLabel>Exterior Areas</FormLabel>
-                      <FormField
-                        control={form.control}
-                        name="exteriorAreas"
-                        render={({ field }) => (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-                            {exteriorAreaOptions.map((item) => {
-                              const isSelected = field.value?.includes(item.id);
-                              return (
-                                <div key={item.id} className="space-y-2">
-                                  <FormItem className={cn(
-                                    'flex flex-row items-center gap-3 rounded-md border p-3 transition-colors h-full',
-                                    isSelected ? 'bg-primary/10 border-primary' : ''
-                                  )}>
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={(checked) => {
-                                          const newValue = checked
-                                            ? [...(field.value || []), item.id]
-                                            : (field.value || []).filter((v: string) => v !== item.id);
-                                          field.onChange(newValue);
-                                          if (item.id === 'Etc' && !checked) form.setValue('otherExteriorArea', '');
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs flex-1">
-                                      <item.icon className="h-4 w-4 shrink-0" />
-                                      {item.label}
-                                    </FormLabel>
-                                  </FormItem>
-                                  {item.id === 'Etc' && isSelected && (
-                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-2">
-                                      <FormLabel className="text-[10px] text-primary font-bold">Please specify:</FormLabel>
-                                      <Input
-                                        {...form.register('otherExteriorArea')}
-                                        placeholder="e.g. Garden shed, Fence, Pergola"
-                                        className="h-8 text-xs mt-1"
-                                      />
-                                    </motion.div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+                        {exteriorAreaOptions.map((item) => {
+                          const isSelected = watchExteriorAreas.includes(item.id);
+                          const isEtc = item.id === 'Etc';
+                          return (
+                            <div key={item.id} className="space-y-2">
+                              <div className={cn(
+                                'flex items-center gap-3 rounded-md border p-3 transition-colors h-full bg-background',
+                                isSelected ? 'bg-primary/10 border-primary' : ''
+                              )}>
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={(checked) => {
+                                    const current = form.getValues('exteriorAreas') || [];
+                                    const next = checked
+                                      ? [...current, item.id]
+                                      : current.filter((v: string) => v !== item.id);
+                                    form.setValue('exteriorAreas', next);
+                                    if (isEtc && !checked) form.setValue('otherExteriorArea', '');
+                                  }}
+                                />
+                                <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs flex-1 min-w-0">
+                                  <item.icon className="h-4 w-4 shrink-0" />
+                                  <span className="truncate">{item.label}</span>
+                                </FormLabel>
+                                {isEtc && isSelected && (
+                                  <div className="ml-2 flex-1" onClick={(e) => e.stopPropagation()}>
+                                    <Input
+                                      {...form.register('otherExteriorArea')}
+                                      placeholder="Specify area"
+                                      className="h-7 text-xs"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                       <FormField
                         control={form.control}
                         name="otherExteriorArea"
