@@ -148,6 +148,7 @@ const estimateFormSchema = z
     exteriorAreas: z.array(z.string()).optional(),
     otherExteriorArea: z.string().optional(),
     otherInteriorArea: z.string().optional(),
+    wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
     approxSize: z.coerce.number().positive().optional(),
     location: z.string().optional(),
     timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
@@ -192,6 +193,14 @@ const estimateFormSchema = z
       return !!data.otherExteriorArea && data.otherExteriorArea.trim().length > 0;
     },
     { path: ['otherExteriorArea'], message: "Please specify the 'Etc' exterior area." }
+  )
+  .refine(
+    (data) => {
+      const hasWall = (data.exteriorAreas ?? []).includes('Wall');
+      if (!hasWall) return true;
+      return !!data.wallType;
+    },
+    { path: ['wallType'], message: "Please select a wall finish." }
   );
 
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
@@ -263,6 +272,7 @@ export function EstimateForm() {
       exteriorAreas: [],
       otherExteriorArea: '',
       otherInteriorArea: '',
+      wallType: undefined,
       location: '',
       timingPurpose: 'Maintenance or refresh',
       paintCondition: undefined,
@@ -966,12 +976,13 @@ export function EstimateForm() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
                         {exteriorAreaOptions.map((item) => {
                           const isSelected = watchExteriorAreas.includes(item.id);
+                          const isWall = item.id === 'Wall';
                           const isEtc = item.id === 'Etc';
                           return (
                             <div key={item.id} className="space-y-2">
                               <div className={cn(
                                 'flex items-center gap-3 rounded-md border p-3 transition-colors h-full bg-background',
-                                isSelected ? 'bg-primary/10 border-primary' : ''
+                                isSelected ? 'bg-primary/10 border-primary shadow-sm' : ''
                               )}>
                                 <Checkbox
                                   checked={isSelected}
@@ -982,6 +993,7 @@ export function EstimateForm() {
                                       : current.filter((v: string) => v !== item.id);
                                     form.setValue('exteriorAreas', next);
                                     if (isEtc && !checked) form.setValue('otherExteriorArea', '');
+                                    if (isWall && !checked) form.setValue('wallType', undefined);
                                   }}
                                 />
                                 <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs flex-1 min-w-0">
@@ -992,12 +1004,44 @@ export function EstimateForm() {
                                   <div className="ml-2 flex-1" onClick={(e) => e.stopPropagation()}>
                                     <Input
                                       {...form.register('otherExteriorArea')}
-                                      placeholder="Specify area"
-                                      className="h-7 text-xs"
+                                      placeholder="Specify: Garden shed, Fence..."
+                                      className="h-7 text-[10px]"
                                     />
                                   </div>
                                 )}
                               </div>
+                              {isWall && isSelected && (
+                                <div className="mt-2 p-3 border rounded-md bg-background shadow-inner">
+                                  <FormField
+                                    control={form.control}
+                                    name="wallType"
+                                    render={({ field }) => (
+                                      <FormItem className="space-y-3">
+                                        <FormLabel className="text-xs font-semibold text-primary">Wall Finish</FormLabel>
+                                        <FormControl>
+                                          <RadioGroup
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value}
+                                            className="flex flex-col space-y-1"
+                                          >
+                                            {['cladding', 'rendered', 'brick'].map((type) => (
+                                              <FormItem key={type} className="flex items-center space-x-3 space-y-0">
+                                                <FormControl>
+                                                  <RadioGroupItem value={type} />
+                                                </FormControl>
+                                                <FormLabel className="font-normal cursor-pointer text-xs capitalize">
+                                                  {type}
+                                                </FormLabel>
+                                              </FormItem>
+                                            ))}
+                                          </RadioGroup>
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+                              )}
                             </div>
                           );
                         })}

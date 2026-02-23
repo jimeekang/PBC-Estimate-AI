@@ -34,6 +34,8 @@ interface EstimateDocument {
         scopeOfPainting: string;
         roomsToPaint?: string[];
         exteriorAreas?: string[];
+        otherExteriorArea?: string;
+        wallType?: string;
         approxSize?: number;
         timingPurpose: string;
         paintCondition?: string;
@@ -181,9 +183,15 @@ export default function EstimateDetailsPage() {
                                             <p className="text-sm font-medium">Exterior Areas:</p>
                                             <div className="flex flex-wrap gap-1">
                                                 {estimate.options.exteriorAreas.map(area => (
-                                                    <Badge key={area} variant="outline" className="text-[10px]">{area}</Badge>
+                                                    <Badge key={area} variant="outline" className="text-[10px]">{area === 'Etc' && estimate.options.otherExteriorArea ? `${area} (${estimate.options.otherExteriorArea})` : area}</Badge>
                                                 ))}
                                             </div>
+                                            {estimate.options.wallType && (
+                                                <div className="mt-2">
+                                                    <p className="text-xs font-semibold text-muted-foreground uppercase">Wall Finish</p>
+                                                    <Badge variant="outline" className="text-xs capitalize">{estimate.options.wallType}</Badge>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
