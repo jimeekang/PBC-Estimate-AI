@@ -159,6 +159,9 @@ const estimateFormSchema = z.object({
     paintType: z.enum(['Oil-based', 'Water-based']),
     trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
   }).optional(),
+  ceilingOptions: z.object({
+    ceilingType: z.enum(['Flat', 'Decorative']),
+  }).optional(),
 });
 
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
@@ -172,17 +175,21 @@ function AutocompleteInput({ field }: { field: any }) {
   useEffect(() => {
     if (!places || !inputRef.current) return;
 
-    const autocompleteInstance = new places.Autocomplete(inputRef.current, {
-      componentRestrictions: { country: 'au' },
-      fields: ['formatted_address'],
-    });
+    try {
+      const autocompleteInstance = new places.Autocomplete(inputRef.current, {
+        componentRestrictions: { country: 'au' },
+        fields: ['formatted_address'],
+      });
 
-    autocompleteInstance.addListener('place_changed', () => {
-      const place = autocompleteInstance.getPlace();
-      if (place && place.formatted_address) {
-        field.onChange(place.formatted_address);
-      }
-    });
+      autocompleteInstance.addListener('place_changed', () => {
+        const place = autocompleteInstance.getPlace();
+        if (place && place.formatted_address) {
+          field.onChange(place.formatted_address);
+        }
+      });
+    } catch (error) {
+      console.warn("Google Places Autocomplete failed to initialize:", error);
+    }
   }, [places, field]);
 
   return (
@@ -215,6 +222,9 @@ export function EstimateForm() {
       trimPaintOptions: {
         paintType: 'Water-based',
         trimItems: [],
+      },
+      ceilingOptions: {
+        ceilingType: 'Flat',
       },
       name: '',
       email: user?.email || '',
@@ -273,13 +283,18 @@ export function EstimateForm() {
   const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
   const watchExteriorAreas = useWatch({ control: form.control, name: 'exteriorAreas' }) || [];
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
+  const watchGlobalCeilingPaint = useWatch({ control: form.control, name: 'paintAreas.ceilingPaint' });
   const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
 
   const hasAnyRoomTrim = watchInteriorRooms?.some(r => r.paintAreas?.trimPaint);
+  const hasAnyRoomCeiling = watchInteriorRooms?.some(r => r.paintAreas?.ceilingPaint);
   const hasHandrail = watchInteriorRooms?.some(r => r.roomName === 'Handrail');
   
   const showTrimOptions = (watchScope === 'Entire property' && watchGlobalTrimPaint) || 
                           (watchScope === 'Specific areas only' && (hasAnyRoomTrim || hasHandrail));
+
+  const showCeilingOptions = (watchScope === 'Entire property' && watchGlobalCeilingPaint) || 
+                             (watchScope === 'Specific areas only' && hasAnyRoomCeiling);
 
   const handleToggleRoom = (roomName: string) => {
     const roomIndex = fields.findIndex(f => f.roomName === roomName);
@@ -605,6 +620,26 @@ export function EstimateForm() {
                     )}
 
                     <AnimatePresence>
+                      {showCeilingOptions && (
+                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 border-2 border-primary/20 bg-primary/[0.03] rounded-xl space-y-6">
+                          <div className="space-y-3">
+                            <FormLabel className="text-primary font-bold flex items-center gap-2"><Layers className="h-4 w-4" /> Ceiling Style Options</FormLabel>
+                            <FormField control={form.control} name="ceilingOptions.ceilingType" render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormControl>
+                                  <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4">
+                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Flat" /></FormControl><FormLabel className="font-normal cursor-pointer">Flat ceiling (standard)</FormLabel></FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="Decorative" /></FormControl><FormLabel className="font-normal cursor-pointer">Decorative / patterned ceiling</FormLabel></FormItem>
+                                  </RadioGroup>
+                                </FormControl>
+                              </FormItem>
+                            )} />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
                       {showTrimOptions && (
                         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 border-2 border-primary/20 bg-primary/[0.03] rounded-xl space-y-6">
                           <div className="space-y-3">
@@ -640,59 +675,56 @@ export function EstimateForm() {
               <AnimatePresence>
                 {isExterior && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="sm:col-span-2 overflow-hidden pt-4">
-                    <FormField control={form.control} name="exteriorAreas" render={() => (
-                      <FormItem>
-                        <FormLabel>Exterior Areas</FormLabel>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
-                          {exteriorAreaOptions.map((item) => {
-                            const isEtc = item.id === 'Etc';
-                            return (
-                              <FormField 
-                                key={item.id} 
-                                control={form.control} 
-                                name="exteriorAreas" 
-                                render={({ field }) => {
-                                  const isSelected = field.value?.includes(item.id);
-                                  return (
-                                    <div className="space-y-2">
-                                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors h-full">
-                                        <FormControl>
-                                          <Checkbox 
-                                            checked={isSelected} 
-                                            onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value?.filter((value) => value !== item.id))} 
-                                          />
-                                        </FormControl>
-                                        <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs flex-1">
-                                          <item.icon className="h-4 w-4 shrink-0" /> 
-                                          {item.label}
-                                        </FormLabel>
-                                      </FormItem>
-                                      {isEtc && isSelected && (
-                                        <div className="pl-9 space-y-1">
-                                          <p className="text-[10px] text-muted-foreground font-medium italic">Please specify:</p>
-                                          <FormField
-                                            control={form.control}
-                                            name="otherExteriorArea"
-                                            render={({ field: otherField }) => (
-                                              <Input 
-                                                {...otherField}
-                                                placeholder="e.g. Garden shed, Fence, Pergola" 
-                                                className="h-8 text-xs"
-                                              />
-                                            )}
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                }} 
-                              />
-                            );
-                          })}
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <div className="space-y-4">
+                      <FormLabel>Exterior Areas</FormLabel>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
+                        {exteriorAreaOptions.map((item) => (
+                          <FormField 
+                            key={item.id} 
+                            control={form.control} 
+                            name="exteriorAreas" 
+                            render={({ field }) => {
+                              const isSelected = field.value?.includes(item.id);
+                              return (
+                                <div className="space-y-2">
+                                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors h-full">
+                                    <FormControl>
+                                      <Checkbox 
+                                        checked={isSelected} 
+                                        onCheckedChange={(checked) => {
+                                          const newValue = checked 
+                                            ? [...(field.value || []), item.id]
+                                            : (field.value || []).filter((v: string) => v !== item.id);
+                                          field.onChange(newValue);
+                                        }} 
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs flex-1">
+                                      <item.icon className="h-4 w-4 shrink-0" /> 
+                                      {item.label}
+                                    </FormLabel>
+                                  </FormItem>
+                                  {item.id === 'Etc' && isSelected && (
+                                    <motion.div 
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: 'auto' }}
+                                      className="pl-9 space-y-1"
+                                    >
+                                      <p className="text-[10px] text-muted-foreground font-medium italic">Please specify:</p>
+                                      <Input 
+                                        {...form.register('otherExteriorArea')}
+                                        placeholder="e.g. Garden shed, Fence, Pergola" 
+                                        className="h-8 text-xs"
+                                      />
+                                    </motion.div>
+                                  )}
+                                </div>
+                              );
+                            }} 
+                          />
+                        ))}
+                      </div>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
