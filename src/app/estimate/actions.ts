@@ -52,6 +52,7 @@ const estimateFormSchema = z.object({
   exteriorAreas: z.array(z.string()).optional(),
   otherExteriorArea: z.string().optional(),
   otherInteriorArea: z.string().optional(),
+  wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
   approxSize: z.coerce.number().positive().optional().nullable(),
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
