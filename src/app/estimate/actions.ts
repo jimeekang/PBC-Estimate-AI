@@ -50,6 +50,7 @@ const estimateFormSchema = z.object({
   roomsToPaint: z.array(z.string()).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
+  otherExteriorArea: z.string().optional(),
   approxSize: z.coerce.number().positive().optional().nullable(),
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
