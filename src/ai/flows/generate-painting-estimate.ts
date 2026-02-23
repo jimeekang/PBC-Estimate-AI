@@ -280,6 +280,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
     })
     .optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
+  otherInteriorArea: z.string().optional(),
   exteriorAreas: z.array(z.string()).optional(),
   otherExteriorArea: z.string().optional(),
   approxSize: z.number().optional(),
@@ -332,7 +333,8 @@ CONTEXT
 - Approx Size: {{#if input.approxSize}}{{input.approxSize}} sqm{{else}}Calculated from room selections{{/if}}
 - Paint Condition: {{#if input.paintCondition}}{{input.paintCondition}}{{else}}Fair{{/if}}
 - Ceiling Style: {{#if input.ceilingType}}{{input.ceilingType}}{{else}}Flat{{/if}}
-- Exterior Custom Area: {{#if input.otherExteriorArea}}{{input.otherExteriorArea}}{{else}}N/A{{/if}}
+- Custom Interior Area (if selected 'Etc'): {{#if input.otherInteriorArea}}{{input.otherInteriorArea}}{{else}}N/A{{/if}}
+- Custom Exterior Area (if selected 'Etc'): {{#if input.otherExteriorArea}}{{input.otherExteriorArea}}{{else}}N/A{{/if}}
 
 GENERATED PRICE DATA (AUD)
 Min: {{priceMin}}

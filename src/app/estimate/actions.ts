@@ -51,6 +51,7 @@ const estimateFormSchema = z.object({
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
   otherExteriorArea: z.string().optional(),
+  otherInteriorArea: z.string().optional(),
   approxSize: z.coerce.number().positive().optional().nullable(),
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
