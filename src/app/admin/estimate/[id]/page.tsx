@@ -18,9 +18,6 @@ import {
     Layout, 
     Sparkles, 
     Info, 
-    Droplets, 
-    Hammer, 
-    ArrowUpToLine, 
     Paintbrush, 
     Palette 
 } from 'lucide-react';
@@ -38,7 +35,6 @@ interface EstimateDocument {
         roomsToPaint?: string[];
         exteriorAreas?: string[];
         approxSize?: number;
-        existingWallColour?: string;
         timingPurpose: string;
         paintCondition?: string;
         jobDifficulty?: string[];
@@ -113,7 +109,6 @@ export default function EstimateDetailsPage() {
             </Button>
 
             <div className="grid lg:grid-cols-3 gap-6">
-                {/* Left Column: Customer & Project Specs */}
                 <div className="lg:col-span-2 space-y-6">
                     <Card className="shadow-sm border-primary/5">
                         <CardHeader className="bg-muted/30 pb-4">
@@ -199,10 +194,6 @@ export default function EstimateDetailsPage() {
                                             <Paintbrush className="h-4 w-4 text-primary" />
                                             <span>{estimate.options.approxSize ? `${estimate.options.approxSize} sqm` : 'Size N/A'}</span>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <Palette className="h-4 w-4 text-primary" />
-                                            <span>{estimate.options.existingWallColour || 'Current colour N/A'}</span>
-                                        </div>
                                     </div>
                                     
                                     <div className="space-y-2">
@@ -240,7 +231,6 @@ export default function EstimateDetailsPage() {
                     </Card>
                 </div>
 
-                {/* Right Column: AI Estimate Result */}
                 <div className="space-y-6">
                     <Card className="shadow-md border-primary/20 bg-primary/[0.02]">
                         <CardHeader className="bg-primary/10 border-b border-primary/10">
@@ -287,17 +277,6 @@ export default function EstimateDetailsPage() {
                                     No AI data generated for this entry.
                                 </div>
                             )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="bg-amber-50 border-amber-100">
-                        <CardContent className="p-4 space-y-3">
-                            <h4 className="text-sm font-bold flex items-center gap-2 text-amber-700">
-                                <Info className="h-4 w-4" /> Next Steps
-                            </h4>
-                            <p className="text-xs text-amber-800 leading-relaxed">
-                                Review the AI result against historical data. This estimate is indicative and serves as a conversation starter for the on-site inspection.
-                            </p>
                         </CardContent>
                     </Card>
                 </div>
