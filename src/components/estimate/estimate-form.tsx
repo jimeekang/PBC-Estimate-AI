@@ -677,16 +677,15 @@ export function EstimateForm() {
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="sm:col-span-2 overflow-hidden pt-4">
                     <div className="space-y-4">
                       <FormLabel>Exterior Areas</FormLabel>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
-                        {exteriorAreaOptions.map((item) => (
-                          <FormField 
-                            key={item.id} 
-                            control={form.control} 
-                            name="exteriorAreas" 
-                            render={({ field }) => {
+                      <FormField
+                        control={form.control}
+                        name="exteriorAreas"
+                        render={({ field }) => (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
+                            {exteriorAreaOptions.map((item) => {
                               const isSelected = field.value?.includes(item.id);
                               return (
-                                <div className="space-y-2">
+                                <div key={item.id} className="space-y-2">
                                   <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors h-full">
                                     <FormControl>
                                       <Checkbox 
@@ -720,10 +719,10 @@ export function EstimateForm() {
                                   )}
                                 </div>
                               );
-                            }} 
-                          />
-                        ))}
-                      </div>
+                            })}
+                          </div>
+                        )}
+                      />
                     </div>
                   </motion.div>
                 )}
