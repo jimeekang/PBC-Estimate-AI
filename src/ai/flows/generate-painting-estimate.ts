@@ -144,6 +144,11 @@ const EXTERIOR_ITEM_BASE: Record<string, { min: number; max: number }> = {
   Gutter: { min: 600, max: 1800 },
   Fascia: { min: 900, max: 2600 },
   'Exterior Trim': { min: 700, max: 2400 },
+  Deck: { min: 800, max: 3000 },
+  Paving: { min: 600, max: 2200 },
+  Pipes: { min: 300, max: 1000 },
+  Roof: { min: 2500, max: 7500 },
+  Etc: { min: 500, max: 2000 },
 };
 
 const EXTERIOR_RISK_MULTIPLIER = { min: 1.1, max: 1.3 };
@@ -317,6 +322,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
     .optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
+  otherExteriorArea: z.string().optional(),
   approxSize: z.number().optional(),
   existingWallColour: z.string().optional(),
   location: z.string().optional(),

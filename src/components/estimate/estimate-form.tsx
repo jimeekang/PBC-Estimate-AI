@@ -40,6 +40,9 @@ import {
   Info,
   Calendar,
   ExternalLink,
+  Grid3X3,
+  Wrench,
+  MoreHorizontal,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
@@ -54,6 +57,7 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, getCountFromServer } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
+import { APIProvider, useMapsLibrary } from '@vis.gl/react-google-maps';
 
 const trimItems = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
@@ -100,6 +104,11 @@ const exteriorAreaOptions = [
   { id: 'Gutter', label: 'Gutter', icon: Droplets },
   { id: 'Fascia', label: 'Fascia', icon: Sparkles },
   { id: 'Exterior Trim', label: 'Exterior Trim', icon: Hammer },
+  { id: 'Deck', label: 'Deck', icon: Layout },
+  { id: 'Paving', label: 'Paving', icon: Grid3X3 },
+  { id: 'Pipes', label: 'Pipes', icon: Wrench },
+  { id: 'Roof', label: 'Roof', icon: Home },
+  { id: 'Etc', label: 'Etc', icon: MoreHorizontal },
 ];
 
 const propertyTypes = ['Apartment', 'House / Townhouse', 'Office', 'Other'];
@@ -133,6 +142,7 @@ const estimateFormSchema = z.object({
   roomsToPaint: z.array(z.string()).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
+  otherExteriorArea: z.string().optional(),
   approxSize: z.coerce.number().positive().optional(),
   existingWallColour: z.string().optional(),
   location: z.string().optional(),
@@ -155,6 +165,35 @@ type EstimateFormValues = z.infer<typeof estimateFormSchema>;
 
 const BOOKING_URL = "https://clienthub.getjobber.com/booking/3a242065-0473-4039-ac49-e0a471328f15/";
 
+function AutocompleteInput({ field }: { field: any }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const places = useMapsLibrary('places');
+
+  useEffect(() => {
+    if (!places || !inputRef.current) return;
+
+    const autocompleteInstance = new places.Autocomplete(inputRef.current, {
+      componentRestrictions: { country: 'au' },
+      fields: ['formatted_address'],
+    });
+
+    autocompleteInstance.addListener('place_changed', () => {
+      const place = autocompleteInstance.getPlace();
+      if (place && place.formatted_address) {
+        field.onChange(place.formatted_address);
+      }
+    });
+  }, [places, field]);
+
+  return (
+    <Input 
+      {...field} 
+      ref={inputRef} 
+      placeholder="e.g. Sydney, NSW" 
+    />
+  );
+}
+
 export function EstimateForm() {
   const { user, isAdmin } = useAuth();
   const [state, setState] = useState<{data?: GeneratePaintingEstimateOutput, error?: string}>({});
@@ -163,9 +202,6 @@ export function EstimateForm() {
   const [isCountLoading, setIsCountLoading] = useState(true);
   const [isLimitReached, setIsLimitReached] = useState(false);
   const { toast } = useToast();
-
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const autocompleteRef = useRef<any>(null);
 
   const form = useForm<EstimateFormValues>({
     resolver: zodResolver(estimateFormSchema),
@@ -191,6 +227,7 @@ export function EstimateForm() {
       roomsToPaint: [],
       interiorRooms: [],
       exteriorAreas: [],
+      otherExteriorArea: '',
       existingWallColour: '',
       location: '',
       timingPurpose: 'Maintenance or refresh',
@@ -228,46 +265,13 @@ export function EstimateForm() {
     }
   }, [user, isAdmin]);
 
-  useEffect(() => {
-    const initAutocomplete = () => {
-      const google = (window as any).google;
-      if (google?.maps?.places && inputRef.current && !autocompleteRef.current) {
-        try {
-          autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
-            componentRestrictions: { country: 'au' },
-            fields: ['formatted_address'],
-          });
-
-          autocompleteRef.current.addListener('place_changed', () => {
-            const place = autocompleteRef.current.getPlace();
-            if (place && place.formatted_address) {
-              form.setValue('location', place.formatted_address);
-            }
-          });
-        } catch (err) {
-          console.warn("Google Places Autocomplete initialization failed. Ensure the domain is authorized in GCP Console.");
-        }
-      }
-    };
-
-    initAutocomplete();
-
-    const timer = setInterval(() => {
-      if ((window as any).google?.maps?.places) {
-        initAutocomplete();
-        clearInterval(timer);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [form]);
-
   const watchTypeOfWork = useWatch({ control: form.control, name: 'typeOfWork' }) || [];
   const isInterior = watchTypeOfWork.includes('Interior Painting');
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
   const watchRoomsToPaint = useWatch({ control: form.control, name: 'roomsToPaint' }) || [];
+  const watchExteriorAreas = useWatch({ control: form.control, name: 'exteriorAreas' }) || [];
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
   const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
 
@@ -347,7 +351,7 @@ export function EstimateForm() {
   }
 
   return (
-    <>
+    <APIProvider apiKey={process.env.NEXT_PUBLIC_API_KEY!}>
       <AnimatePresence>
         {isLimitReached && !isCountLoading && !isAdmin && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
@@ -372,14 +376,7 @@ export function EstimateForm() {
                 <FormItem>
                   <FormLabel>Location / Suburb</FormLabel>
                   <FormControl>
-                    <Input 
-                      placeholder="e.g. Sydney, NSW" 
-                      {...field} 
-                      ref={(e) => {
-                        field.ref(e);
-                        inputRef.current = e;
-                      }}
-                    />
+                    <AutocompleteInput field={field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -641,16 +638,54 @@ export function EstimateForm() {
                 {isExterior && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="sm:col-span-2 overflow-hidden pt-4">
                     <FormField control={form.control} name="exteriorAreas" render={() => (
-                      <FormItem><FormLabel>Exterior Areas</FormLabel><div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                        {exteriorAreaOptions.map((item) => (
-                          <FormField key={item.id} control={form.control} name="exteriorAreas" render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
-                              <FormControl><Checkbox checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value?.filter((value) => value !== item.id))} /></FormControl>
-                              <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs"><item.icon className="h-4 w-4" /> {item.label}</FormLabel>
-                            </FormItem>
-                          )} />
-                        ))}
-                      </div><FormMessage /></FormItem>
+                      <FormItem>
+                        <FormLabel>Exterior Areas</FormLabel>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
+                          {exteriorAreaOptions.map((item) => {
+                            const isEtc = item.id === 'Etc';
+                            return (
+                              <FormField 
+                                key={item.id} 
+                                control={form.control} 
+                                name="exteriorAreas" 
+                                render={({ field }) => {
+                                  const isSelected = field.value?.includes(item.id);
+                                  return (
+                                    <div className="space-y-2">
+                                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors h-full">
+                                        <FormControl>
+                                          <Checkbox 
+                                            checked={isSelected} 
+                                            onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value?.filter((value) => value !== item.id))} 
+                                          />
+                                        </FormControl>
+                                        <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs flex-1">
+                                          <item.icon className="h-4 w-4 shrink-0" /> 
+                                          {item.label}
+                                        </FormLabel>
+                                      </FormItem>
+                                      {isEtc && isSelected && (
+                                        <FormField
+                                          control={form.control}
+                                          name="otherExteriorArea"
+                                          render={({ field: otherField }) => (
+                                            <Input 
+                                              {...otherField}
+                                              placeholder="Specify other area..." 
+                                              className="h-8 text-xs"
+                                            />
+                                          )}
+                                        />
+                                      )}
+                                    </div>
+                                  );
+                                }} 
+                              />
+                            );
+                          })}
+                        </div>
+                        <FormMessage />
+                      </FormItem>
                     )} />
                   </motion.div>
                 )}
@@ -716,6 +751,6 @@ export function EstimateForm() {
         )}
       </AnimatePresence>
       {state.data && <EstimateResult result={state.data} />}
-    </>
+    </APIProvider>
   );
 }
