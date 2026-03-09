@@ -124,6 +124,13 @@ const EXTERIOR_TRIM_OPTIONS = [
   { id: 'Front Door', label: 'Front Door', icon: DoorOpen },
 ] as const;
 
+const APARTMENT_STRUCTURE_OPTIONS = [
+  { id: 'Studio' as const,    label: 'Studio',                                   bedroomCount: 0, hasMaster: false, hasEnsuite: false },
+  { id: '1Bed' as const,      label: '1 Bed Apartment',                           bedroomCount: 0, hasMaster: true,  hasEnsuite: false },
+  { id: '2Bed2Bath' as const, label: '2 Bed / 2 Bath Apartment (Ensuite inc.)',   bedroomCount: 1, hasMaster: true,  hasEnsuite: true  },
+  { id: '3Bed2Bath' as const, label: '3 Bed / 2 Bath Apartment (Ensuite inc.)',   bedroomCount: 2, hasMaster: true,  hasEnsuite: true  },
+] as const;
+
 const propertyTypes = ['Apartment', 'House / Townhouse', 'Office', 'Other'] as const;
 
 const typeOfWorkItems = [
@@ -155,6 +162,7 @@ const estimateFormSchema = z
     propertyType: z.string().min(1, 'Property type is required.'),
     houseStories: z.enum(['Single story', 'Double story or more']).optional(),
     bedroomCount: z.coerce.number().min(0).optional(),
+    bathroomCount: z.coerce.number().min(0).optional(),
     roomsToPaint: z.array(z.string()).optional(),
     interiorRooms: z.array(InteriorRoomItemSchema).optional(),
 
@@ -162,8 +170,9 @@ const estimateFormSchema = z
     exteriorAreas: z.array(z.string()).optional(),
     otherExteriorArea: z.string().optional(),
 
-    // ✅ 변경: wallType(enum) -> wallFinishes(array)
+    // wallFinishes: multi-select wall finish types
     wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).optional(),
+    wallHeight: z.coerce.number().positive().optional(),
 
     // ✅ 추가: Exterior Trim 멀티 옵션
     exteriorTrimItems: z
@@ -171,6 +180,7 @@ const estimateFormSchema = z
       .optional(),
 
     otherInteriorArea: z.string().optional(),
+    apartmentStructure: z.enum(['Studio', '1Bed', '2Bed2Bath', '3Bed2Bath']).optional(),
     approxSize: z.coerce.number().positive().optional(),
     location: z.string().optional(),
     timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
@@ -284,13 +294,13 @@ export function EstimateForm() {
     resolver: zodResolver(estimateFormSchema),
     defaultValues: {
       paintAreas: {
-        ceilingPaint: false,
-        wallPaint: false,
-        trimPaint: false,
+        ceilingPaint: true,
+        wallPaint: true,
+        trimPaint: true,
         ensuitePaint: false,
       },
       trimPaintOptions: {
-        paintType: 'Water-based',
+        paintType: 'Oil-based',
         trimItems: [],
       },
       ceilingOptions: {
@@ -304,14 +314,16 @@ export function EstimateForm() {
       propertyType: '',
       houseStories: 'Single story',
       bedroomCount: 0,
+      bathroomCount: 0,
       roomsToPaint: [],
       interiorRooms: [],
       exteriorAreas: [],
       otherExteriorArea: '',
       otherInteriorArea: '',
+      apartmentStructure: undefined,
 
-      // ✅ 변경: wallFinishes / exteriorTrimItems 기본값
       wallFinishes: [],
+      wallHeight: undefined,
       exteriorTrimItems: [],
 
       location: '',
@@ -360,6 +372,8 @@ export function EstimateForm() {
   const watchGlobalCeilingPaint = useWatch({ control: form.control, name: 'paintAreas.ceilingPaint' });
   const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
   const watchExteriorAreas = useWatch({ control: form.control, name: 'exteriorAreas' }) || [];
+  const watchApartmentStructure = useWatch({ control: form.control, name: 'apartmentStructure' });
+  const isApartmentType = watchPropertyType === 'Apartment';
 
   const hasAnyRoomTrim = watchInteriorRooms?.some((r) => r.paintAreas?.trimPaint);
   const hasAnyRoomCeiling = watchInteriorRooms?.some((r) => r.paintAreas?.ceilingPaint);
@@ -374,6 +388,15 @@ const showCeilingOptions =
   isInterior &&
   ((watchScope === 'Entire property' && watchGlobalCeilingPaint) ||
     (watchScope === 'Specific areas only' && hasAnyRoomCeiling));
+
+  useEffect(() => {
+    if (!isInterior || !isApartmentType || watchScope !== 'Entire property' || !watchApartmentStructure) return;
+    const option = APARTMENT_STRUCTURE_OPTIONS.find((o) => o.id === watchApartmentStructure);
+    if (!option) return;
+    form.setValue('bedroomCount', option.bedroomCount);
+    form.setValue('roomsToPaint', option.hasMaster ? ['Master Bedroom'] : []);
+    form.setValue('paintAreas.ensuitePaint', option.hasEnsuite);
+  }, [watchApartmentStructure, isInterior, isApartmentType, watchScope]);
 
   const handleToggleRoom = (roomName: string) => {
     const roomIndex = fields.findIndex((f) => f.roomName === roomName);
@@ -715,162 +738,257 @@ const showCeilingOptions =
       className="sm:col-span-2 overflow-hidden space-y-8 pt-4"
     >
       {watchScope === 'Entire property' ? (
-        <div className="space-y-6">
-          <div className="grid sm:grid-cols-2 gap-4">
+        isApartmentType ? (
+          /* ── Apartment: simplified structure selection ── */
+          <div className="space-y-6">
             <FormField
               control={form.control}
-              name="bedroomCount"
+              name="apartmentStructure"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Number of Other Bedrooms</FormLabel>
+                <FormItem className="space-y-3">
+                  <FormLabel className="text-base font-bold flex items-center gap-2">
+                    <Home className="h-4 w-4 text-primary" /> Apartment Structure
+                  </FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      onKeyDown={preventInvalidCharsNoDecimal}
-                      {...field}
+                    <RadioGroup
+                      onValueChange={field.onChange}
                       value={field.value ?? ''}
-                      onChange={(e) =>
-                        field.onChange(e.target.value === ' ' ? undefined : parseInt(e.target.value))
-                      }
-                    />
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                    >
+                      {APARTMENT_STRUCTURE_OPTIONS.map((opt) => (
+                        <FormItem key={opt.id}>
+                          <FormLabel
+                            className={cn(
+                              'flex items-center gap-3 rounded-md border p-4 cursor-pointer transition-colors font-normal w-full',
+                              field.value === opt.id
+                                ? 'border-primary bg-primary/10'
+                                : 'bg-background hover:bg-accent/50'
+                            )}
+                          >
+                            <FormControl>
+                              <RadioGroupItem value={opt.id} />
+                            </FormControl>
+                            <span className="text-sm">{opt.label}</span>
+                          </FormLabel>
+                        </FormItem>
+                      ))}
+                    </RadioGroup>
                   </FormControl>
-                  <FormDescription>Excluding Master Bedroom</FormDescription>
+                  <FormDescription className="text-xs text-muted-foreground">
+                    Price includes Lounge, Dining, Kitchen &amp; Laundry as standard.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          </div>
 
-          <div className="space-y-4">
-            <FormLabel>Areas to Paint (Interior)</FormLabel>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
-              {interiorRoomList
-                .filter((r) => r === 'Master Bedroom' || !r.includes('Bedroom'))
-                .map((room) => (
-                  <div key={room} className="space-y-2">
-                    <div
-                      className={cn(
-                        'flex flex-row items-center gap-3 rounded-md border p-3 transition-colors bg-background',
-                        watchRoomsToPaint.includes(room) ? 'bg-primary/10 border-primary' : ''
-                      )}
-                    >
-                      <Checkbox
-                        checked={watchRoomsToPaint.includes(room)}
-                        onCheckedChange={(checked) => {
-                          const current = form.getValues('roomsToPaint') || [];
-                          const next = checked
-                            ? [...current, room]
-                            : current.filter((v) => v !== room);
-                          form.setValue('roomsToPaint', next);
-                          if (room === 'Etc' && !checked) form.setValue('otherInteriorArea', '');
-                        }}
-                      />
-                      <FormLabel className="font-normal cursor-pointer text-xs flex-1">{room}</FormLabel>
-
-                      {room === 'Etc' && watchRoomsToPaint.includes('Etc') && (
-                        <div className="ml-2 flex-1">
-                          <Input
-                            {...form.register('otherInteriorArea')}
-                            placeholder="Specify room"
-                            className="h-7 text-xs"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-            </div>
-            <FormField
-              control={form.control}
-              name="otherInteriorArea"
-              render={() => <FormMessage />}
-            />
-          </div>
-
-          <AnimatePresence>
-            {watchRoomsToPaint.includes('Master Bedroom') && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-4 border rounded-lg bg-primary/5 border-primary/20"
-              >
+            <div className="space-y-4">
+              <FormLabel>Paint Surfaces</FormLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-md border p-4 bg-background">
                 <FormField
                   control={form.control}
-                  name="paintAreas.ensuitePaint"
+                  name="paintAreas.ceilingPaint"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
                       <FormControl>
                         <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
-                      <FormLabel className="font-bold text-primary cursor-pointer text-sm">
-                        Include Master Ensuite?
-                      </FormLabel>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center gap-2 cursor-pointer">
+                          <PaintRoller className="h-5 w-5" /> Ceiling
+                        </FormLabel>
+                      </div>
                     </FormItem>
                   )}
                 />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div className="space-y-4">
-            <FormLabel>Paint Surfaces (Global)</FormLabel>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-md border p-4 bg-background">
+                <FormField
+                  control={form.control}
+                  name="paintAreas.wallPaint"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center gap-2 cursor-pointer">
+                          <Paintbrush className="h-5 w-5" /> Walls
+                        </FormLabel>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="paintAreas.trimPaint"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center gap-2 cursor-pointer">
+                          <Palette className="h-5 w-5" /> Trim
+                        </FormLabel>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ── House / Other: existing detailed UI ── */
+          <div className="space-y-6">
+            <div className="grid sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="paintAreas.ceilingPaint"
+                name="bedroomCount"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                  <FormItem>
+                    <FormLabel>Bedrooms</FormLabel>
                     <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        onKeyDown={preventInvalidCharsNoDecimal}
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))
+                        }
+                      />
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="flex items-center gap-2 cursor-pointer">
-                        <PaintRoller className="h-5 w-5" /> Ceiling
-                      </FormLabel>
-                    </div>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
-                name="paintAreas.wallPaint"
+                name="bathroomCount"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                  <FormItem>
+                    <FormLabel>Bathrooms (Ensuite inc.)</FormLabel>
                     <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        onKeyDown={preventInvalidCharsNoDecimal}
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))
+                        }
+                      />
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="flex items-center gap-2 cursor-pointer">
-                        <Paintbrush className="h-5 w-5" /> Walls
-                      </FormLabel>
-                    </div>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="paintAreas.trimPaint"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
-                    <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="flex items-center gap-2 cursor-pointer">
-                        <Palette className="h-5 w-5" /> Trim
-                      </FormLabel>
-                    </div>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
+
+            <div className="space-y-4">
+              <FormLabel>Areas to Paint (Interior)</FormLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+                {interiorRoomList
+                  .filter((r) => r !== 'Master Bedroom' && !r.includes('Bedroom') && r !== 'Bathroom')
+                  .map((room) => (
+                    <div key={room} className="space-y-2">
+                      <div
+                        className={cn(
+                          'flex flex-row items-center gap-3 rounded-md border p-3 transition-colors bg-background',
+                          watchRoomsToPaint.includes(room) ? 'bg-primary/5 border-primary' : ''
+                        )}
+                      >
+                        <Checkbox
+                          checked={watchRoomsToPaint.includes(room)}
+                          onCheckedChange={(checked) => {
+                            const current = form.getValues('roomsToPaint') || [];
+                            const next = checked
+                              ? [...current, room]
+                              : current.filter((v) => v !== room);
+                            form.setValue('roomsToPaint', next);
+                            if (room === 'Etc' && !checked) form.setValue('otherInteriorArea', '');
+                          }}
+                        />
+                        <FormLabel className="font-normal cursor-pointer text-xs flex-1">{room}</FormLabel>
+
+                        {room === 'Etc' && watchRoomsToPaint.includes('Etc') && (
+                          <div className="ml-2 flex-1">
+                            <Input
+                              {...form.register('otherInteriorArea')}
+                              placeholder="Specify room"
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              <FormField
+                control={form.control}
+                name="otherInteriorArea"
+                render={() => <FormMessage />}
+              />
+            </div>
+
+            <div className="space-y-4">
+              <FormLabel>Paint Surfaces (Global)</FormLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-md border p-4 bg-background">
+                <FormField
+                  control={form.control}
+                  name="paintAreas.ceilingPaint"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center gap-2 cursor-pointer">
+                          <PaintRoller className="h-5 w-5" /> Ceiling
+                        </FormLabel>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="paintAreas.wallPaint"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center gap-2 cursor-pointer">
+                          <Paintbrush className="h-5 w-5" /> Walls
+                        </FormLabel>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="paintAreas.trimPaint"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center gap-2 cursor-pointer">
+                          <Palette className="h-5 w-5" /> Trim
+                        </FormLabel>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
@@ -898,8 +1016,8 @@ const showCeilingOptions =
                 <Card
                   key={roomName}
                   className={cn(
-                    'transition-all border-2',
-                    isSelected ? 'border-primary bg-primary/[0.02] shadow-sm' : 'border-border opacity-60'
+                    'border transition-colors',
+                    isSelected ? 'border-primary bg-primary/5' : 'bg-background'
                   )}
                 >
                   <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
@@ -1095,7 +1213,39 @@ const showCeilingOptions =
                     exit={{ opacity: 0, height: 0 }}
                     className="sm:col-span-2 overflow-hidden pt-4"
                   >
-                    <div className="space-y-4">
+                    <div className="space-y-6">
+                      {watchPropertyType === 'House / Townhouse' && (
+                        <FormField
+                          control={form.control}
+                          name="wallHeight"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Approx. Wall Height (m)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="2"
+                                  max="12"
+                                  placeholder="e.g. 2.7 (single) / 5.4 (double)"
+                                  onKeyDown={preventInvalidChars}
+                                  {...field}
+                                  value={field.value ?? ''}
+                                  onChange={(e) =>
+                                    field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))
+                                  }
+                                />
+                              </FormControl>
+                              <FormDescription className="text-xs text-muted-foreground">
+                                Single story ≈ 2.4–3.0m, Double story ≈ 4.8–6.0m
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+
+                      <div className="space-y-4">
                       <FormLabel>Exterior Areas</FormLabel>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
@@ -1252,6 +1402,7 @@ const showCeilingOptions =
                           );
                         })}
                       </div>
+                    </div>
                     </div>
                   </motion.div>
                 )}

@@ -69,7 +69,7 @@ export default function RootLayout({
         </AuthProvider>
         <Script
           id="google-maps-places-api"
-          src="https://maps.googleapis.com/maps/api/js?key=[REDACTED]&libraries=places"
+          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_API_KEY || ''}&libraries=places`}
           strategy="beforeInteractive"
         />
       </body>

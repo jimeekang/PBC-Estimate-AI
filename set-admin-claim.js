@@ -18,13 +18,13 @@ const isAdmin = false;
 // Initialize Firebase Admin SDK
 try {
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+    credential: admin.credential.cert(serviceAccount),
   });
 } catch (error) {
-    if (error.code !== 'app/duplicate-app') {
-        console.error('Error initializing Firebase Admin SDK:', error);
-        process.exit(1);
-    }
+  if (error.code !== 'app/duplicate-app') {
+    console.error('Error initializing Firebase Admin SDK:', error);
+    process.exit(1);
+  }
 }
 
 // Find user by email and update permissions
@@ -37,16 +37,24 @@ async function updateAdminClaim() {
     await admin.auth().setCustomUserClaims(uid, { admin: isAdmin });
 
     if (isAdmin) {
-      console.log(`Success: Admin permission granted to ${userEmail} (UID: ${uid}).`);
+      console.log(
+        `Success: Admin permission granted to ${userEmail} (UID: ${uid}).`,
+      );
     } else {
-      console.log(`Success: Admin permission revoked from ${userEmail} (UID: ${uid}).`);
+      console.log(
+        `Success: Admin permission revoked from ${userEmail} (UID: ${uid}).`,
+      );
     }
-    
-    console.log('The user must log out and log back in for the changes to take effect.');
+
+    console.log(
+      'The user must log out and log back in for the changes to take effect.',
+    );
     process.exit(0);
   } catch (error) {
     if (error.code === 'auth/user-not-found') {
-      console.error(`Error: User '${userEmail}' not found. Please ensure the user has signed up first.`);
+      console.error(
+        `Error: User '${userEmail}' not found. Please ensure the user has signed up first.`,
+      );
     } else {
       console.error('Error setting permissions:', error);
     }

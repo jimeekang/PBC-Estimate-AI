@@ -1,0 +1,8 @@
+{
+  "apphosting": [
+    {
+      "backendId": "studio",
+      "rootDir": "."
+    }
+  ]
+}

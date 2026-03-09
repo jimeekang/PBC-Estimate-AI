@@ -47,12 +47,15 @@ const estimateFormSchema = z.object({
   propertyType: z.string().min(1, 'Property type is required.'),
   houseStories: z.enum(['Single story', 'Double story or more']).optional(),
   bedroomCount: z.coerce.number().min(0).optional(),
+  bathroomCount: z.coerce.number().min(0).optional(),
   roomsToPaint: z.array(z.string()).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string()).optional(),
   otherExteriorArea: z.string().optional(),
   otherInteriorArea: z.string().optional(),
   wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
+  wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).optional(),
+  wallHeight: z.coerce.number().positive().optional().nullable(),
   approxSize: z.coerce.number().positive().optional().nullable(),
   location: z.string().optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
@@ -94,10 +97,20 @@ export async function submitEstimate(formData: any) {
 
     const rawData = validatedFields.data;
     const approxSize = rawData.approxSize || undefined;
+    const wallHeight = rawData.wallHeight || undefined;
+
+    // wallFinishes (multi) → wallType (single): pick most expensive for anchor
+    const WALL_TYPE_PRIORITY: Record<string, number> = { rendered: 3, brick: 2, cladding: 1 };
+    const wallFinishes = rawData.wallFinishes ?? [];
+    const wallType = wallFinishes.length
+      ? wallFinishes.sort((a, b) => (WALL_TYPE_PRIORITY[b] ?? 0) - (WALL_TYPE_PRIORITY[a] ?? 0))[0]
+      : undefined;
 
     const aiPayload: any = stripUndefined({
       ...rawData,
       approxSize,
+      wallHeight,
+      wallType,
       ceilingType: rawData.ceilingOptions?.ceilingType,
     });
 

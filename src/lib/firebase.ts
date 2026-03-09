@@ -72,7 +72,10 @@ export const getEstimates = async () => {
   if (!firebaseConfig.apiKey) return [];
   const estimatesCol = collection(db, 'estimates');
   const estimateSnapshot = await getDocs(estimatesCol);
-  const estimateList = estimateSnapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+  const estimateList = estimateSnapshot.docs.map(d => ({
+    ...d.data(),
+    id: d.id,
+  }));
   return estimateList;
 };
 
