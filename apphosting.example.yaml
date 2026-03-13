@@ -13,7 +13,10 @@ env:
       - RUNTIME
 
   - variable: NEXT_PUBLIC_API_KEY
-    value: "YOUR_FIREBASE_API_KEY"
+    secret: firebase-web-api-key
+    availability:
+      - BUILD
+      - RUNTIME
   - variable: NEXT_PUBLIC_AUTH_DOMAIN
     value: "YOUR_PROJECT.firebaseapp.com"
   - variable: NEXT_PUBLIC_PROJECT_ID
@@ -24,3 +27,8 @@ env:
     value: "YOUR_SENDER_ID"
   - variable: NEXT_PUBLIC_APP_ID
     value: "YOUR_APP_ID"
+  - variable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    secret: google-maps-api-key
+    availability:
+      - BUILD
+      - RUNTIME

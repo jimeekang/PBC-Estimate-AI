@@ -23,7 +23,24 @@ Professional painting estimate service using AI, "PBC Estimate AI".
 
 ### 1. Environment Configuration
 
-Set up the required API keys in the `.env` file.
+For local development, set the required values in `.env` using `.env.example` as the template.
+
+For Firebase App Hosting deployments from Git:
+
+- Keep `apphosting.yaml` out of Git. It is already ignored in `.gitignore`.
+- Copy `apphosting.example.yaml` to `apphosting.yaml`.
+- Use Firebase App Hosting secrets for API keys instead of hardcoding them in `apphosting.yaml`.
+- Keep non-secret Firebase web config values in `value:` entries unless you intentionally want to manage those as secrets too.
+
+Example secret setup commands:
+
+```bash
+firebase apphosting:secrets:set firebase-web-api-key
+firebase apphosting:secrets:set google-maps-api-key
+firebase apphosting:secrets:set gemini-api-key
+```
+
+This project already reads `NEXT_PUBLIC_API_KEY` and `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` from environment variables at build/runtime, so the deployed app will use the currently registered Firebase secrets without storing the actual keys in Git.
 
 ### 2. Set Admin Permissions
 
@@ -46,4 +63,3 @@ If the login popup closes immediately:
 
 1. Ensure **third-party cookies** are allowed in your browser settings.
 2. Register the current domain in Firebase Console > Authentication > Settings > **Authorized domains**.
-
