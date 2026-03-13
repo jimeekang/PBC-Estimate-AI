@@ -1,5 +1,6 @@
 const admin = require('firebase-admin');
 require('dotenv').config();
+const { readFileSync } = require('node:fs');
 
 const userEmail = process.argv[2] || process.env.ADMIN_USER_EMAIL;
 const isAdmin = (process.argv[3] || process.env.ADMIN_IS_ADMIN || 'false').toLowerCase() === 'true';
@@ -7,6 +8,12 @@ const isAdmin = (process.argv[3] || process.env.ADMIN_IS_ADMIN || 'false').toLow
 function getCredential() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     return admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON));
+  }
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+    return admin.credential.cert(
+      JSON.parse(readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8'))
+    );
   }
 
   return admin.credential.applicationDefault();

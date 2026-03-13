@@ -365,10 +365,20 @@ export function EstimateForm() {
   };
 
   useEffect(() => {
-    if (user) {
-      setIsCountLoading(true);
-      fetchEstimateCount(user.uid).finally(() => setIsCountLoading(false));
+    if (!user) {
+      setIsCountLoading(false);
+      return;
     }
+
+    if (isAdmin) {
+      setEstimateCount(0);
+      setIsLimitReached(false);
+      setIsCountLoading(false);
+      return;
+    }
+
+    setIsCountLoading(true);
+    fetchEstimateCount(user.uid).finally(() => setIsCountLoading(false));
   }, [user, isAdmin]);
 
   const watchTypeOfWork = useWatch({ control: form.control, name: 'typeOfWork' }) || [];
@@ -441,17 +451,14 @@ const showCeilingOptions =
 
     const idToken = await user.getIdToken();
 
-    if (!isAdmin) {
-      const currentCount = await fetchEstimateCount(user.uid);
-      if (currentCount >= 2) {
-        setIsLimitReached(true);
-        toast({
-          variant: 'destructive',
-          title: 'Limit Reached',
-          description: 'You have already used your 2 free estimates.',
-        });
-        return;
-      }
+    if (!isAdmin && estimateCount >= 2) {
+      setIsLimitReached(true);
+      toast({
+        variant: 'destructive',
+        title: 'Limit Reached',
+        description: 'You have already used your 2 free estimates.',
+      });
+      return;
     }
 
     setIsPending(true);

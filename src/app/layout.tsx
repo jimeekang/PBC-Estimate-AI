@@ -6,7 +6,6 @@ import { AuthProvider } from '@/providers/auth-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { Toaster } from '@/components/ui/toaster';
-import Script from 'next/script';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -50,14 +49,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
       <body className={cn('font-body antialiased h-full', inter.variable)}>
         <AuthProvider>
           <div className="flex flex-col min-h-full">
@@ -67,11 +58,6 @@ export default function RootLayout({
           </div>
           <Toaster />
         </AuthProvider>
-        <Script
-          id="google-maps-places-api"
-          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_API_KEY || ''}&libraries=places`}
-          strategy="beforeInteractive"
-        />
       </body>
     </html>
   );

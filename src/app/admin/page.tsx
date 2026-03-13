@@ -11,6 +11,7 @@ import { LayoutDashboard, ClipboardList, Home, Paintbrush, Loader2 } from 'lucid
 export default function AdminPage() {
   const { user, loading, isAdmin } = useAuth();
   const router = useRouter();
+  const [estimates, setEstimates] = useState<any[]>([]);
   const [stats, setStats] = useState({
     total: 0,
     interior: 0,
@@ -26,12 +27,13 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (isAdmin) {
-      const fetchStats = async () => {
+      const fetchAdminData = async () => {
         try {
-          const estimates = await getEstimates();
-          const total = estimates.length;
-          const interior = estimates.filter((e: any) => e.options?.typeOfWork?.includes('Interior Painting')).length;
-          const exterior = estimates.filter((e: any) => e.options?.typeOfWork?.includes('Exterior Painting')).length;
+          const nextEstimates = await getEstimates();
+          const total = nextEstimates.length;
+          const interior = nextEstimates.filter((e: any) => e.options?.typeOfWork?.includes('Interior Painting')).length;
+          const exterior = nextEstimates.filter((e: any) => e.options?.typeOfWork?.includes('Exterior Painting')).length;
+          setEstimates(nextEstimates);
           setStats({ total, interior, exterior });
         } catch (error) {
           console.error("Error fetching stats:", error);
@@ -39,9 +41,12 @@ export default function AdminPage() {
           setIsStatsLoading(false);
         }
       };
-      fetchStats();
+
+      fetchAdminData();
+    } else if (!loading) {
+      setIsStatsLoading(false);
     }
-  }, [isAdmin]);
+  }, [isAdmin, loading]);
 
   if (loading) {
     return (
@@ -111,7 +116,7 @@ export default function AdminPage() {
           <CardTitle>Recent Estimates</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <EstimatesTable />
+          <EstimatesTable estimates={estimates} loading={isStatsLoading} />
         </CardContent>
       </Card>
     </div>

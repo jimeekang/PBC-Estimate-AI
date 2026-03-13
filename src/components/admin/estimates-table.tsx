@@ -30,14 +30,26 @@ interface EstimateDocument {
   createdAt: any;
 }
 
-export default function EstimatesTable() {
-    const [estimates, setEstimates] = useState<EstimateDocument[]>([]);
+interface EstimatesTableProps {
+    estimates?: EstimateDocument[];
+    loading?: boolean;
+}
+
+export default function EstimatesTable({ estimates: initialEstimates, loading: initialLoading = true }: EstimatesTableProps) {
+    const [estimates, setEstimates] = useState<EstimateDocument[]>(initialEstimates ?? []);
     const [filteredEstimates, setFilteredEstimates] = useState<EstimateDocument[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(initialEstimates ? initialLoading : true);
     const [search, setSearch] = useState('');
     const router = useRouter();
 
     useEffect(() => {
+        if (initialEstimates) {
+            setEstimates(initialEstimates);
+            setFilteredEstimates(initialEstimates);
+            setLoading(initialLoading);
+            return;
+        }
+
         const fetchEstimates = async () => {
             setLoading(true);
             try {
@@ -55,7 +67,7 @@ export default function EstimatesTable() {
         };
 
         fetchEstimates();
-    }, []);
+    }, [initialEstimates, initialLoading]);
 
     useEffect(() => {
         const filtered = estimates.filter(est => 
