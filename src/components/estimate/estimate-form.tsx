@@ -471,8 +471,10 @@ const showCeilingOptions =
     setIsPending(false);
   }
 
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_API_KEY;
+
   return (
-    <APIProvider apiKey={process.env.NEXT_PUBLIC_API_KEY!}>
+    <APIProvider apiKey={googleMapsApiKey!}>
       <AnimatePresence>
         {isLimitReached && !isCountLoading && !isAdmin && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
