@@ -27,8 +27,8 @@ For local development, set the required values in `.env` using `.env.example` as
 
 For Firebase App Hosting deployments from Git:
 
-- Keep `apphosting.yaml` out of Git. It is already ignored in `.gitignore`.
 - Copy `apphosting.example.yaml` to `apphosting.yaml`.
+- Commit `apphosting.yaml` to Git after replacing sensitive API keys with Firebase App Hosting `secret:` references.
 - Use Firebase App Hosting secrets for API keys instead of hardcoding them in `apphosting.yaml`.
 - Keep non-secret Firebase web config values in `value:` entries unless you intentionally want to manage those as secrets too.
 

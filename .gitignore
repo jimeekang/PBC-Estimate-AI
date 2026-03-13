@@ -22,8 +22,8 @@
 # Vercel
 .vercel
 
-# App Hosting (contains API keys)
-apphosting.yaml
+# App Hosting
+# Safe to commit when API keys are referenced via Secret Manager.
 
 # Local Env Files
 .env.local
@@ -41,3 +41,4 @@ tsconfig.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+firebase-debug.log
