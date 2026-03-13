@@ -1,24 +1,27 @@
 const admin = require('firebase-admin');
+require('dotenv').config();
 
-// ===============================================================================================
-// === Admin Permission Setup Guide =============================================================
-// ===============================================================================================
+const userEmail = process.argv[2] || process.env.ADMIN_USER_EMAIL;
+const isAdmin = (process.argv[3] || process.env.ADMIN_IS_ADMIN || 'false').toLowerCase() === 'true';
 
-// 1. Service Account Key File Path (Already configured)
-const serviceAccount = require('./studio-5245261553-378c8-firebase-adminsdk-fbsvc-032b22c6a5.json');
+function getCredential() {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    return admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON));
+  }
 
-// 2. Enter the email address of the user to modify admin permissions for.
-const userEmail = 'kjm12081@gmail.com';
+  return admin.credential.applicationDefault();
+}
 
-// 3. Set permission (true: Grant, false: Revoke)
-const isAdmin = false;
-
-// ===============================================================================================
+if (!userEmail) {
+  console.error('Usage: node set-admin-claim.js <email> <true|false>');
+  process.exit(1);
+}
 
 // Initialize Firebase Admin SDK
 try {
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: getCredential(),
+    projectId: process.env.NEXT_PUBLIC_PROJECT_ID,
   });
 } catch (error) {
   if (error.code !== 'app/duplicate-app') {

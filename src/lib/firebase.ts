@@ -9,9 +9,9 @@ import {
   setPersistence,
   Auth,
 } from 'firebase/auth';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import {
   initializeFirestore,
-  getFirestore,
   collection,
   getDocs,
   doc,
@@ -37,6 +37,7 @@ const app: FirebaseApp =
       : ({} as FirebaseApp);
 
 const auth: Auth = firebaseConfig.apiKey ? getAuth(app) : ({} as Auth);
+const appCheckSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY;
 
 // ✅ IMPORTANT: ignoreUndefinedProperties prevents Firestore from rejecting undefined fields
 const db: Firestore = firebaseConfig.apiKey
@@ -49,6 +50,17 @@ const db: Firestore = firebaseConfig.apiKey
 // Set persistence to local storage only on the client-side
 if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
   setPersistence(auth, browserLocalPersistence);
+
+  if (appCheckSiteKey) {
+    if (window.location.hostname === 'localhost') {
+      (self as typeof self & { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  }
 }
 
 // Google Auth Provider

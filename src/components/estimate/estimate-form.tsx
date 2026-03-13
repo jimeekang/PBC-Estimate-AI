@@ -55,7 +55,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useAuth } from '@/providers/auth-provider';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, where, getCountFromServer } from 'firebase/firestore';
+import { collection, query, where, getCountFromServer } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { APIProvider, useMapsLibrary } from '@vis.gl/react-google-maps';
 
@@ -160,7 +160,7 @@ const estimateFormSchema = z
       .min(1, 'Please select at least one type of work.'),
     scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
     propertyType: z.string().min(1, 'Property type is required.'),
-    houseStories: z.enum(['Single story', 'Double story or more']).optional(),
+    houseStories: z.enum(['1 storey', '2 storey', '3 storey']).optional(),
     bedroomCount: z.coerce.number().min(0).optional(),
     bathroomCount: z.coerce.number().min(0).optional(),
     roomsToPaint: z.array(z.string()).optional(),
@@ -248,6 +248,15 @@ const estimateFormSchema = z
       return (data.exteriorTrimItems ?? []).length > 0;
     },
     { path: ['exteriorTrimItems'], message: 'Please select at least one exterior trim item.' }
+  )
+  // houseStories required when Exterior Painting is selected
+  .refine(
+    (data) => {
+      const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
+      if (!hasExterior) return true;
+      return !!data.houseStories;
+    },
+    { path: ['houseStories'], message: 'Please select the number of stories for exterior painting.' }
   );
 
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
@@ -312,7 +321,7 @@ export function EstimateForm() {
       typeOfWork: [],
       scopeOfPainting: 'Entire property',
       propertyType: '',
-      houseStories: 'Single story',
+      houseStories: '1 storey',
       bedroomCount: 0,
       bathroomCount: 0,
       roomsToPaint: [],
@@ -429,6 +438,9 @@ const showCeilingOptions =
 
   async function onSubmit(values: EstimateFormValues) {
     if (!user) return;
+
+    const idToken = await user.getIdToken();
+
     if (!isAdmin) {
       const currentCount = await fetchEstimateCount(user.uid);
       if (currentCount >= 2) {
@@ -443,30 +455,22 @@ const showCeilingOptions =
     }
 
     setIsPending(true);
-    const result = await submitEstimate(values);
+    const result = await submitEstimate({ formData: values, idToken });
 
     if (result.error) {
+      if (result.limitReached) {
+        setIsLimitReached(true);
+      }
       toast({ variant: 'destructive', title: 'Error', description: result.error });
     } else if (result.data) {
-      try {
-        await addDoc(collection(db, 'estimates'), {
-          userId: user.uid,
-          options: result.sanitizedOptions ?? values,
-          estimate: result.data,
-          createdAt: serverTimestamp(),
-        });
-
-        if (!isAdmin) {
-          const currentCount = await fetchEstimateCount(user.uid);
-          setEstimateCount(currentCount);
-          setIsLimitReached(currentCount >= 2);
-        }
-        setState(result);
-        toast({ title: 'Success', description: 'Estimate generated!' });
-      } catch (dbError: any) {
-        console.error('Firestore Save Error:', dbError);
-        toast({ variant: 'destructive', title: 'Storage Error', description: 'Failed to save estimate.' });
+      if (!isAdmin) {
+        const nextCount =
+          typeof result.estimateCount === 'number' ? result.estimateCount : await fetchEstimateCount(user.uid);
+        setEstimateCount(nextCount);
+        setIsLimitReached(result.limitReached ?? nextCount >= 2);
       }
+      setState(result);
+      toast({ title: 'Success', description: 'Estimate generated!' });
     }
     setIsPending(false);
   }
@@ -623,7 +627,7 @@ const showCeilingOptions =
               </AnimatePresence>
 
               <AnimatePresence>
-                {watchPropertyType === 'House / Townhouse' && (
+                {(watchPropertyType === 'House / Townhouse' || isExterior) && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -635,7 +639,7 @@ const showCeilingOptions =
                       name="houseStories"
                       render={({ field }) => (
                         <FormItem className="space-y-3">
-                          <FormLabel>Number of Stories</FormLabel>
+                          <FormLabel>Number of Stories {isExterior && <span className="text-destructive">*</span>}</FormLabel>
                           <FormControl>
                             <RadioGroup
                               onValueChange={field.onChange}
@@ -644,18 +648,25 @@ const showCeilingOptions =
                             >
                               <FormItem className="flex items-center space-x-3 space-y-0">
                                 <FormControl>
-                                  <RadioGroupItem value="Single story" />
+                                  <RadioGroupItem value="1 storey" />
                                 </FormControl>
-                                <FormLabel className="font-normal cursor-pointer">Single story</FormLabel>
+                                <FormLabel className="font-normal cursor-pointer">1 storey</FormLabel>
                               </FormItem>
                               <FormItem className="flex items-center space-x-3 space-y-0">
                                 <FormControl>
-                                  <RadioGroupItem value="Double story or more" />
+                                  <RadioGroupItem value="2 storey" />
                                 </FormControl>
-                                <FormLabel className="font-normal cursor-pointer">Double story or more</FormLabel>
+                                <FormLabel className="font-normal cursor-pointer">2 storey</FormLabel>
+                              </FormItem>
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="3 storey" />
+                                </FormControl>
+                                <FormLabel className="font-normal cursor-pointer">3 storey</FormLabel>
                               </FormItem>
                             </RadioGroup>
                           </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
@@ -1229,7 +1240,7 @@ const showCeilingOptions =
                                   step="0.1"
                                   min="2"
                                   max="12"
-                                  placeholder="e.g. 2.7 (single) / 5.4 (double)"
+                                  placeholder="e.g. 2.7 (1 storey) / 5.4 (2 storey) / 8.1 (3 storey)"
                                   onKeyDown={preventInvalidChars}
                                   {...field}
                                   value={field.value ?? ''}
@@ -1239,7 +1250,7 @@ const showCeilingOptions =
                                 />
                               </FormControl>
                               <FormDescription className="text-xs text-muted-foreground">
-                                Single story ≈ 2.4–3.0m, Double story ≈ 4.8–6.0m
+                                1 storey ≈ 2.4–3.0m, 2 storey ≈ 4.8–6.0m, 3 storey ≈ 7.2–9.0m
                               </FormDescription>
                               <FormMessage />
                             </FormItem>

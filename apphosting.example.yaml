@@ -32,3 +32,5 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY
+    value: "YOUR_RECAPTCHA_V3_SITE_KEY"

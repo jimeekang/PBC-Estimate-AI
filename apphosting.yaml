@@ -21,17 +21,19 @@ env:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_AUTH_DOMAIN
-    value: "studio-5245261553-378c8.firebaseapp.com"
+    value: 'studio-5245261553-378c8.firebaseapp.com'
   - variable: NEXT_PUBLIC_PROJECT_ID
-    value: "studio-5245261553-378c8"
+    value: 'studio-5245261553-378c8'
   - variable: NEXT_PUBLIC_STORAGE_BUCKET
-    value: "studio-5245261553-378c8.firebasestorage.app"
+    value: 'studio-5245261553-378c8.firebasestorage.app'
   - variable: NEXT_PUBLIC_MESSAGING_SENDER_ID
-    value: "176887759680"
+    value: '176887759680'
   - variable: NEXT_PUBLIC_APP_ID
-    value: "1:176887759680:web:2debce89454733ddb970a5"
+    value: '1:176887759680:web:2debce89454733ddb970a5'
   - variable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
     secret: google-maps-api-key
     availability:
       - BUILD
       - RUNTIME
+  - variable: NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY
+    value: '6LdOr4ksAAAAAK3I189aD4J6kFNKYT8vO0NKRiYr'

@@ -1,7 +1,13 @@
 'use server';
 
 import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
+import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
+
+const MIN_SUBMIT_INTERVAL_MS = 30 * 1000;
+const MAX_SUBMITS_PER_HOUR = 5;
+const MAX_SUBMITS_PER_DAY = 10;
 
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -25,8 +31,8 @@ function stripUndefined<T>(value: T): T {
 }
 
 const InteriorRoomItemSchema = z.object({
-  roomName: z.string(),
-  otherRoomName: z.string().optional(),
+  roomName: z.string().min(1).max(100),
+  otherRoomName: z.string().trim().max(120).optional(),
   paintAreas: z.object({
     ceilingPaint: z.boolean().default(false),
     wallPaint: z.boolean().default(false),
@@ -37,33 +43,34 @@ const InteriorRoomItemSchema = z.object({
 });
 
 const estimateFormSchema = z.object({
-  name: z.string().min(1, 'Name is required.'),
+  name: z.string().trim().min(1, 'Name is required.').max(100),
   email: z.string().email('Invalid email address.'),
-  phone: z.string().min(1, 'Phone number is required.'),
+  phone: z.string().trim().min(1, 'Phone number is required.').max(40),
   typeOfWork: z
     .array(z.enum(['Interior Painting', 'Exterior Painting']))
     .min(1, 'Please select at least one type of work.'),
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
-  propertyType: z.string().min(1, 'Property type is required.'),
-  houseStories: z.enum(['Single story', 'Double story or more']).optional(),
+  propertyType: z.string().trim().min(1, 'Property type is required.').max(80),
+  houseStories: z.enum(['1 storey', '2 storey', '3 storey', 'Single story', 'Double story or more']).optional(),
   bedroomCount: z.coerce.number().min(0).optional(),
   bathroomCount: z.coerce.number().min(0).optional(),
-  roomsToPaint: z.array(z.string()).optional(),
+  roomsToPaint: z.array(z.string().max(80)).max(20).optional(),
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
-  exteriorAreas: z.array(z.string()).optional(),
-  otherExteriorArea: z.string().optional(),
-  otherInteriorArea: z.string().optional(),
+  exteriorAreas: z.array(z.string().max(80)).max(20).optional(),
+  otherExteriorArea: z.string().trim().max(120).optional(),
+  otherInteriorArea: z.string().trim().max(120).optional(),
   wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
-  wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).optional(),
+  wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).max(3).optional(),
   wallHeight: z.coerce.number().positive().optional().nullable(),
   approxSize: z.coerce.number().positive().optional().nullable(),
-  location: z.string().optional(),
+  location: z.string().trim().max(200).optional(),
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
   jobDifficulty: z
     .array(
       z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])
     )
+    .max(4)
     .optional(),
   paintAreas: z
     .object({
@@ -76,7 +83,7 @@ const estimateFormSchema = z.object({
   trimPaintOptions: z
     .object({
       paintType: z.enum(['Oil-based', 'Water-based']),
-      trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
+      trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])).max(3),
     })
     .optional(),
   ceilingOptions: z
@@ -86,9 +93,76 @@ const estimateFormSchema = z.object({
     .optional(),
 });
 
-export async function submitEstimate(formData: any) {
+const saveEstimateSchema = z.object({
+  idToken: z.string().min(1, 'Authentication is required.'),
+  formData: estimateFormSchema,
+});
+
+async function enforceEstimateRateLimit(uid: string) {
+  const now = new Date();
+  const currentHour = now.toISOString().slice(0, 13);
+  const currentDay = now.toISOString().slice(0, 10);
+  const rateLimitRef = adminDb.collection('estimateRateLimits').doc(uid);
+
+  await adminDb.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(rateLimitRef);
+    const data = snapshot.data() as
+      | {
+          lastSubmitAt?: number;
+          hourlyBucket?: string;
+          hourlyCount?: number;
+          dailyBucket?: string;
+          dailyCount?: number;
+        }
+      | undefined;
+
+    const lastSubmitAt = data?.lastSubmitAt ?? 0;
+    const hourlyCount = data?.hourlyBucket === currentHour ? data?.hourlyCount ?? 0 : 0;
+    const dailyCount = data?.dailyBucket === currentDay ? data?.dailyCount ?? 0 : 0;
+
+    if (lastSubmitAt && now.getTime() - lastSubmitAt < MIN_SUBMIT_INTERVAL_MS) {
+      throw new Error('Please wait at least 30 seconds before requesting another estimate.');
+    }
+
+    if (hourlyCount >= MAX_SUBMITS_PER_HOUR) {
+      throw new Error('Too many estimate requests this hour. Please try again later.');
+    }
+
+    if (dailyCount >= MAX_SUBMITS_PER_DAY) {
+      throw new Error('Daily estimate request limit reached. Please try again tomorrow.');
+    }
+
+    transaction.set(
+      rateLimitRef,
+      {
+        lastSubmitAt: now.getTime(),
+        hourlyBucket: currentHour,
+        hourlyCount: hourlyCount + 1,
+        dailyBucket: currentDay,
+        dailyCount: dailyCount + 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+}
+
+export async function submitEstimate(payload: unknown) {
   try {
-    const validatedFields = estimateFormSchema.safeParse(formData);
+    const validatedPayload = saveEstimateSchema.safeParse(payload);
+
+    if (!validatedPayload.success) {
+      console.error('Validation Error:', validatedPayload.error.flatten().fieldErrors);
+      return { error: 'Invalid request payload.' };
+    }
+
+    const decodedToken = await adminAuth.verifyIdToken(validatedPayload.data.idToken);
+
+    if (!decodedToken.email || !decodedToken.email_verified) {
+      return { error: 'A verified email address is required.' };
+    }
+
+    const validatedFields = estimateFormSchema.safeParse(validatedPayload.data.formData);
 
     if (!validatedFields.success) {
       console.error('Validation Error:', validatedFields.error.flatten().fieldErrors);
@@ -96,6 +170,31 @@ export async function submitEstimate(formData: any) {
     }
 
     const rawData = validatedFields.data;
+
+    if (rawData.email.toLowerCase() !== decodedToken.email.toLowerCase()) {
+      return { error: 'The submitted email does not match the signed-in account.' };
+    }
+
+    const estimatesSnapshot = await adminDb
+      .collection('estimates')
+      .where('userId', '==', decodedToken.uid)
+      .count()
+      .get();
+    const estimateCount = estimatesSnapshot.data().count;
+    const isAdmin = decodedToken.admin === true;
+
+    if (!isAdmin && estimateCount >= 2) {
+      return {
+        error: 'You have already used your 2 free estimates.',
+        limitReached: true,
+        estimateCount,
+      };
+    }
+
+    if (!isAdmin) {
+      await enforceEstimateRateLimit(decodedToken.uid);
+    }
+
     const approxSize = rawData.approxSize || undefined;
     const wallHeight = rawData.wallHeight || undefined;
 
@@ -125,7 +224,19 @@ export async function submitEstimate(formData: any) {
     const estimate = await generatePaintingEstimate(aiPayload);
     const sanitizedOptions = stripUndefined(rawData);
 
-    return { data: estimate, sanitizedOptions };
+    await adminDb.collection('estimates').add({
+      userId: decodedToken.uid,
+      options: sanitizedOptions,
+      estimate,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      data: estimate,
+      sanitizedOptions,
+      estimateCount: isAdmin ? estimateCount : estimateCount + 1,
+      limitReached: !isAdmin && estimateCount + 1 >= 2,
+    };
   } catch (error: any) {
     console.error('Error generating estimate:', error);
     return { error: 'Failed to generate estimate. ' + (error.message || 'Please try again later.') };

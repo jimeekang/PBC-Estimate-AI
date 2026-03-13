@@ -42,13 +42,17 @@ firebase apphosting:secrets:set gemini-api-key
 
 This project already reads `NEXT_PUBLIC_API_KEY` and `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` from environment variables at build/runtime, so the deployed app will use the currently registered Firebase secrets without storing the actual keys in Git.
 
+For Firebase App Check, add a reCAPTCHA v3 site key as `NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY` and enable App Check enforcement for the Firebase services you expose to the client.
+
 ### 2. Set Admin Permissions
 
-To designate a specific account as admin, modify the `userEmail` in `set-admin-claim.js` and run:
+Set `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_PATH` in your environment, or authenticate with Application Default Credentials, then run:
 
 ```bash
-node set-admin-claim.js
+node set-admin-claim.js user@example.com true
 ```
+
+Use `false` as the second argument to revoke admin access.
 
 ### 3. Run Development Server
 
