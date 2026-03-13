@@ -35,6 +35,7 @@ studio-*-*.json
 .env
 .env.*
 !.env.example
+.claude/
 
 # Build
 tsconfig.tsbuildinfo

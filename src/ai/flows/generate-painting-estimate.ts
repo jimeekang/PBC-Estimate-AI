@@ -15,8 +15,10 @@
  *
  * Exterior model (updated):
  * - wallType (cladding / rendered / brick) drives the base anchor selection.
- *   cladding = cheapest base; rendered = most expensive (prep + high paint absorption);
- *   brick = labour intensive (paint into mortar joints).
+ *   cladding = cheapest base; rendered = mid-range (prep + high paint absorption);
+ *   brick = most expensive (labour intensive, mortar joints, highest material consumption).
+ * - All types use 3-coat system (BASE_COAT_COUNT=3): 1 undercoat + 2 finish coats.
+ * - houseStories: '1 storey' / '2 storey' / '3 storey' (3 tiers).
  * - 5-band size multiplier for finer granularity (≤100 / 101~150 / 151~220 / 221~350 / 350+)
  * - Applies storey modifier properly
  * - Avoids double-counting "Difficult access areas" on double-storey jobs
@@ -121,24 +123,29 @@ const HOUSE_INTERIOR_ANCHORS = {
 
 /**
  * Exterior anchors by wall type (Northern Beaches, Sydney).
+ * All use 3-coat system (1 undercoat + 2 finish coats).
  * cladding = cheapest (standard prep, normal absorption)
- * rendered = most expensive (high absorption, more prep work)
- * brick     = labour intensive (paint into mortar joints)
- * default   = fallback when wallType not specified
+ * rendered = mid-range (high absorption, textured/porous finish, more prep)
+ * brick    = most expensive (mortar joint labour, highest material consumption)
+ * default  = fallback when wallType not specified
  */
 const EXTERIOR_WALL_TYPE_ANCHOR = {
   cladding: { min: 3500, max: 16000, median: 7000 },
-  rendered:  { min: 4500, max: 20000, median: 9500 },
-  brick:     { min: 4000, max: 18000, median: 8500 },
+  rendered:  { min: 5000, max: 21000, median: 10500 },
+  brick:     { min: 6000, max: 24000, median: 13000 },
   default:   { min: 4000, max: 18000, median: 8500 },
 } as const;
 
-/** Wall-type-aware minimum floor prices per scope category */
+/** Wall-type-aware minimum floor prices per scope category.
+ *  Brick is highest due to mortar joint labour and material consumption.
+ *  All types use 3-coat system (BASE_COAT_COUNT): 1 undercoat + 2 finish coats.
+ *  tripleStoreyFullExterior added for 3-storey support.
+ */
 const EXTERIOR_WALL_TYPE_FLOORS = {
-  cladding: { wallOnly: 4000, wallPlusEaves: 5500, fullExterior: 7000, doubleStoreyFullExterior: 10000 },
-  rendered:  { wallOnly: 5000, wallPlusEaves: 7000, fullExterior: 9000, doubleStoreyFullExterior: 13000 },
-  brick:     { wallOnly: 4500, wallPlusEaves: 6000, fullExterior: 8000, doubleStoreyFullExterior: 11500 },
-  default:   { wallOnly: 4500, wallPlusEaves: 6000, fullExterior: 8000, doubleStoreyFullExterior: 11000 },
+  cladding: { wallOnly: 4000, wallPlusEaves: 5500, fullExterior: 7000, doubleStoreyFullExterior: 10000, tripleStoreyFullExterior: 13500 },
+  rendered:  { wallOnly: 5000, wallPlusEaves: 7000, fullExterior: 9000, doubleStoreyFullExterior: 13000, tripleStoreyFullExterior: 17000 },
+  brick:     { wallOnly: 6000, wallPlusEaves: 8000, fullExterior: 10500, doubleStoreyFullExterior: 15000, tripleStoreyFullExterior: 19500 },
+  default:   { wallOnly: 4500, wallPlusEaves: 6000, fullExterior: 8000, doubleStoreyFullExterior: 11000, tripleStoreyFullExterior: 14500 },
 } as const;
 
 const COMBINED_ANCHOR = { min: 15000, max: 35000, median: 22000 } as const;
@@ -205,10 +212,17 @@ const ENTIRE_APT_BAND = {
   Poor:      { min: 0.90, max: 1.25 },
 } as const;
 
-const STORY_MODIFIER = {
+const STORY_MODIFIER: Record<string, number> = {
+  '1 storey': 1.0,
+  '2 storey': 1.18,
+  '3 storey': 1.35,
+  // Legacy aliases for backward compatibility
   'Single story': 1.0,
   'Double story or more': 1.18,
 };
+
+/** Standard coat system: 1 undercoat + 2 finish coats */
+const BASE_COAT_COUNT = 3;
 
 const WATER_BASED_UPLIFT = { minPct: 0.08, maxPct: 0.12 } as const;
 const TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM = { min: 80, max: 180 } as const;
@@ -263,10 +277,14 @@ const EXTERIOR_WALL_AREA_BANDS = [
   { minArea: 346, maxArea: 9999, minMult: 1.76, maxMult: 1.98 }, // ~250sqm+ 복층
 ] as const;
 
-const DEFAULT_WALL_HEIGHT = {
+const DEFAULT_WALL_HEIGHT: Record<string, number> = {
+  '1 storey': 2.7,
+  '2 storey': 5.4,
+  '3 storey': 8.1,
+  // Legacy aliases
   'Single story': 2.7,
   'Double story or more': 5.4,
-} as const;
+};
 
 const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: number; notes?: string }> = {
   Wall: { minPct: 0.0, maxPct: 0.0, notes: 'Base includes walls for typical full exterior scope.' },
@@ -508,8 +526,8 @@ function shouldApply3B2BFairSingleHouseCalibration(
 ) {
   const isHouse = input.propertyType === 'House / Townhouse';
   const condition = input.paintCondition ?? 'Fair';
-  const story = input.houseStories ?? 'Single story';
-  return isHouse && houseKey === '3B2B' && condition === 'Fair' && story === 'Single story';
+  const story = input.houseStories ?? '1 storey';
+  return isHouse && houseKey === '3B2B' && condition === 'Fair' && (story === 'Single story' || story === '1 storey');
 }
 
 function calibrate3B2BFairSingleHouse(
@@ -547,9 +565,9 @@ function applyDoubleStorey3B2BUplift(
 ) {
   const isHouse = input.propertyType === 'House / Townhouse';
   const condition = input.paintCondition ?? 'Fair';
-  const story = input.houseStories ?? 'Single story';
+  const story = input.houseStories ?? '1 storey';
 
-  if (!isHouse || houseKey !== '3B2B' || condition !== 'Fair' || story !== 'Double story or more') {
+  if (!isHouse || houseKey !== '3B2B' || condition !== 'Fair' || (story !== 'Double story or more' && story !== '2 storey')) {
     return { min: minVal, max: maxVal };
   }
 
@@ -587,8 +605,8 @@ function applyInteriorComplexityUpliftPct(
   maxVal: number
 ) {
   const factors = input.jobDifficulty ?? [];
-  const story = input.houseStories ?? 'Single story';
-  const isDouble = story === 'Double story or more';
+  const story = input.houseStories ?? '1 storey';
+  const isDouble = story === 'Double story or more' || story === '2 storey' || story === '3 storey';
 
   let minPct = 0;
   let maxPct = 0;
@@ -654,7 +672,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
   scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
   propertyType: z.string(),
 
-  houseStories: z.enum(['Single story', 'Double story or more']).optional(),
+  houseStories: z.enum(['1 storey', '2 storey', '3 storey', 'Single story', 'Double story or more']).optional(),
   bedroomCount: z.number().optional(),
   bathroomCount: z.number().optional(),
 
@@ -745,6 +763,7 @@ const explanationPrompt = ai.definePrompt({
       extMax: z.number(),
       priceMin: z.number(),
       priceMax: z.number(),
+      wallTypeSurfaceNote: z.string().optional(),
     }),
   },
   output: { schema: GeneratePaintingEstimateOutputSchema },
@@ -770,9 +789,18 @@ Interior: {{intMin}} - {{intMax}}
 Exterior: {{extMin}} - {{extMax}}
 Total: {{priceMin}} - {{priceMax}}
 
+WALL TYPE COAT SYSTEM (use when exterior wall type is selected):
+All exterior wall types use a standard 3-coat system: 1 undercoat + 2 finish coats.
+
+{{#if wallTypeSurfaceNote}}
+SURFACE NOTE (incorporate this naturally into the explanation):
+{{wallTypeSurfaceNote}}
+{{/if}}
+
 INSTRUCTIONS
 1) explanation: 3–5 sentences, Australian English, professional tone.
    Focus on the main cost drivers: scope, condition, selected areas, stories, wall finish (if exterior), and complexity factors.
+   If wallType is "rendered" or "brick", incorporate the relevant SURFACE NOTE above into the explanation naturally.
 2) priceRange:
    - Use commas as thousands separators.
    - If Total priceMax >= 35,000 format: "From AUD {{priceMin}}+ (Site Inspection Required)"
@@ -806,9 +834,11 @@ export const generatePaintingEstimate = ai.defineFlow(
     const houseCondMult = HOUSE_CONDITION_MULTIPLIER[condition];
     const exteriorCondMult = EXTERIOR_CONDITION_MULTIPLIER[condition];
 
-    const story = input.houseStories ?? 'Single story';
+    const story = input.houseStories ?? '1 storey';
     const storyMult = STORY_MODIFIER[story] || 1.0;
-    const isDouble = story === 'Double story or more';
+    const isDouble = story === 'Double story or more' || story === '2 storey';
+    const isTriple = story === '3 storey';
+    const isMultiStorey = isDouble || isTriple;
 
     // -----------------------------
     // 1) Interior
@@ -1157,7 +1187,10 @@ export const generatePaintingEstimate = ai.defineFlow(
       const hasDifficultAccess = diffs.includes('Difficult access areas');
 
       if (hasDifficultAccess) {
-        if (isDouble) {
+        if (isTriple) {
+          rMin *= 1.05;
+          rMax *= 1.10;
+        } else if (isDouble) {
           rMin *= 1.03;
           rMax *= 1.06;
         } else {
@@ -1176,14 +1209,14 @@ export const generatePaintingEstimate = ai.defineFlow(
         areas.includes('Exterior Trim');
 
       const floor =
-        isFullExterior && isDouble
-          ? wallFloors.doubleStoreyFullExterior
-          : isFullExterior
-            ? wallFloors.fullExterior
-            : hasEaves
-              ? wallFloors.wallPlusEaves
-              : isWallOnly
-                ? wallFloors.wallOnly
+        isFullExterior && isTriple
+          ? wallFloors.tripleStoreyFullExterior
+          : isFullExterior && isMultiStorey
+            ? wallFloors.doubleStoreyFullExterior
+            : isFullExterior
+              ? wallFloors.fullExterior
+              : hasEaves
+                ? wallFloors.wallPlusEaves
                 : wallFloors.wallOnly;
 
       rMin = Math.max(rMin, floor);
@@ -1258,6 +1291,14 @@ export const generatePaintingEstimate = ai.defineFlow(
     // -----------------------------
     // 5) AI Explanation
     // -----------------------------
+    const WALL_TYPE_SURFACE_NOTES: Record<string, string> = {
+      rendered:
+        'Rendered surfaces have a textured, porous finish that requires a full 3-coat system (1 undercoat + 2 finish coats) for proper adhesion and uniform coverage. The undercoat seals the render and prevents uneven absorption, while the two finish coats ensure colour consistency and long-term weather protection — particularly important for exterior surfaces exposed to Sydney\'s coastal conditions.',
+      brick:
+        'Brick surfaces require significantly more labour and preparation than other wall types. The deep mortar joints absorb more paint and demand careful brushwork to achieve full coverage, along with more complex surface preparation. While the same 3-coat system applies (1 undercoat + 2 finish coats), the increased application complexity and higher material consumption are reflected in the estimate.',
+    };
+    const wallTypeSurfaceNote = input.wallType ? WALL_TYPE_SURFACE_NOTES[input.wallType] : undefined;
+
     const { output } = await explanationPrompt({
       input,
       intMin,
@@ -1266,6 +1307,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       extMax,
       priceMin: totalMin,
       priceMax: totalMax,
+      wallTypeSurfaceNote,
     });
 
     if (output?.priceRange) {
