@@ -67,3 +67,7 @@ If the login popup closes immediately:
 
 1. Ensure **third-party cookies** are allowed in your browser settings.
 2. Register the current domain in Firebase Console > Authentication > Settings > **Authorized domains**.
+
+## Deployment Note
+
+Firebase App Hosting deploys are triggered from commits pushed to the connected branch.
