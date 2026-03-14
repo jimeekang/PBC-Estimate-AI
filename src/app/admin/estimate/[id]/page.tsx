@@ -48,6 +48,7 @@ interface EstimateDocument {
         trimPaintOptions?: {
             paintType: string;
             trimItems: string[];
+            interiorWindowFrameTypes?: string[];
         };
     };
     estimate?: {
@@ -217,6 +218,13 @@ export default function EstimateDetailsPage() {
                                         <div className="text-xs space-y-1 pt-2 border-t border-primary/5">
                                             <p><strong>Trim Paint Type:</strong> {estimate.options.trimPaintOptions.paintType}</p>
                                             <p><strong>Trim Items:</strong> {estimate.options.trimPaintOptions.trimItems.join(', ')}</p>
+                                            {!!estimate.options.trimPaintOptions.interiorWindowFrameTypes?.length && (
+                                                <p>
+                                                    <strong>Interior Window Types:</strong>{' '}
+                                                    {estimate.options.trimPaintOptions.interiorWindowFrameTypes
+                                                        .join(', ')}
+                                                </p>
+                                            )}
                                         </div>
                                     )}
                                 </div>

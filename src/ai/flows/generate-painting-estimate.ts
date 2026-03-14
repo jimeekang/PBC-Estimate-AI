@@ -73,7 +73,7 @@ const APARTMENT_ANCHORS_OIL = {
 // -----------------------------
 // rawMedian = price before areaFactor is applied.
 // Calibrated so that:
-//   85sqm × af(1.12 ensuite) × Fair band(0.92) → low-$4.1k start ✅
+//   85sqm × af(1.0 ceil+wall+trim) × Fair band(0.92) + Normal window → ~$4,080 min ✅
 //   90sqm × af(1.12 ensuite) × Excellent band(0.95~1.05) → high-$4k to low-$5k ✅
 // Interpolates smoothly — no class boundary cliffs.
 const APARTMENT_SQM_CURVE: readonly { sqm: number; rawMedian: number }[] = [
@@ -82,7 +82,7 @@ const APARTMENT_SQM_CURVE: readonly { sqm: number; rawMedian: number }[] = [
   { sqm: 55,  rawMedian: 3100 },
   { sqm: 65,  rawMedian: 3450 },
   { sqm: 80,  rawMedian: 3800 },
-  { sqm: 85,  rawMedian: 4025 },  // avg 2bed apartment ← key calibration point
+  { sqm: 85,  rawMedian: 4350 },  // avg 2bed apartment ← key calibration point
   { sqm: 90,  rawMedian: 4300 },
   { sqm: 105, rawMedian: 4850 },
   { sqm: 120, rawMedian: 5800 },
@@ -233,18 +233,35 @@ const TRIM_PREMIUM_SPECIFIC_PER_ROOM = {
   'Water-based': { min: 155, max: 260 },
 } as const;
 
-/** Interior door per-door painting price (AUD), Sydney Northern Beaches 2026.
- *  Applied when painting doors specifically (door-only scope).
- */
-const INTERIOR_DOOR_PRICE = {
-  'Oil-based':   250,
-  'Water-based': 325,
+/** Interior window frame painting price by window type (AUD), Sydney Northern Beaches 2026. */
+const INTERIOR_WINDOW_PRICE = {
+  'Oil-based': {
+    Normal: 140,
+    Awning: 165,
+    'Double Hung': 210,
+    French: 290,
+  },
+  'Water-based': {
+    Normal: 180,
+    Awning: 205,
+    'Double Hung': 255,
+    French: 340,
+  },
 } as const;
 
-/** Interior window frame per-window painting price (AUD), Sydney Northern Beaches 2026. */
-const INTERIOR_WINDOW_PRICE = {
-  'Oil-based':   140,
-  'Water-based': 180,
+const INTERIOR_WINDOW_TYPE_PREMIUM = {
+  'Oil-based': {
+    Normal: { min: 80, max: 140 },
+    Awning: { min: 100, max: 170 },
+    'Double Hung': { min: 130, max: 220 },
+    French: { min: 230, max: 290 },
+  },
+  'Water-based': {
+    Normal: { min: 95, max: 160 },
+    Awning: { min: 120, max: 195 },
+    'Double Hung': { min: 150, max: 245 },
+    French: { min: 245, max: 310 },
+  },
 } as const;
 
 const INTERIOR_TRIM_ONLY_BASE = {
@@ -513,6 +530,19 @@ function isTrimOnlySpecificInterior(
     const paintAreas = room.paintAreas ?? {};
     return !!paintAreas.trimPaint && !paintAreas.wallPaint && !paintAreas.ceilingPaint;
   });
+}
+
+function hasSelectedTrimOptions(input: z.infer<typeof GeneratePaintingEstimateInputSchema>) {
+  return !!input.trimPaintOptions?.trimItems?.length;
+}
+
+function withTrimPricingNote(
+  text: string,
+  includeTrimPricingNote: boolean
+) {
+  if (!includeTrimPricingNote) return text;
+  const trimNote = 'Pricing varies depending on the number of trim items included.';
+  return text.includes(trimNote) ? text : `${text} ${trimNote}`;
 }
 
 function sumAreaFactorWholeApartment(flags: {
@@ -850,8 +880,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
     .object({
       paintType: z.enum(['Oil-based', 'Water-based']),
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
-      doorCount: z.number().min(0).max(40).optional(),
-      windowFrameCount: z.number().min(0).max(40).optional(),
+      interiorWindowFrameTypes: z.array(z.enum(['Normal', 'Awning', 'Double Hung', 'French'])).optional(),
     })
     .optional(),
 
@@ -943,6 +972,7 @@ INSTRUCTIONS
 1) explanation: 3–5 sentences, Australian English, professional tone.
    Focus on the main cost drivers: scope, condition, selected areas, stories, wall finish (if exterior), and complexity factors.
    If wallType is "rendered" or "brick", incorporate the relevant SURFACE NOTE above into the explanation naturally.
+   If trim-related options are selected, include this idea naturally in English: "Pricing varies depending on the number of trim items included."
 2) priceRange:
    - Use commas as thousands separators.
    - If Total priceMax >= 35,000 format: "From AUD {{priceMin}}+ (Site Inspection Required)"
@@ -1190,14 +1220,21 @@ export const generatePaintingEstimate = ai.defineFlow(
       if (input.trimPaintOptions) {
         const paintType = input.trimPaintOptions.paintType;
         const trimItems = input.trimPaintOptions.trimItems ?? [];
-        const doorCount = trimItems.includes('Doors') ? input.trimPaintOptions.doorCount ?? 0 : 0;
-        const windowFrameCount = trimItems.includes('Window Frames')
-          ? input.trimPaintOptions.windowFrameCount ?? 0
-          : 0;
+        const interiorWindowFrameTypes = trimItems.includes('Window Frames')
+          ? input.trimPaintOptions.interiorWindowFrameTypes ?? []
+          : [];
         const trimOnlySpecific = isTrimOnlySpecificInterior(input, selectedRooms);
 
         if (input.scopeOfPainting === 'Entire property') {
           const globalTrimOn = !!input.paintAreas?.trimPaint;
+
+          if (interiorWindowFrameTypes.length > 0) {
+            for (const type of interiorWindowFrameTypes) {
+              const premium = INTERIOR_WINDOW_TYPE_PREMIUM[paintType][type];
+              intMin += premium.min;
+              intMax += premium.max;
+            }
+          }
 
           if (globalTrimOn && paintType === 'Water-based') {
             const itemCount = trimItems.length;
@@ -1227,16 +1264,12 @@ export const generatePaintingEstimate = ai.defineFlow(
             }
           }
 
-          if (doorCount > 0) {
-            const doorUnitPrice = INTERIOR_DOOR_PRICE[paintType];
-            intMin += doorUnitPrice * doorCount;
-            intMax += doorUnitPrice * doorCount;
-          }
-
-          if (windowFrameCount > 0) {
-            const windowUnitPrice = INTERIOR_WINDOW_PRICE[paintType];
-            intMin += windowUnitPrice * windowFrameCount;
-            intMax += windowUnitPrice * windowFrameCount;
+          if (interiorWindowFrameTypes.length > 0) {
+            for (const type of interiorWindowFrameTypes) {
+              const unitPrice = INTERIOR_WINDOW_PRICE[paintType][type];
+              intMin += unitPrice;
+              intMax += unitPrice;
+            }
           }
 
           if (trimOnlySpecific) {
@@ -1476,6 +1509,8 @@ export const generatePaintingEstimate = ai.defineFlow(
 
     if (isInt) breakdown.interior = { min: intMin, max: intMax, priceRange: interiorPriceRange };
     if (isExt) breakdown.exterior = { min: extMin, max: extMax, priceRange: exteriorPriceRange };
+    const includeTrimPricingNote = hasSelectedTrimOptions(input);
+    const trimPricingDetail = 'Pricing varies depending on the number of trim items included.';
 
     // -----------------------------
     // 5) AI Explanation
@@ -1502,26 +1537,36 @@ export const generatePaintingEstimate = ai.defineFlow(
     if (output?.priceRange) {
       return {
         ...output,
+        explanation: withTrimPricingNote(
+          output.explanation,
+          includeTrimPricingNote
+        ),
         breakdown: output.breakdown ?? breakdown,
         details:
           output.details && output.details.length
-            ? output.details
+            ? includeTrimPricingNote && !output.details.includes(trimPricingDetail)
+              ? [...output.details, trimPricingDetail]
+              : output.details
             : [
                 ...(isInt ? [`Interior: ${interiorPriceRange}`] : []),
                 ...(isExt ? [`Exterior: ${exteriorPriceRange}`] : []),
                 `Total: ${totalPriceRange}`,
+                ...(includeTrimPricingNote ? [trimPricingDetail] : []),
               ],
       };
     }
 
     return {
       priceRange: totalPriceRange,
-      explanation:
+      explanation: withTrimPricingNote(
         'This is an indicative estimate based on the information provided and is subject to site inspection for a final quote.',
+        includeTrimPricingNote
+      ),
       details: [
         ...(isInt ? [`Interior: ${interiorPriceRange}`] : []),
         ...(isExt ? [`Exterior: ${exteriorPriceRange}`] : []),
         `Total: ${totalPriceRange}`,
+        ...(includeTrimPricingNote ? [trimPricingDetail] : []),
       ],
       breakdown,
     };
