@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, Loader2, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { auth, signInWithGoogle } from '@/lib/firebase';
+import { auth, ensureAppCheck, signInWithGoogle } from '@/lib/firebase';
 import { PrivacyPolicy } from './privacy-policy';
 import { Icons } from '@/components/icons';
 import { useRouter } from 'next/navigation';
@@ -30,6 +30,7 @@ export function SignupForm() {
 
   const handleGoogleSignIn = async () => {
     try {
+      await ensureAppCheck();
       setIsGooglePending(true);
       setErrors(null);
       const result = await signInWithGoogle();
@@ -93,6 +94,7 @@ export function SignupForm() {
     }
 
     try {
+      await ensureAppCheck();
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await sendEmailVerification(userCredential.user);
       window.location.href = '/verify-email';

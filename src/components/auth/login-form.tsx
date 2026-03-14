@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Loader2, Info } from 'lucide-react';
 import Link from 'next/link';
 import { signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { auth, signInWithGoogle } from '@/lib/firebase';
+import { auth, ensureAppCheck, signInWithGoogle } from '@/lib/firebase';
 import { Icons } from '@/components/icons';
 import { useRouter } from 'next/navigation';
 
@@ -29,6 +29,7 @@ export function LoginForm() {
 
   const handleGoogleSignIn = async () => {
     try {
+      await ensureAppCheck();
       setIsGooglePending(true);
       setErrors(null);
       const result = await signInWithGoogle();
@@ -83,6 +84,7 @@ export function LoginForm() {
     }
 
     try {
+      await ensureAppCheck();
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       await user.reload();

@@ -35,5 +35,7 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: NEXT_PUBLIC_ENABLE_APPCHECK
+    value: 'true'
   - variable: NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY
     value: '6LdOr4ksAAAAAK3I189aD4J6kFNKYT8vO0NKRiYr'

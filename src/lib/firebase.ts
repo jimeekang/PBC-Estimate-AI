@@ -20,13 +20,17 @@ import {
   Firestore,
 } from 'firebase/firestore';
 
+function env(name: string) {
+  return process.env[name]?.trim();
+}
+
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_APP_ID,
+  apiKey: env('NEXT_PUBLIC_API_KEY'),
+  authDomain: env('NEXT_PUBLIC_AUTH_DOMAIN'),
+  projectId: env('NEXT_PUBLIC_PROJECT_ID'),
+  storageBucket: env('NEXT_PUBLIC_STORAGE_BUCKET'),
+  messagingSenderId: env('NEXT_PUBLIC_MESSAGING_SENDER_ID'),
+  appId: env('NEXT_PUBLIC_APP_ID'),
 };
 
 // Initialize Firebase only if API key is present to avoid hard crashes during SSR/Build
@@ -38,9 +42,9 @@ const app: FirebaseApp =
       : ({} as FirebaseApp);
 
 const auth: Auth = firebaseConfig.apiKey ? getAuth(app) : ({} as Auth);
-const isAppCheckEnabled = process.env.NEXT_PUBLIC_ENABLE_APPCHECK === 'true';
-const appCheckSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY;
-const appCheckDebugToken = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN;
+const isAppCheckEnabled = env('NEXT_PUBLIC_ENABLE_APPCHECK') === 'true';
+const appCheckSiteKey = env('NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY');
+const appCheckDebugToken = env('NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN');
 let appCheckInitialized = false;
 let appCheckInitPromise: Promise<void> | null = null;
 
