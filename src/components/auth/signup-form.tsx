@@ -11,6 +11,7 @@ import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/
 import { auth, signInWithGoogle } from '@/lib/firebase';
 import { PrivacyPolicy } from './privacy-policy';
 import { Icons } from '@/components/icons';
+import { useRouter } from 'next/navigation';
 
 function SubmitButton({ isPending }: { isPending: boolean }) {
   return (
@@ -25,12 +26,16 @@ export function SignupForm() {
   const [errors, setErrors] = useState<{ [key: string]: string[] | undefined } | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [isGooglePending, setIsGooglePending] = useState(false);
+  const router = useRouter();
 
   const handleGoogleSignIn = async () => {
     try {
       setIsGooglePending(true);
       setErrors(null);
-      await signInWithGoogle();
+      const result = await signInWithGoogle();
+      if (result) {
+        router.replace('/estimate');
+      }
     } catch (e: any) {
       console.error("Google Sign-In Error (Signup):", e);
       

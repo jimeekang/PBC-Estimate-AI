@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onIdTokenChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -21,21 +21,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const idTokenResult = await user.getIdTokenResult();
-          setIsAdmin(!!idTokenResult.claims.admin);
-          setUser(user);
-        } catch (error) {
-          console.error("Error getting token result:", error);
-          setUser(user);
-        }
-      } else {
-        setUser(null);
-        setIsAdmin(false);
-      }
+    const unsubscribe = onIdTokenChanged(auth, (nextUser) => {
+      setUser(nextUser);
       setLoading(false);
+
+      if (!nextUser) {
+        setIsAdmin(false);
+        return;
+      }
+
+      nextUser
+        .getIdTokenResult()
+        .then((idTokenResult) => {
+          setIsAdmin(!!idTokenResult.claims.admin);
+        })
+        .catch((error) => {
+          console.error('Error getting token result:', error);
+          setIsAdmin(false);
+        });
     });
 
     return () => unsubscribe();
@@ -46,11 +49,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     if (user) {
       if (['/', '/login', '/signup'].includes(pathname)) {
-        router.push('/estimate');
+        router.replace('/estimate');
       }
     } else {
       if (pathname.startsWith('/estimate') || pathname.startsWith('/admin')) {
-        router.push('/login');
+        router.replace('/login');
       }
     }
   }, [user, loading, pathname, router]);

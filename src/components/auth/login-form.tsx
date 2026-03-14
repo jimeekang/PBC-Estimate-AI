@@ -31,7 +31,10 @@ export function LoginForm() {
     try {
       setIsGooglePending(true);
       setErrors(null);
-      await signInWithGoogle();
+      const result = await signInWithGoogle();
+      if (result) {
+        router.replace('/estimate');
+      }
     } catch (e: any) {
       console.error("Google Sign-In Error:", e);
       

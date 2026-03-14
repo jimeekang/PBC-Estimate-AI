@@ -4,6 +4,7 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
+  signInWithRedirect,
   signInWithPopup,
   browserLocalPersistence,
   setPersistence,
@@ -38,6 +39,9 @@ const app: FirebaseApp =
 
 const auth: Auth = firebaseConfig.apiKey ? getAuth(app) : ({} as Auth);
 const appCheckSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY;
+const appCheckDebugToken = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN;
+let appCheckInitialized = false;
+let appCheckInitPromise: Promise<void> | null = null;
 
 // ✅ IMPORTANT: ignoreUndefinedProperties prevents Firestore from rejecting undefined fields
 const db: Firestore = firebaseConfig.apiKey
@@ -50,22 +54,43 @@ const db: Firestore = firebaseConfig.apiKey
 // Set persistence to local storage only on the client-side
 if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
   setPersistence(auth, browserLocalPersistence);
-
-  if (appCheckSiteKey) {
-    if (window.location.hostname === 'localhost') {
-      (self as typeof self & { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-    }
-
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(appCheckSiteKey),
-      isTokenAutoRefreshEnabled: true,
-    });
-  }
 }
 
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+export const ensureAppCheck = async () => {
+  if (
+    typeof window === 'undefined' ||
+    !firebaseConfig.apiKey ||
+    !appCheckSiteKey ||
+    appCheckInitialized
+  ) {
+    return;
+  }
+
+  if (!appCheckInitPromise) {
+    appCheckInitPromise = Promise.resolve().then(() => {
+      if (window.location.hostname === 'localhost' && appCheckDebugToken) {
+        (
+          self as typeof self & {
+            FIREBASE_APPCHECK_DEBUG_TOKEN?: string | boolean;
+          }
+        ).FIREBASE_APPCHECK_DEBUG_TOKEN =
+          appCheckDebugToken === 'true' ? true : appCheckDebugToken;
+      }
+
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(appCheckSiteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+      appCheckInitialized = true;
+    });
+  }
+
+  await appCheckInitPromise;
+};
 
 export const signInWithGoogle = async () => {
   if (typeof window === 'undefined') {
@@ -76,12 +101,23 @@ export const signInWithGoogle = async () => {
     return result;
   } catch (error: any) {
     console.error('Google Sign-In Error Details:', error.code, error.message);
+
+    if (
+      error?.code === 'auth/internal-error' ||
+      error?.code === 'auth/popup-blocked' ||
+      error?.code === 'auth/popup-closed-by-user'
+    ) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+
     throw error;
   }
 };
 
 export const getEstimates = async () => {
   if (!firebaseConfig.apiKey) return [];
+  await ensureAppCheck();
   const estimatesCol = collection(db, 'estimates');
   const estimateSnapshot = await getDocs(estimatesCol);
   const estimateList = estimateSnapshot.docs.map(d => ({
@@ -93,6 +129,7 @@ export const getEstimates = async () => {
 
 export const getEstimate = async (id: string) => {
   if (!firebaseConfig.apiKey) return null;
+  await ensureAppCheck();
   const docRef = doc(db, 'estimates', id);
   const docSnap = await getDoc(docRef);
   if (docSnap.exists()) {

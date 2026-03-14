@@ -54,7 +54,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/providers/auth-provider';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { db } from '@/lib/firebase';
+import { db, ensureAppCheck } from '@/lib/firebase';
 import { collection, query, where, getCountFromServer } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { APIProvider, useMapsLibrary } from '@vis.gl/react-google-maps';
@@ -349,6 +349,7 @@ export function EstimateForm() {
 
   const fetchEstimateCount = async (uid: string) => {
     try {
+      await ensureAppCheck();
       const estimatesRef = collection(db, 'estimates');
       const q = query(estimatesRef, where('userId', '==', uid));
       const snapshot = await getCountFromServer(q);
