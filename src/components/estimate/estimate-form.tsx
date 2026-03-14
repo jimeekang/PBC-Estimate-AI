@@ -48,6 +48,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
 import { useEffect, useState, useRef } from 'react';
 import { EstimateResult } from './estimate-result';
+import type { EstimatePdfMeta } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '../ui/input';
@@ -123,6 +124,8 @@ const EXTERIOR_TRIM_OPTIONS = [
   { id: 'Architraves', label: 'Architraves', icon: Baseline },
   { id: 'Front Door', label: 'Front Door', icon: DoorOpen },
 ] as const;
+
+const WINDOW_TYPE_OPTIONS = ['Normal', 'Awning', 'Double Hung', 'French'] as const;
 
 const APARTMENT_STRUCTURE_OPTIONS = [
   { id: 'Studio' as const,    label: 'Studio',                                   bedroomCount: 0, bathroomCount: 1, hasMaster: false, hasEnsuite: false, avgSqm: 40 },
@@ -213,8 +216,7 @@ const estimateFormSchema = z
       .object({
         paintType: z.enum(['Oil-based', 'Water-based']),
         trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
-        doorCount: z.coerce.number().min(0).max(40).optional(),
-        windowFrameCount: z.coerce.number().min(0).max(40).optional(),
+        interiorWindowFrameTypes: z.array(z.enum(['Normal', 'Awning', 'Double Hung', 'French'])).optional(),
       })
       .optional(),
 
@@ -385,7 +387,11 @@ function ExteriorTrimDetail({ title, icon, styles, max, fieldName, styleKey, for
 
 export function EstimateForm() {
   const { user, isAdmin } = useAuth();
-  const [state, setState] = useState<{ data?: GeneratePaintingEstimateOutput; error?: string }>({});
+  const [state, setState] = useState<{
+    data?: GeneratePaintingEstimateOutput;
+    error?: string;
+    pdfMeta?: EstimatePdfMeta;
+  }>({});
   const [isPending, setIsPending] = useState(false);
   const [estimateCount, setEstimateCount] = useState(0);
   const [isCountLoading, setIsCountLoading] = useState(true);
@@ -404,8 +410,7 @@ export function EstimateForm() {
       trimPaintOptions: {
         paintType: 'Oil-based',
         trimItems: [],
-        doorCount: 0,
-        windowFrameCount: 0,
+        interiorWindowFrameTypes: [],
       },
       ceilingOptions: {
         ceilingType: 'Flat',
@@ -493,6 +498,9 @@ export function EstimateForm() {
   const watchExteriorTrimItems = useWatch({ control: form.control, name: 'exteriorTrimItems' }) || [];
   const watchApartmentStructure = useWatch({ control: form.control, name: 'apartmentStructure' });
   const isApartmentType = watchPropertyType === 'Apartment';
+  const selectedApartmentStructure = APARTMENT_STRUCTURE_OPTIONS.find(
+    (option) => option.id === watchApartmentStructure
+  );
 
   const hasAnyRoomTrim = watchInteriorRooms?.some((r) => r.paintAreas?.trimPaint);
   const hasAnyRoomCeiling = watchInteriorRooms?.some((r) => r.paintAreas?.ceilingPaint);
@@ -512,12 +520,16 @@ const showCeilingOptions =
     if (!isInterior || !isApartmentType || watchScope !== 'Entire property' || !watchApartmentStructure) return;
     const option = APARTMENT_STRUCTURE_OPTIONS.find((o) => o.id === watchApartmentStructure);
     if (!option) return;
+    const currentApproxSize = form.getValues('approxSize');
+
     form.setValue('bedroomCount', option.bedroomCount);
     form.setValue('bathroomCount', option.bathroomCount);
-    form.setValue('approxSize', option.avgSqm);
+    if (currentApproxSize == null || currentApproxSize <= 0 || Number.isNaN(currentApproxSize)) {
+      form.setValue('approxSize', option.avgSqm);
+    }
     form.setValue('roomsToPaint', option.hasMaster ? ['Master Bedroom'] : []);
     form.setValue('paintAreas.ensuitePaint', option.hasEnsuite);
-  }, [watchApartmentStructure, isInterior, isApartmentType, watchScope]);
+  }, [watchApartmentStructure, isInterior, isApartmentType, watchScope, form]);
 
   const handleToggleRoom = (roomName: string) => {
     const roomIndex = fields.findIndex((f) => f.roomName === roomName);
@@ -578,7 +590,24 @@ const showCeilingOptions =
         setEstimateCount(nextCount);
         setIsLimitReached(result.limitReached ?? nextCount >= 2);
       }
-      setState(result);
+      const generatedAt = new Date().toISOString();
+      const referenceId = `PBC-${generatedAt.slice(2, 10).replace(/-/g, '')}-${values.name
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .slice(0, 4)
+        .toUpperCase() || 'USER'}`;
+
+      setState({
+        data: result.data,
+        error: result.error,
+        pdfMeta: {
+          generatedAt,
+          recipientName: values.name,
+          recipientEmail: values.email,
+          location: values.location,
+          typeOfWork: values.typeOfWork,
+          referenceId,
+        },
+      });
       toast({ title: 'Success', description: 'Estimate generated!' });
     }
     setIsPending(false);
@@ -727,6 +756,12 @@ const showCeilingOptions =
                               }
                             />
                           </FormControl>
+                          {isInterior && isApartmentType && watchScope === 'Entire property' && selectedApartmentStructure && (
+                            <FormDescription>
+                              Default guide for {selectedApartmentStructure.label}: {selectedApartmentStructure.avgSqm} sqm.
+                              Your custom sqm entry will be used as-is.
+                            </FormDescription>
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1310,8 +1345,7 @@ const showCeilingOptions =
                               }
 
                               field.onChange(field.value?.filter((value) => value !== item.id));
-                              if (item.id === 'Doors') form.setValue('trimPaintOptions.doorCount', 0);
-                              if (item.id === 'Window Frames') form.setValue('trimPaintOptions.windowFrameCount', 0);
+                              if (item.id === 'Window Frames') form.setValue('trimPaintOptions.interiorWindowFrameTypes', []);
                             }}
                           />
                         </FormControl>
@@ -1324,52 +1358,37 @@ const showCeilingOptions =
                 ))}
               </div>
 
-              {form.watch('trimPaintOptions.trimItems')?.includes('Doors') && (
-                <div className="rounded-lg border bg-background p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium">Interior doors</p>
-                    <FormField
-                      control={form.control}
-                      name="trimPaintOptions.doorCount"
-                      render={({ field }) => (
-                        <FormItem className="w-28">
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={40}
-                              value={field.value ?? 0}
-                              onChange={(event) => field.onChange(Number(event.target.value))}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
-              )}
-
               {form.watch('trimPaintOptions.trimItems')?.includes('Window Frames') && (
-                <div className="rounded-lg border bg-background p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium">Interior window frames</p>
-                    <FormField
-                      control={form.control}
-                      name="trimPaintOptions.windowFrameCount"
-                      render={({ field }) => (
-                        <FormItem className="w-28">
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={40}
-                              value={field.value ?? 0}
-                              onChange={(event) => field.onChange(Number(event.target.value))}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
+                <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                    <Layout className="h-3.5 w-3.5" />
+                    Interior Window Frames
+                  </div>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {WINDOW_TYPE_OPTIONS.map((type) => (
+                      <FormField
+                        key={type}
+                        control={form.control}
+                        name="trimPaintOptions.interiorWindowFrameTypes"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value?.includes(type)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    field.onChange([...(field.value || []), type]);
+                                    return;
+                                  }
+                                  field.onChange(field.value?.filter((value) => value !== type));
+                                }}
+                              />
+                            </FormControl>
+                            <FormLabel className="font-normal cursor-pointer text-xs">{type}</FormLabel>
+                          </FormItem>
+                        )}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
@@ -1786,7 +1805,7 @@ const showCeilingOptions =
         )}
       </AnimatePresence>
 
-      {state.data && <EstimateResult result={state.data} />}
+      {state.data && <EstimateResult result={state.data} pdfMeta={state.pdfMeta} />}
     </APIProvider>
   );
 }

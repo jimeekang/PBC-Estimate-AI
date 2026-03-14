@@ -9,10 +9,12 @@ import { Toaster } from '@/components/ui/toaster';
 export const metadata: Metadata = {
   metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
   title: 'PBC Estimate AI | Professional Painting Quotes',
-  description: 'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
+  description:
+    'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
   openGraph: {
     title: 'PBC Estimate AI | Professional Painting Quotes',
-    description: 'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
+    description:
+      'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
     url: 'https://pbc-estimate-ai.vercel.app',
     siteName: 'PBC Estimate AI',
     locale: 'en_AU',
@@ -21,7 +23,7 @@ export const metadata: Metadata = {
         url: '/PBCLOGO-Letter-removebg-preview.png',
         width: 1200,
         height: 630,
-        alt: 'PBC Estimate AI – AI Painting Estimate',
+        alt: 'PBC Estimate AI - AI Painting Estimate',
       },
     ],
     type: 'website',
@@ -48,7 +50,7 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className={cn('font-body antialiased h-full')}>
         <AuthProvider>
-          <div className="flex flex-col min-h-full">
+          <div className="flex min-h-full flex-col">
             <Header />
             <main className="flex-1">{children}</main>
             <Footer />
