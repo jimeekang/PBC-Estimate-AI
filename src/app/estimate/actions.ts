@@ -1,7 +1,7 @@
 'use server';
 
 import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
-import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
@@ -112,6 +112,7 @@ const saveEstimateSchema = z.object({
 });
 
 async function enforceEstimateRateLimit(uid: string) {
+  const adminDb = getAdminDb();
   const now = new Date();
   const currentHour = now.toISOString().slice(0, 13);
   const currentDay = now.toISOString().slice(0, 10);
@@ -162,6 +163,8 @@ async function enforceEstimateRateLimit(uid: string) {
 
 export async function submitEstimate(payload: unknown) {
   try {
+    const adminAuth = getAdminAuth();
+    const adminDb = getAdminDb();
     const validatedPayload = saveEstimateSchema.safeParse(payload);
 
     if (!validatedPayload.success) {

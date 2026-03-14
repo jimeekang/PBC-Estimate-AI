@@ -2,15 +2,20 @@ import 'server-only';
 
 import { readFileSync } from 'node:fs';
 
-import { applicationDefault, cert, getApp, getApps, initializeApp } from 'firebase-admin/app';
+import {
+  applicationDefault,
+  cert,
+  getApp,
+  getApps,
+  initializeApp,
+  type App,
+} from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
 function getServiceAccountCredential() {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  const hasApplicationDefaultCredentials =
-    !!process.env.GOOGLE_APPLICATION_CREDENTIALS || !!process.env.GCLOUD_PROJECT || !!process.env.GOOGLE_CLOUD_PROJECT;
 
   if (serviceAccountJson) {
     return cert(JSON.parse(serviceAccountJson));
@@ -20,22 +25,24 @@ function getServiceAccountCredential() {
     return cert(JSON.parse(readFileSync(serviceAccountPath, 'utf8')));
   }
 
-  if (hasApplicationDefaultCredentials) {
-    return applicationDefault();
-  }
-
-  throw new Error(
-    'Firebase Admin credentials are missing. Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH for local development.'
-  );
+  return applicationDefault();
 }
 
-const adminApp =
-  getApps().length > 0
-    ? getApp()
-    : initializeApp({
-        credential: getServiceAccountCredential(),
-        projectId: process.env.NEXT_PUBLIC_PROJECT_ID,
-      });
+export function getAdminApp(): App {
+  if (getApps().length > 0) {
+    return getApp();
+  }
 
-export const adminAuth = getAuth(adminApp);
-export const adminDb = getFirestore(adminApp);
+  return initializeApp({
+    credential: getServiceAccountCredential(),
+    projectId: process.env.NEXT_PUBLIC_PROJECT_ID,
+  });
+}
+
+export function getAdminAuth() {
+  return getAuth(getAdminApp());
+}
+
+export function getAdminDb() {
+  return getFirestore(getAdminApp());
+}
