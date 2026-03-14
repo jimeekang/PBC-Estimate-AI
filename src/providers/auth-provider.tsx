@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { onIdTokenChanged, User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -21,6 +21,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
 
   useEffect(() => {
+    if (!isFirebaseConfigured) {
+      setUser(null);
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onIdTokenChanged(auth, (nextUser) => {
       setUser(nextUser);
       setLoading(false);

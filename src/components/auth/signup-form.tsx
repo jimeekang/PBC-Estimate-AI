@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, Loader2, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { auth, ensureAppCheck, signInWithGoogle } from '@/lib/firebase';
+import { auth, ensureAppCheck, isFirebaseConfigured, signInWithGoogle } from '@/lib/firebase';
 import { PrivacyPolicy } from './privacy-policy';
 import { Icons } from '@/components/icons';
 import { useRouter } from 'next/navigation';
@@ -29,6 +29,10 @@ export function SignupForm() {
   const router = useRouter();
 
   const handleGoogleSignIn = async () => {
+    if (!isFirebaseConfigured) {
+      setErrors({ _form: ['Firebase configuration is missing. Please check App Hosting environment variables.'] });
+      return;
+    }
     try {
       await ensureAppCheck();
       setIsGooglePending(true);
@@ -61,6 +65,11 @@ export function SignupForm() {
     event.preventDefault();
     setIsPending(true);
     setErrors(null);
+
+    if (!isFirebaseConfigured) {
+      setIsPending(false);
+      return setErrors({ _form: ['Firebase configuration is missing. Please check App Hosting environment variables.'] });
+    }
 
     const formData = new FormData(event.currentTarget);
     const email = formData.get('email') as string;

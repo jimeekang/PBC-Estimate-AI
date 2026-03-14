@@ -32,16 +32,22 @@ const firebaseConfig = {
   messagingSenderId: env('NEXT_PUBLIC_MESSAGING_SENDER_ID'),
   appId: env('NEXT_PUBLIC_APP_ID'),
 };
+const isFirebaseConfigured = !!(
+  firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.appId
+);
 
 // Initialize Firebase only if API key is present to avoid hard crashes during SSR/Build
 const app: FirebaseApp =
-  !getApps().length && firebaseConfig.apiKey
+  !getApps().length && isFirebaseConfigured
     ? initializeApp(firebaseConfig)
     : getApps().length
       ? getApp()
       : ({} as FirebaseApp);
 
-const auth: Auth = firebaseConfig.apiKey ? getAuth(app) : ({} as Auth);
+const auth: Auth = isFirebaseConfigured ? getAuth(app) : ({} as Auth);
 const isAppCheckEnabled = env('NEXT_PUBLIC_ENABLE_APPCHECK') === 'true';
 const appCheckSiteKey = env('NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY');
 const appCheckDebugToken = env('NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN');
@@ -57,7 +63,7 @@ const db: Firestore = firebaseConfig.apiKey
 // const db: Firestore = firebaseConfig.apiKey ? getFirestore(app) : ({} as Firestore);
 
 // Set persistence to local storage only on the client-side
-if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
+if (typeof window !== 'undefined' && isFirebaseConfigured) {
   setPersistence(auth, browserLocalPersistence);
 }
 
@@ -68,7 +74,7 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 export const ensureAppCheck = async () => {
   if (
     typeof window === 'undefined' ||
-    !firebaseConfig.apiKey ||
+    !isFirebaseConfigured ||
     !isAppCheckEnabled ||
     !appCheckSiteKey ||
     appCheckInitialized
@@ -102,6 +108,9 @@ export const signInWithGoogle = async () => {
   if (typeof window === 'undefined') {
     throw new Error('This function can only be called on the client side.');
   }
+  if (!isFirebaseConfigured) {
+    throw new Error('Firebase configuration is missing.');
+  }
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result;
@@ -122,7 +131,7 @@ export const signInWithGoogle = async () => {
 };
 
 export const getEstimates = async () => {
-  if (!firebaseConfig.apiKey) return [];
+  if (!isFirebaseConfigured) return [];
   await ensureAppCheck();
   const estimatesCol = collection(db, 'estimates');
   const estimateSnapshot = await getDocs(estimatesCol);
@@ -134,7 +143,7 @@ export const getEstimates = async () => {
 };
 
 export const getEstimate = async (id: string) => {
-  if (!firebaseConfig.apiKey) return null;
+  if (!isFirebaseConfigured) return null;
   await ensureAppCheck();
   const docRef = doc(db, 'estimates', id);
   const docSnap = await getDoc(docRef);
@@ -144,4 +153,4 @@ export const getEstimate = async (id: string) => {
   return null;
 };
 
-export { auth, db };
+export { auth, db, isFirebaseConfigured };
