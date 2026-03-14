@@ -125,10 +125,10 @@ const EXTERIOR_TRIM_OPTIONS = [
 ] as const;
 
 const APARTMENT_STRUCTURE_OPTIONS = [
-  { id: 'Studio' as const,    label: 'Studio',                                   bedroomCount: 0, hasMaster: false, hasEnsuite: false },
-  { id: '1Bed' as const,      label: '1 Bed Apartment',                           bedroomCount: 0, hasMaster: true,  hasEnsuite: false },
-  { id: '2Bed2Bath' as const, label: '2 Bed / 2 Bath Apartment (Ensuite inc.)',   bedroomCount: 1, hasMaster: true,  hasEnsuite: true  },
-  { id: '3Bed2Bath' as const, label: '3 Bed / 2 Bath Apartment (Ensuite inc.)',   bedroomCount: 2, hasMaster: true,  hasEnsuite: true  },
+  { id: 'Studio' as const,    label: 'Studio',                                   bedroomCount: 0, bathroomCount: 1, hasMaster: false, hasEnsuite: false, avgSqm: 40 },
+  { id: '1Bed' as const,      label: '1 Bed Apartment',                           bedroomCount: 0, bathroomCount: 1, hasMaster: true,  hasEnsuite: false, avgSqm: 55 },
+  { id: '2Bed2Bath' as const, label: '2 Bed / 2 Bath Apartment (Ensuite inc.)',   bedroomCount: 1, bathroomCount: 2, hasMaster: true,  hasEnsuite: true,  avgSqm: 85 },
+  { id: '3Bed2Bath' as const, label: '3 Bed / 2 Bath Apartment (Ensuite inc.)',   bedroomCount: 2, bathroomCount: 2, hasMaster: true,  hasEnsuite: true,  avgSqm: 110 },
 ] as const;
 
 const propertyTypes = ['Apartment', 'House / Townhouse', 'Office', 'Other'] as const;
@@ -213,6 +213,8 @@ const estimateFormSchema = z
       .object({
         paintType: z.enum(['Oil-based', 'Water-based']),
         trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
+        doorCount: z.coerce.number().min(0).max(40).optional(),
+        windowFrameCount: z.coerce.number().min(0).max(40).optional(),
       })
       .optional(),
 
@@ -402,6 +404,8 @@ export function EstimateForm() {
       trimPaintOptions: {
         paintType: 'Oil-based',
         trimItems: [],
+        doorCount: 0,
+        windowFrameCount: 0,
       },
       ceilingOptions: {
         ceilingType: 'Flat',
@@ -509,6 +513,8 @@ const showCeilingOptions =
     const option = APARTMENT_STRUCTURE_OPTIONS.find((o) => o.id === watchApartmentStructure);
     if (!option) return;
     form.setValue('bedroomCount', option.bedroomCount);
+    form.setValue('bathroomCount', option.bathroomCount);
+    form.setValue('approxSize', option.avgSqm);
     form.setValue('roomsToPaint', option.hasMaster ? ['Master Bedroom'] : []);
     form.setValue('paintAreas.ensuitePaint', option.hasEnsuite);
   }, [watchApartmentStructure, isInterior, isApartmentType, watchScope]);
@@ -1297,11 +1303,16 @@ const showCeilingOptions =
                         <FormControl>
                           <Checkbox
                             checked={field.value?.includes(item.id)}
-                            onCheckedChange={(checked) =>
-                              checked
-                                ? field.onChange([...(field.value || []), item.id])
-                                : field.onChange(field.value?.filter((value) => value !== item.id))
-                            }
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                field.onChange([...(field.value || []), item.id]);
+                                return;
+                              }
+
+                              field.onChange(field.value?.filter((value) => value !== item.id));
+                              if (item.id === 'Doors') form.setValue('trimPaintOptions.doorCount', 0);
+                              if (item.id === 'Window Frames') form.setValue('trimPaintOptions.windowFrameCount', 0);
+                            }}
                           />
                         </FormControl>
                         <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs">
@@ -1312,6 +1323,56 @@ const showCeilingOptions =
                   />
                 ))}
               </div>
+
+              {form.watch('trimPaintOptions.trimItems')?.includes('Doors') && (
+                <div className="rounded-lg border bg-background p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">Interior doors</p>
+                    <FormField
+                      control={form.control}
+                      name="trimPaintOptions.doorCount"
+                      render={({ field }) => (
+                        <FormItem className="w-28">
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={40}
+                              value={field.value ?? 0}
+                              onChange={(event) => field.onChange(Number(event.target.value))}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {form.watch('trimPaintOptions.trimItems')?.includes('Window Frames') && (
+                <div className="rounded-lg border bg-background p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">Interior window frames</p>
+                    <FormField
+                      control={form.control}
+                      name="trimPaintOptions.windowFrameCount"
+                      render={({ field }) => (
+                        <FormItem className="w-28">
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={40}
+                              value={field.value ?? 0}
+                              onChange={(event) => field.onChange(Number(event.target.value))}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

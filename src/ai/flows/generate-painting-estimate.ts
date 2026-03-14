@@ -7,7 +7,7 @@
  * Base price = wall + ceiling + trim oil-based (all included).
  *
  * - Apartment interior (Entire property): uses CONTINUOUS SQM CURVE for smooth pricing.
- *   No class-based cliffs. 90sqm rawMedian $4,500 is the key calibration point.
+ *   No class-based cliffs. 85sqm (avg 2bed apartment) is calibrated to start from low-$4k.
  *   Trim water-based upgrade and complexity factors add on top.
  * - Apartment interior (Specific areas): class-based anchor + room scoring.
  *   TwoBed split: TwoBedStd (≤90sqm) / TwoBedLg (91~110sqm).
@@ -63,7 +63,7 @@ import { z } from 'genkit';
 const APARTMENT_ANCHORS_OIL = {
   Studio:    { min: 2200, max: 3500, median: 2700 },
   OneBed:    { min: 2800, max: 4200, median: 3300 },
-  TwoBedStd: { min: 3800, max: 5500, median: 4400 },
+  TwoBedStd: { min: 4300, max: 6200, median: 5000 },
   TwoBedLg:  { min: 5000, max: 7500, median: 6000 },
   ThreeBed:  { min: 6500, max: 9500, median: 7500 },
 } as const;
@@ -73,20 +73,22 @@ const APARTMENT_ANCHORS_OIL = {
 // -----------------------------
 // rawMedian = price before areaFactor is applied.
 // Calibrated so that:
-//   90sqm × af(1.12 ensuite) × Excellent band(0.94~1.06) → $4,061 ~ $4,579 ✅
+//   85sqm × af(1.12 ensuite) × Fair band(0.92) → low-$4.1k start ✅
+//   90sqm × af(1.12 ensuite) × Excellent band(0.95~1.05) → high-$4k to low-$5k ✅
 // Interpolates smoothly — no class boundary cliffs.
 const APARTMENT_SQM_CURVE: readonly { sqm: number; rawMedian: number }[] = [
   { sqm: 35,  rawMedian: 2200 },
-  { sqm: 45,  rawMedian: 2589 },
-  { sqm: 55,  rawMedian: 2900 },
-  { sqm: 65,  rawMedian: 3125 },
-  { sqm: 80,  rawMedian: 3500 },
-  { sqm: 90,  rawMedian: 3857 },  // TwoBed avg ← key calibration point
-  { sqm: 105, rawMedian: 4286 },
-  { sqm: 120, rawMedian: 4900 },  // smooth transition (no cliff at 110→111)
-  { sqm: 140, rawMedian: 5800 },
-  { sqm: 160, rawMedian: 6700 },
-  { sqm: 200, rawMedian: 8000 },
+  { sqm: 45,  rawMedian: 2800 },
+  { sqm: 55,  rawMedian: 3100 },
+  { sqm: 65,  rawMedian: 3450 },
+  { sqm: 80,  rawMedian: 3800 },
+  { sqm: 85,  rawMedian: 4025 },  // avg 2bed apartment ← key calibration point
+  { sqm: 90,  rawMedian: 4300 },
+  { sqm: 105, rawMedian: 4850 },
+  { sqm: 120, rawMedian: 5800 },
+  { sqm: 140, rawMedian: 6900 },
+  { sqm: 160, rawMedian: 7900 },
+  { sqm: 200, rawMedian: 9500 },
 ] as const;
 
 function getRawMedianFromSqm(sqmInput: number | undefined | null): number {
@@ -207,8 +209,8 @@ const ENTIRE_HOUSE_BAND = {
 // Fair: moderate range
 // Poor: wider range (more uncertainty)
 const ENTIRE_APT_BAND = {
-  Excellent: { min: 0.94, max: 1.06 },
-  Fair:      { min: 0.93, max: 1.10 },
+  Excellent: { min: 0.95, max: 1.05 },
+  Fair:      { min: 0.92, max: 1.08 },
   Poor:      { min: 0.90, max: 1.25 },
 } as const;
 
@@ -224,11 +226,30 @@ const STORY_MODIFIER: Record<string, number> = {
 /** Standard coat system: 1 undercoat + 2 finish coats */
 const BASE_COAT_COUNT = 3;
 
-const WATER_BASED_UPLIFT = { minPct: 0.08, maxPct: 0.12 } as const;
-const TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM = { min: 80, max: 180 } as const;
+const WATER_BASED_UPLIFT = { minPct: 0.04, maxPct: 0.06 } as const;
+const TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM = { min: 50, max: 110 } as const;
 const TRIM_PREMIUM_SPECIFIC_PER_ROOM = {
-  'Oil-based': { min: 120, max: 260 },
-  'Water-based': { min: 180, max: 380 },
+  'Oil-based': { min: 130, max: 220 },
+  'Water-based': { min: 155, max: 260 },
+} as const;
+
+/** Interior door per-door painting price (AUD), Sydney Northern Beaches 2026.
+ *  Applied when painting doors specifically (door-only scope).
+ */
+const INTERIOR_DOOR_PRICE = {
+  'Oil-based':   250,
+  'Water-based': 325,
+} as const;
+
+/** Interior window frame per-window painting price (AUD), Sydney Northern Beaches 2026. */
+const INTERIOR_WINDOW_PRICE = {
+  'Oil-based':   140,
+  'Water-based': 180,
+} as const;
+
+const INTERIOR_TRIM_ONLY_BASE = {
+  apartment: { min: 2850, max: 3600 },
+  house: { min: 3200, max: 4100 },
 } as const;
 
 // -----------------------------
@@ -474,6 +495,24 @@ function sumAreaFactor(flags: {
   if (flags.trimPaint) f += AREA_SHARE.trimPaint;
   if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
   return f > 0 ? f : 1.0;
+}
+
+function isTrimOnlySpecificInterior(
+  input: z.infer<typeof GeneratePaintingEstimateInputSchema>,
+  selectedRooms: string[]
+) {
+  if (input.scopeOfPainting !== 'Specific areas only') return false;
+  if (!input.trimPaintOptions?.trimItems?.length) return false;
+
+  if (!selectedRooms.length) return true;
+
+  const rooms = input.interiorRooms ?? [];
+  if (!rooms.length) return true;
+
+  return rooms.every((room) => {
+    const paintAreas = room.paintAreas ?? {};
+    return !!paintAreas.trimPaint && !paintAreas.wallPaint && !paintAreas.ceilingPaint;
+  });
 }
 
 function sumAreaFactorWholeApartment(flags: {
@@ -811,6 +850,8 @@ const GeneratePaintingEstimateInputSchema = z.object({
     .object({
       paintType: z.enum(['Oil-based', 'Water-based']),
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
+      doorCount: z.number().min(0).max(40).optional(),
+      windowFrameCount: z.number().min(0).max(40).optional(),
     })
     .optional(),
 
@@ -999,7 +1040,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
           const computedMin = Math.round(median * band.min);
           const computedMax = Math.round(median * band.max);
-          const absoluteFloor = Math.round(rawMedian * 0.7);
+          const absoluteFloor = Math.round(rawMedian * 0.78);
           intMin = Number.isFinite(computedMin) ? Math.max(computedMin, absoluteFloor) : absoluteFloor;
           intMax = Number.isFinite(computedMax) ? Math.max(computedMax, Math.round(absoluteFloor * 1.2)) : Math.round(absoluteFloor * 1.2);
         }
@@ -1148,12 +1189,18 @@ export const generatePaintingEstimate = ai.defineFlow(
       // trim options
       if (input.trimPaintOptions) {
         const paintType = input.trimPaintOptions.paintType;
+        const trimItems = input.trimPaintOptions.trimItems ?? [];
+        const doorCount = trimItems.includes('Doors') ? input.trimPaintOptions.doorCount ?? 0 : 0;
+        const windowFrameCount = trimItems.includes('Window Frames')
+          ? input.trimPaintOptions.windowFrameCount ?? 0
+          : 0;
+        const trimOnlySpecific = isTrimOnlySpecificInterior(input, selectedRooms);
 
         if (input.scopeOfPainting === 'Entire property') {
           const globalTrimOn = !!input.paintAreas?.trimPaint;
 
           if (globalTrimOn && paintType === 'Water-based') {
-            const itemCount = input.trimPaintOptions.trimItems?.length ?? 0;
+            const itemCount = trimItems.length;
             if (itemCount > 0) {
               intMin += TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM.min * itemCount;
               intMax += TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM.max * itemCount;
@@ -1178,6 +1225,24 @@ export const generatePaintingEstimate = ai.defineFlow(
               intMin += Math.round(premMin * WATER_BASED_UPLIFT.minPct);
               intMax += Math.round(premMax * WATER_BASED_UPLIFT.maxPct);
             }
+          }
+
+          if (doorCount > 0) {
+            const doorUnitPrice = INTERIOR_DOOR_PRICE[paintType];
+            intMin += doorUnitPrice * doorCount;
+            intMax += doorUnitPrice * doorCount;
+          }
+
+          if (windowFrameCount > 0) {
+            const windowUnitPrice = INTERIOR_WINDOW_PRICE[paintType];
+            intMin += windowUnitPrice * windowFrameCount;
+            intMax += windowUnitPrice * windowFrameCount;
+          }
+
+          if (trimOnlySpecific) {
+            const trimBase = aptLike ? INTERIOR_TRIM_ONLY_BASE.apartment : INTERIOR_TRIM_ONLY_BASE.house;
+            intMin = Math.max(intMin, trimBase.min);
+            intMax = Math.max(intMax, trimBase.max);
           }
         }
       }

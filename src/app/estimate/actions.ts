@@ -97,6 +97,8 @@ const estimateFormSchema = z.object({
     .object({
       paintType: z.enum(['Oil-based', 'Water-based']),
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])).max(3),
+      doorCount: z.coerce.number().min(0).max(40).optional(),
+      windowFrameCount: z.coerce.number().min(0).max(40).optional(),
     })
     .optional(),
   ceilingOptions: z
