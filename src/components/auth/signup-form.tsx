@@ -64,6 +64,11 @@ export function SignupForm() {
       }
     } catch (e: any) {
       console.error("Google Sign-In Error (Signup):", e);
+
+      if (e?.message?.includes('Local App Check debug token is not registered')) {
+        setErrors({ _form: [e.message] });
+        return;
+      }
       
       const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
       let errorMessage = [`Error: ${e.message}`];
@@ -129,6 +134,9 @@ export function SignupForm() {
       window.location.href = '/verify-email';
     } catch (e: any) {
       setIsPending(false);
+      if (e?.message?.includes('Local App Check debug token is not registered')) {
+        return setErrors({ _form: [e.message] });
+      }
       if (e.code === 'auth/email-already-in-use') {
         return setErrors({ email: ['Email already in use.'] });
       }

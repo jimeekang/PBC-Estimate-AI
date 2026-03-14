@@ -64,6 +64,11 @@ export function LoginForm() {
       }
     } catch (e: any) {
       console.error("Google Sign-In Error:", e);
+
+      if (e?.message?.includes('Local App Check debug token is not registered')) {
+        setErrors({ _form: [e.message] });
+        return;
+      }
       
       const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
       let errorMessage = [`Error: ${e.message}`];
@@ -132,6 +137,9 @@ export function LoginForm() {
     } catch (e: any) {
       setIsPending(false);
       console.error("Email Login Error:", e);
+      if (e?.message?.includes('Local App Check debug token is not registered')) {
+        return setErrors({ _form: [e.message] });
+      }
       if (e.code === 'auth/invalid-credential') {
         return setErrors({ _form: ['Invalid email or password.'] });
       }

@@ -70,6 +70,14 @@ let appCheckInitialized = false;
 let appCheckInitPromise: Promise<void> | null = null;
 let appCheckInstance: AppCheck | null = null;
 
+function isLocalDevelopmentHost() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname);
+}
+
 // ✅ IMPORTANT: ignoreUndefinedProperties prevents Firestore from rejecting undefined fields
 const db: Firestore = firebaseConfig.apiKey
   ? initializeFirestore(app, { ignoreUndefinedProperties: true })
@@ -100,13 +108,13 @@ export const ensureAppCheck = async () => {
 
   if (!appCheckInitPromise) {
     appCheckInitPromise = Promise.resolve().then(() => {
-      if (window.location.hostname === 'localhost' && appCheckDebugToken) {
+      if (isLocalDevelopmentHost()) {
         (
           self as typeof self & {
             FIREBASE_APPCHECK_DEBUG_TOKEN?: string | boolean;
           }
         ).FIREBASE_APPCHECK_DEBUG_TOKEN =
-          appCheckDebugToken === 'true' ? true : appCheckDebugToken;
+          appCheckDebugToken ? (appCheckDebugToken === 'true' ? true : appCheckDebugToken) : true;
       }
 
       appCheckInstance = initializeAppCheck(app, {
@@ -120,7 +128,17 @@ export const ensureAppCheck = async () => {
   await appCheckInitPromise;
 
   if (appCheckInstance) {
-    await getAppCheckToken(appCheckInstance, false);
+    try {
+      await getAppCheckToken(appCheckInstance, false);
+    } catch (error) {
+      if (isLocalDevelopmentHost()) {
+        throw new Error(
+          'Local App Check debug token is not registered. Add the generated debug token to Firebase Console > App Check > Manage debug tokens, then restart the dev server.'
+        );
+      }
+
+      throw error;
+    }
   }
 };
 
