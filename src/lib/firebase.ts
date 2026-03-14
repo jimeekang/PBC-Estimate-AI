@@ -24,13 +24,23 @@ function env(name: string) {
   return process.env[name]?.trim();
 }
 
+const defaultFirebaseConfig = {
+  apiKey: 'AIzaSyD2qyDSXm1rmSSUqzFpD3ix198jc4Bh_iQ',
+  authDomain: 'studio-5245261553-378c8.firebaseapp.com',
+  projectId: 'studio-5245261553-378c8',
+  storageBucket: 'studio-5245261553-378c8.firebasestorage.app',
+  messagingSenderId: '176887759680',
+  appId: '1:176887759680:web:2debce89454733ddb970a5',
+};
+
 const firebaseConfig = {
-  apiKey: env('NEXT_PUBLIC_API_KEY'),
-  authDomain: env('NEXT_PUBLIC_AUTH_DOMAIN'),
-  projectId: env('NEXT_PUBLIC_PROJECT_ID'),
-  storageBucket: env('NEXT_PUBLIC_STORAGE_BUCKET'),
-  messagingSenderId: env('NEXT_PUBLIC_MESSAGING_SENDER_ID'),
-  appId: env('NEXT_PUBLIC_APP_ID'),
+  apiKey: env('NEXT_PUBLIC_API_KEY') || defaultFirebaseConfig.apiKey,
+  authDomain: env('NEXT_PUBLIC_AUTH_DOMAIN') || defaultFirebaseConfig.authDomain,
+  projectId: env('NEXT_PUBLIC_PROJECT_ID') || defaultFirebaseConfig.projectId,
+  storageBucket: env('NEXT_PUBLIC_STORAGE_BUCKET') || defaultFirebaseConfig.storageBucket,
+  messagingSenderId:
+    env('NEXT_PUBLIC_MESSAGING_SENDER_ID') || defaultFirebaseConfig.messagingSenderId,
+  appId: env('NEXT_PUBLIC_APP_ID') || defaultFirebaseConfig.appId,
 };
 const isFirebaseConfigured = !!(
   firebaseConfig.apiKey &&

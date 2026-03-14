@@ -16,10 +16,7 @@ env:
 
   # Keep API keys in Secret Manager; public Firebase identifiers can stay here.
   - variable: NEXT_PUBLIC_API_KEY
-    secret: firebase-web-api-key
-    availability:
-      - BUILD
-      - RUNTIME
+    value: 'AIzaSyD2qyDSXm1rmSSUqzFpD3ix198jc4Bh_iQ'
   - variable: NEXT_PUBLIC_AUTH_DOMAIN
     value: 'studio-5245261553-378c8.firebaseapp.com'
   - variable: NEXT_PUBLIC_PROJECT_ID

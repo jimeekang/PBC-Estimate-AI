@@ -13,10 +13,7 @@ env:
       - RUNTIME
 
   - variable: NEXT_PUBLIC_API_KEY
-    secret: firebase-web-api-key
-    availability:
-      - BUILD
-      - RUNTIME
+    value: "YOUR_FIREBASE_WEB_API_KEY"
   - variable: NEXT_PUBLIC_AUTH_DOMAIN
     value: "YOUR_PROJECT.firebaseapp.com"
   - variable: NEXT_PUBLIC_PROJECT_ID
