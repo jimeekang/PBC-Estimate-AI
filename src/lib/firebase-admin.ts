@@ -46,3 +46,6 @@ export function getAdminAuth() {
 export function getAdminDb() {
   return getFirestore(getAdminApp());
 }
+
+export const adminAuth = getAdminAuth();
+export const adminDb = getAdminDb();
