@@ -8,7 +8,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Loader2, Info } from 'lucide-react';
 import Link from 'next/link';
 import { signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { auth, ensureAppCheck, isFirebaseConfigured, signInWithGoogle } from '@/lib/firebase';
+import {
+  auth,
+  ensureAppCheck,
+  isFirebaseConfigured,
+  refreshAppCheckToken,
+  signInWithGoogle,
+} from '@/lib/firebase';
 import { Icons } from '@/components/icons';
 import { useRouter } from 'next/navigation';
 
@@ -27,16 +33,32 @@ export function LoginForm() {
   const [isGooglePending, setIsGooglePending] = useState(false);
   const router = useRouter();
 
+  const signInWithEmail = async (email: string, password: string) => {
+    await ensureAppCheck();
+
+    try {
+      return await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      if (error?.code === 'auth/firebase-app-check-token-is-invalid') {
+        await refreshAppCheckToken();
+        return signInWithEmailAndPassword(auth, email, password);
+      }
+
+      throw error;
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     if (!isFirebaseConfigured) {
       setErrors({ _form: ['Firebase configuration is missing. Please check App Hosting environment variables.'] });
       return;
     }
     try {
-      await ensureAppCheck();
       setIsGooglePending(true);
       setErrors(null);
+      await ensureAppCheck();
       const result = await signInWithGoogle();
+
       if (result) {
         router.replace('/estimate');
       }
@@ -93,8 +115,7 @@ export function LoginForm() {
     }
 
     try {
-      await ensureAppCheck();
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmail(email, password);
       const user = userCredential.user;
       await user.reload();
 

@@ -8,7 +8,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, Loader2, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { auth, ensureAppCheck, isFirebaseConfigured, signInWithGoogle } from '@/lib/firebase';
+import {
+  auth,
+  ensureAppCheck,
+  isFirebaseConfigured,
+  refreshAppCheckToken,
+  signInWithGoogle,
+} from '@/lib/firebase';
 import { PrivacyPolicy } from './privacy-policy';
 import { Icons } from '@/components/icons';
 import { useRouter } from 'next/navigation';
@@ -28,15 +34,30 @@ export function SignupForm() {
   const [isGooglePending, setIsGooglePending] = useState(false);
   const router = useRouter();
 
+  const createAccount = async (email: string, password: string) => {
+    await ensureAppCheck();
+
+    try {
+      return await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      if (error?.code === 'auth/firebase-app-check-token-is-invalid') {
+        await refreshAppCheckToken();
+        return createUserWithEmailAndPassword(auth, email, password);
+      }
+
+      throw error;
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     if (!isFirebaseConfigured) {
       setErrors({ _form: ['Firebase configuration is missing. Please check App Hosting environment variables.'] });
       return;
     }
     try {
-      await ensureAppCheck();
       setIsGooglePending(true);
       setErrors(null);
+      await ensureAppCheck();
       const result = await signInWithGoogle();
       if (result) {
         router.replace('/estimate');
@@ -103,8 +124,7 @@ export function SignupForm() {
     }
 
     try {
-      await ensureAppCheck();
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createAccount(email, password);
       await sendEmailVerification(userCredential.user);
       window.location.href = '/verify-email';
     } catch (e: any) {

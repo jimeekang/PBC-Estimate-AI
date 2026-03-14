@@ -10,7 +10,12 @@ import {
   setPersistence,
   Auth,
 } from 'firebase/auth';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import {
+  AppCheck,
+  getToken as getAppCheckToken,
+  initializeAppCheck,
+  ReCaptchaV3Provider,
+} from 'firebase/app-check';
 import {
   initializeFirestore,
   collection,
@@ -63,6 +68,7 @@ const appCheckSiteKey = env('NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY');
 const appCheckDebugToken = env('NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN');
 let appCheckInitialized = false;
 let appCheckInitPromise: Promise<void> | null = null;
+let appCheckInstance: AppCheck | null = null;
 
 // ✅ IMPORTANT: ignoreUndefinedProperties prevents Firestore from rejecting undefined fields
 const db: Firestore = firebaseConfig.apiKey
@@ -103,7 +109,7 @@ export const ensureAppCheck = async () => {
           appCheckDebugToken === 'true' ? true : appCheckDebugToken;
       }
 
-      initializeAppCheck(app, {
+      appCheckInstance = initializeAppCheck(app, {
         provider: new ReCaptchaV3Provider(appCheckSiteKey),
         isTokenAutoRefreshEnabled: true,
       });
@@ -112,6 +118,18 @@ export const ensureAppCheck = async () => {
   }
 
   await appCheckInitPromise;
+
+  if (appCheckInstance) {
+    await getAppCheckToken(appCheckInstance, false);
+  }
+};
+
+export const refreshAppCheckToken = async () => {
+  await ensureAppCheck();
+
+  if (appCheckInstance) {
+    await getAppCheckToken(appCheckInstance, true);
+  }
 };
 
 export const signInWithGoogle = async () => {
@@ -126,6 +144,11 @@ export const signInWithGoogle = async () => {
     return result;
   } catch (error: any) {
     console.error('Google Sign-In Error Details:', error.code, error.message);
+
+    if (error?.code === 'auth/firebase-app-check-token-is-invalid') {
+      await refreshAppCheckToken();
+      return signInWithPopup(auth, googleProvider);
+    }
 
     if (
       error?.code === 'auth/internal-error' ||
