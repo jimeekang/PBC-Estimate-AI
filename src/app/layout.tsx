@@ -1,13 +1,10 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { AuthProvider } from '@/providers/auth-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { Toaster } from '@/components/ui/toaster';
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
@@ -49,7 +46,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className={cn('font-body antialiased h-full', inter.variable)}>
+      <body className={cn('font-body antialiased h-full')}>
         <AuthProvider>
           <div className="flex flex-col min-h-full">
             <Header />
