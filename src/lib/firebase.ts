@@ -38,6 +38,7 @@ const app: FirebaseApp =
       : ({} as FirebaseApp);
 
 const auth: Auth = firebaseConfig.apiKey ? getAuth(app) : ({} as Auth);
+const isAppCheckEnabled = process.env.NEXT_PUBLIC_ENABLE_APPCHECK === 'true';
 const appCheckSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY;
 const appCheckDebugToken = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN;
 let appCheckInitialized = false;
@@ -64,6 +65,7 @@ export const ensureAppCheck = async () => {
   if (
     typeof window === 'undefined' ||
     !firebaseConfig.apiKey ||
+    !isAppCheckEnabled ||
     !appCheckSiteKey ||
     appCheckInitialized
   ) {
