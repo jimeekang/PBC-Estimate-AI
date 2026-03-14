@@ -58,6 +58,19 @@ const estimateFormSchema = z.object({
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
   exteriorAreas: z.array(z.string().max(80)).max(20).optional(),
   otherExteriorArea: z.string().trim().max(120).optional(),
+  exteriorTrimItems: z.array(z.string().max(40)).max(10).optional(),
+  exteriorDoors: z
+    .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(20) }))
+    .max(3)
+    .optional(),
+  exteriorWindows: z
+    .array(z.object({ type: z.enum(['Normal', 'Awning', 'Double Hung', 'French']), quantity: z.number().min(0).max(30) }))
+    .max(4)
+    .optional(),
+  exteriorArchitraves: z
+    .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(50) }))
+    .max(3)
+    .optional(),
   otherInteriorArea: z.string().trim().max(120).optional(),
   wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
   wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).max(3).optional(),

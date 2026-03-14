@@ -179,6 +179,17 @@ const estimateFormSchema = z
       .array(z.enum(['Doors', 'Window Frames', 'Architraves', 'Front Door']))
       .optional(),
 
+    // Exterior trim style+quantity detail
+    exteriorDoors: z
+      .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(20) }))
+      .optional(),
+    exteriorWindows: z
+      .array(z.object({ type: z.enum(['Normal', 'Awning', 'Double Hung', 'French']), quantity: z.number().min(0).max(30) }))
+      .optional(),
+    exteriorArchitraves: z
+      .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(50) }))
+      .optional(),
+
     otherInteriorArea: z.string().optional(),
     apartmentStructure: z.enum(['Studio', '1Bed', '2Bed2Bath', '3Bed2Bath']).optional(),
     approxSize: z.coerce.number().positive().optional(),
@@ -290,6 +301,86 @@ function AutocompleteInput({ field }: { field: any }) {
   return <Input {...field} ref={inputRef} placeholder="e.g. Sydney, NSW" />;
 }
 
+// ── ExteriorTrimDetail ──────────────────────────────────────────────────────
+// Generic style+quantity picker for Doors / Windows / Architraves.
+// styleKey distinguishes 'style' (Doors, Architraves) from 'type' (Windows).
+type DoorStyle = 'Simple' | 'Standard' | 'Complex';
+type WindowType = 'Normal' | 'Awning' | 'Double Hung' | 'French';
+type ArchStyle = 'Simple' | 'Standard' | 'Complex';
+
+interface ExteriorTrimDetailProps {
+  title: string;
+  icon: React.ReactNode;
+  styles: readonly (DoorStyle | WindowType | ArchStyle)[];
+  max: number;
+  fieldName: 'exteriorDoors' | 'exteriorWindows' | 'exteriorArchitraves';
+  styleKey: 'style' | 'type';
+  form: ReturnType<typeof useForm<EstimateFormValues>>;
+}
+
+function ExteriorTrimDetail({ title, icon, styles, max, fieldName, styleKey, form }: ExteriorTrimDetailProps) {
+  const entries = (form.watch(fieldName) as Array<Record<string, any>>) ?? [];
+
+  const getQty = (s: string): number => {
+    const found = entries.find((e) => e[styleKey] === s);
+    return found ? (found.quantity as number) : 0;
+  };
+
+  const setQty = (s: string, qty: number) => {
+    const current: Array<Record<string, any>> = (form.getValues(fieldName) as Array<Record<string, any>>) ?? [];
+    const filtered = current.filter((e) => e[styleKey] !== s);
+    const next = qty > 0 ? [...filtered, { [styleKey]: s, quantity: qty }] : filtered;
+    (form.setValue as any)(fieldName, next);
+  };
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+        {icon}
+        {title}
+      </div>
+      <div className="grid grid-cols-1 gap-1.5">
+        {styles.map((s) => {
+          const qty = getQty(s);
+          return (
+            <div
+              key={s}
+              className={cn(
+                'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
+                qty > 0 ? 'border-primary bg-primary/10' : 'bg-background'
+              )}
+            >
+              <span className="font-medium">{s}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={`Decrease ${s}`}
+                  onClick={() => setQty(s, Math.max(0, qty - 1))}
+                  className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
+                  disabled={qty === 0}
+                >
+                  -
+                </button>
+                <span className="w-5 text-center tabular-nums">{qty}</span>
+                <button
+                  type="button"
+                  aria-label={`Increase ${s}`}
+                  onClick={() => setQty(s, Math.min(max, qty + 1))}
+                  className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
+                  disabled={qty >= max}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 export function EstimateForm() {
   const { user, isAdmin } = useAuth();
   const [state, setState] = useState<{ data?: GeneratePaintingEstimateOutput; error?: string }>({});
@@ -334,6 +425,9 @@ export function EstimateForm() {
       wallFinishes: [],
       wallHeight: undefined,
       exteriorTrimItems: [],
+      exteriorDoors: [],
+      exteriorWindows: [],
+      exteriorArchitraves: [],
 
       location: '',
       timingPurpose: 'Maintenance or refresh',
@@ -392,6 +486,7 @@ export function EstimateForm() {
   const watchGlobalCeilingPaint = useWatch({ control: form.control, name: 'paintAreas.ceilingPaint' });
   const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
   const watchExteriorAreas = useWatch({ control: form.control, name: 'exteriorAreas' }) || [];
+  const watchExteriorTrimItems = useWatch({ control: form.control, name: 'exteriorTrimItems' }) || [];
   const watchApartmentStructure = useWatch({ control: form.control, name: 'apartmentStructure' });
   const isApartmentType = watchPropertyType === 'Apartment';
 
@@ -1372,11 +1467,11 @@ const showCeilingOptions =
                                 </CardContent>
                               )}
 
-                              {/* ✅ Exterior Trim options: 동일 UX + 멀티 */}
+                              {/* Exterior Trim: style + quantity subsections */}
                               {isExtTrim && isSelected && (
-                                <CardContent className="pt-0 px-4 pb-4 space-y-3">
+                                <CardContent className="pt-0 px-4 pb-4 space-y-4">
                                   <div className="text-xs font-semibold text-primary">
-                                    Exterior trim items (select all that apply)
+                                    Select trim items to include
                                   </div>
 
                                   <FormField
@@ -1403,6 +1498,12 @@ const showCeilingOptions =
                                                       ? [...current, opt.id]
                                                       : current.filter((v) => v !== opt.id);
                                                     field.onChange(next);
+                                                    // clear detail data when unchecked
+                                                    if (!c) {
+                                                      if (opt.id === 'Doors') form.setValue('exteriorDoors', []);
+                                                      if (opt.id === 'Window Frames') form.setValue('exteriorWindows', []);
+                                                      if (opt.id === 'Architraves') form.setValue('exteriorArchitraves', []);
+                                                    }
                                                   }}
                                                 />
                                                 <div className="flex items-center gap-2">
@@ -1417,6 +1518,45 @@ const showCeilingOptions =
                                       </FormItem>
                                     )}
                                   />
+
+                                  {/* Doors detail */}
+                                  {watchExteriorTrimItems.includes('Doors') && (
+                                    <ExteriorTrimDetail
+                                      title="Exterior Doors"
+                                      icon={<DoorOpen className="h-3.5 w-3.5" />}
+                                      styles={['Simple', 'Standard', 'Complex'] as const}
+                                      max={20}
+                                      fieldName="exteriorDoors"
+                                      styleKey="style"
+                                      form={form}
+                                    />
+                                  )}
+
+                                  {/* Window Frames detail */}
+                                  {watchExteriorTrimItems.includes('Window Frames') && (
+                                    <ExteriorTrimDetail
+                                      title="Window Frames"
+                                      icon={<Layout className="h-3.5 w-3.5" />}
+                                      styles={['Normal', 'Awning', 'Double Hung', 'French'] as const}
+                                      max={30}
+                                      fieldName="exteriorWindows"
+                                      styleKey="type"
+                                      form={form}
+                                    />
+                                  )}
+
+                                  {/* Architraves detail */}
+                                  {watchExteriorTrimItems.includes('Architraves') && (
+                                    <ExteriorTrimDetail
+                                      title="Architraves"
+                                      icon={<Baseline className="h-3.5 w-3.5" />}
+                                      styles={['Simple', 'Standard', 'Complex'] as const}
+                                      max={50}
+                                      fieldName="exteriorArchitraves"
+                                      styleKey="style"
+                                      form={form}
+                                    />
+                                  )}
                                 </CardContent>
                               )}
                             </Card>

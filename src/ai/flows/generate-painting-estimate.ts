@@ -130,10 +130,10 @@ const HOUSE_INTERIOR_ANCHORS = {
  * default  = fallback when wallType not specified
  */
 const EXTERIOR_WALL_TYPE_ANCHOR = {
-  cladding: { min: 3500, max: 16000, median: 7000 },
-  rendered:  { min: 5000, max: 21000, median: 10500 },
-  brick:     { min: 6000, max: 24000, median: 13000 },
-  default:   { min: 4000, max: 18000, median: 8500 },
+  cladding: { min: 3000, max: 12000, median: 5500 },
+  rendered:  { min: 4500, max: 17000, median: 9000 },
+  brick:     { min: 5500, max: 20000, median: 11500 },
+  default:   { min: 3500, max: 14000, median: 7000 },
 } as const;
 
 /** Wall-type-aware minimum floor prices per scope category.
@@ -142,10 +142,10 @@ const EXTERIOR_WALL_TYPE_ANCHOR = {
  *  tripleStoreyFullExterior added for 3-storey support.
  */
 const EXTERIOR_WALL_TYPE_FLOORS = {
-  cladding: { wallOnly: 4000, wallPlusEaves: 5500, fullExterior: 7000, doubleStoreyFullExterior: 10000, tripleStoreyFullExterior: 13500 },
-  rendered:  { wallOnly: 5000, wallPlusEaves: 7000, fullExterior: 9000, doubleStoreyFullExterior: 13000, tripleStoreyFullExterior: 17000 },
-  brick:     { wallOnly: 6000, wallPlusEaves: 8000, fullExterior: 10500, doubleStoreyFullExterior: 15000, tripleStoreyFullExterior: 19500 },
-  default:   { wallOnly: 4500, wallPlusEaves: 6000, fullExterior: 8000, doubleStoreyFullExterior: 11000, tripleStoreyFullExterior: 14500 },
+  cladding: { wallOnly: 3000, wallPlusEaves: 4500, fullExterior: 6000, doubleStoreyFullExterior: 9000, tripleStoreyFullExterior: 13000 },
+  rendered:  { wallOnly: 4000, wallPlusEaves: 6000, fullExterior: 8000, doubleStoreyFullExterior: 12000, tripleStoreyFullExterior: 16000 },
+  brick:     { wallOnly: 5000, wallPlusEaves: 7000, fullExterior: 9500, doubleStoreyFullExterior: 14000, tripleStoreyFullExterior: 18500 },
+  default:   { wallOnly: 3500, wallPlusEaves: 5000, fullExterior: 7000, doubleStoreyFullExterior: 10000, tripleStoreyFullExterior: 13500 },
 } as const;
 
 const COMBINED_ANCHOR = { min: 15000, max: 35000, median: 22000 } as const;
@@ -291,7 +291,7 @@ const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: number;
   Eaves: { minPct: 0.09, maxPct: 0.14 },
   Gutter: { minPct: 0.05, maxPct: 0.08 },
   Fascia: { minPct: 0.05, maxPct: 0.08 },
-  'Exterior Trim': { minPct: 0.06, maxPct: 0.1 },
+  'Exterior Trim': { minPct: 0.04, maxPct: 0.08 },
   Pipes: { minPct: 0.02, maxPct: 0.04 },
   Deck: { minPct: 0.06, maxPct: 0.12 },
   Paving: { minPct: 0.04, maxPct: 0.09 },
@@ -299,7 +299,94 @@ const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: number;
   Etc: { minPct: 0.04, maxPct: 0.1 },
 };
 
+/** Standalone pricing for exterior detail areas selected WITHOUT Wall painting.
+ *  Calibrated for Sydney Northern Beaches 2026.
+ */
+const EXTERIOR_DETAIL_STANDALONE: Record<string, { min: number; max: number; perStoryMult?: number }> = {
+  'Exterior Trim': { min: 400, max: 1500, perStoryMult: 1.4 },
+  'Pipes':         { min: 200, max: 600,  perStoryMult: 1.3 },
+  'Deck':          { min: 800, max: 3500 },
+  'Paving':        { min: 500, max: 2500 },
+  'Eaves':         { min: 600, max: 2500, perStoryMult: 1.3 },
+  'Gutter':        { min: 400, max: 1500, perStoryMult: 1.3 },
+  'Fascia':        { min: 400, max: 1500, perStoryMult: 1.3 },
+  'Roof':          { min: 2500, max: 9000 },
+  'Etc':           { min: 300, max: 1500 },
+};
+
 // EXTERIOR_FLOORS kept for backward-compat; actual floors resolved via EXTERIOR_WALL_TYPE_FLOORS
+
+// -----------------------------
+// Exterior Trim Item-Level Anchors (Sydney Northern Beaches 2026)
+// Per-item pricing for doors, windows, architraves.
+// These are ADDITIVE to the base exterior estimate — not captured by EXTERIOR_AREA_UPLIFT_PCT.
+// -----------------------------
+
+/** Exterior door painting price per door (AUD), Sydney Northern Beaches 2026.
+ *  Simple = flush/flat door; Standard = panel door; Complex = French/glazed/ornate.
+ */
+const EXTERIOR_DOOR_ANCHOR: Record<string, { min: number; max: number }> = {
+  Simple:   { min: 150, max: 280 },
+  Standard: { min: 250, max: 420 },
+  Complex:  { min: 400, max: 680 },
+};
+
+/** Exterior window frame painting price per window (AUD), Sydney Northern Beaches 2026.
+ *  Normal = single pane slider; Awning = hinged outward; Double Hung = sash window;
+ *  French = multi-pane French window.
+ */
+const EXTERIOR_WINDOW_ANCHOR: Record<string, { min: number; max: number }> = {
+  Normal:       { min: 80,  max: 160 },
+  Awning:       { min: 130, max: 220 },
+  'Double Hung': { min: 180, max: 320 },
+  French:       { min: 280, max: 500 },
+};
+
+/** Exterior architrave painting price per set (AUD), Sydney Northern Beaches 2026.
+ *  Simple = flat profile; Standard = ogee/colonial; Complex = ornate/multi-step.
+ */
+const EXTERIOR_ARCHITRAVE_ANCHOR: Record<string, { min: number; max: number }> = {
+  Simple:   { min: 50,  max: 110 },
+  Standard: { min: 80,  max: 170 },
+  Complex:  { min: 140, max: 300 },
+};
+
+/** Quantity scale discount factor — batch pricing for multiple identical items.
+ *  1-3 items: full price (mobilisation cost dominates)
+ *  4-7 items: 8% discount (trade efficiency gain)
+ *  8-12 items: 15% discount (significant batch savings)
+ *  13+ items: 20% discount (maximum batch discount)
+ */
+function getQtyScaleFactor(qty: number): number {
+  if (qty <= 3)  return 1.00;
+  if (qty <= 7)  return 0.92;
+  if (qty <= 12) return 0.85;
+  return 0.80;
+}
+
+/** Calculate total cost for a set of exterior trim items using per-item anchors + quantity scaling.
+ *  Stacking rule: each item group gets its own qty scale factor (not shared across groups).
+ *  E.g., 5 doors + 3 windows → doors get 0.92 scale, windows get 1.00 scale.
+ */
+function calcTrimItemCost(
+  items: { style?: string; type?: string; quantity: number }[],
+  anchor: Record<string, { min: number; max: number }>
+): { min: number; max: number } {
+  let totalMin = 0;
+  let totalMax = 0;
+  for (const item of items) {
+    const key = item.style ?? item.type ?? 'Standard';
+    const anchorKeys = Object.keys(anchor);
+    // Fallback to middle tier if key not found
+    const a = anchor[key] ?? anchor[anchorKeys[Math.floor(anchorKeys.length / 2)]] ?? { min: 0, max: 0 };
+    const qty = Math.max(0, item.quantity ?? 0);
+    if (qty === 0) continue;
+    const scale = getQtyScaleFactor(qty);
+    totalMin += a.min * qty * scale;
+    totalMax += a.max * qty * scale;
+  }
+  return { min: Math.round(totalMin), max: Math.round(totalMax) };
+}
 
 // -----------------------------
 // Helpers
@@ -693,6 +780,20 @@ const GeneratePaintingEstimateInputSchema = z.object({
   otherExteriorArea: z.string().optional(),
   wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
   wallHeight: z.number().optional(),
+
+  /** Exterior trim item-level inputs (optional — additive to base exterior estimate) */
+  exteriorDoors: z.array(z.object({
+    style: z.enum(['Simple', 'Standard', 'Complex']),
+    quantity: z.number().min(0),
+  })).optional(),
+  exteriorWindows: z.array(z.object({
+    type: z.enum(['Normal', 'Awning', 'Double Hung', 'French']),
+    quantity: z.number().min(0),
+  })).optional(),
+  exteriorArchitraves: z.array(z.object({
+    style: z.enum(['Simple', 'Standard', 'Complex']),
+    quantity: z.number().min(0),
+  })).optional(),
 
   approxSize: z.number().optional(),
   location: z.string().optional(),
@@ -1138,6 +1239,8 @@ export const generatePaintingEstimate = ai.defineFlow(
       let areas = (input.exteriorAreas ?? []).slice();
 
       if (!areas.length) areas = ['Wall', 'Eaves'];
+
+      // Exterior = always includes wall painting (cladding board = full wall scope)
       if (!areas.includes('Wall')) areas = ['Wall', ...areas];
 
       // wallType 기반 앵커 선택 (cladding / rendered / brick / default)
@@ -1197,6 +1300,27 @@ export const generatePaintingEstimate = ai.defineFlow(
           rMin *= 1.08;
           rMax *= 1.12;
         }
+      }
+
+      // --- Exterior Trim Item-Level Costs (ADDITIVE, not captured by EXTERIOR_AREA_UPLIFT_PCT) ---
+      // These are added AFTER condition and difficulty multipliers but BEFORE floor enforcement.
+      // Stacking rule: trim item costs are flat additions — they do not multiply with base.
+      // This prevents double-counting with the 'Exterior Trim' uplift percentage which covers
+      // general trim scope (fascia boards, bargeboards etc.), not individual doors/windows/architraves.
+      if (input.exteriorDoors?.length) {
+        const doorCost = calcTrimItemCost(input.exteriorDoors, EXTERIOR_DOOR_ANCHOR);
+        rMin += doorCost.min;
+        rMax += doorCost.max;
+      }
+      if (input.exteriorWindows?.length) {
+        const windowCost = calcTrimItemCost(input.exteriorWindows, EXTERIOR_WINDOW_ANCHOR);
+        rMin += windowCost.min;
+        rMax += windowCost.max;
+      }
+      if (input.exteriorArchitraves?.length) {
+        const archCost = calcTrimItemCost(input.exteriorArchitraves, EXTERIOR_ARCHITRAVE_ANCHOR);
+        rMin += archCost.min;
+        rMax += archCost.max;
       }
 
       const hasEaves = areas.includes('Eaves');
