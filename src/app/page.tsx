@@ -3,36 +3,29 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/providers/auth-provider';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, User, DollarSign, ArrowRight } from 'lucide-react';
-import { onAuthStateChanged } from 'firebase/auth';
 
 export default function HomePage() {
   const router = useRouter();
   const [isClient, setIsClient] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
-    // This code runs only on the client
     setIsClient(true);
-    if (auth) { // auth is only available on the client
-      const unsubscribe = onAuthStateChanged(auth, (user) => {
-        if (user) {
-          router.push('/dashboard');
-        }
-      });
-      return () => unsubscribe();
-    }
-  }, [router]);
 
-  // Render a loading state or nothing on the server and initial client render
+    if (user) {
+      router.replace('/estimate');
+    }
+  }, [router, user]);
+
   if (!isClient) {
     return null;
   }
 
-  // Render the actual content only on the client
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl w-full space-y-12 text-center">
