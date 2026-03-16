@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Estimate photos: public read (admin uploads via server, users read via URL)
+    match /estimates/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow write: if false; // server-side only via Admin SDK
+    }
+  }
+}

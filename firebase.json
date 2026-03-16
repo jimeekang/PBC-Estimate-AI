@@ -5,5 +5,8 @@
       "rootDir": ".",
       "alwaysDeployFromSource": true
     }
-  ]
+  ],
+  "storage": {
+    "rules": "storage.rules"
+  }
 }
