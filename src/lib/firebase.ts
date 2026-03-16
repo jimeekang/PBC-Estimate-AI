@@ -24,7 +24,6 @@ import {
   getDoc,
   Firestore,
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL, FirebaseStorage } from 'firebase/storage';
 
 function env(name: string) {
   return process.env[name]?.trim();
@@ -205,20 +204,30 @@ export const getEstimate = async (id: string) => {
   return null;
 };
 
-const storage: FirebaseStorage = isFirebaseConfigured ? getStorage(app) : ({} as FirebaseStorage);
+export const uploadEstimatePhotos = async (idToken: string, photos: File[]): Promise<string[]> => {
+  const formData = new FormData();
 
-export const uploadEstimatePhotos = async (uid: string, photos: File[]): Promise<string[]> => {
-  const timestamp = Date.now();
-  const urls = await Promise.all(
-    photos.map(async (file, idx) => {
-      const ext = file.name.split('.').pop() || 'jpg';
-      const path = `estimates/${uid}/${timestamp}/photo_${idx}.${ext}`;
-      const storageRef = ref(storage, path);
-      await uploadBytes(storageRef, file);
-      return getDownloadURL(storageRef);
-    })
-  );
-  return urls;
+  photos.forEach((photo) => {
+    formData.append('photos', photo);
+  });
+
+  const response = await fetch('/api/estimate-photos', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: formData,
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { photoUrls?: string[]; error?: string }
+    | null;
+
+  if (!response.ok || !payload?.photoUrls) {
+    throw new Error(payload?.error || 'Photo upload failed.');
+  }
+
+  return payload.photoUrls;
 };
 
-export { auth, db, storage, isFirebaseConfigured };
+export { auth, db, isFirebaseConfigured };

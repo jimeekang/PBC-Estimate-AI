@@ -586,7 +586,7 @@ const showCeilingOptions =
     let photoUrls: string[] = [];
     if (photos.length > 0) {
       try {
-        photoUrls = await uploadEstimatePhotos(user.uid, photos);
+        photoUrls = await uploadEstimatePhotos(idToken, photos);
       } catch (err) {
         console.error('Photo upload failed:', err);
         toast({ variant: 'destructive', title: 'Photo Upload Failed', description: 'Could not upload photos. Please try again.' });
