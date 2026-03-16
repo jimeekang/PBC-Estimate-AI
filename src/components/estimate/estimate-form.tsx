@@ -43,9 +43,13 @@ import {
   Grid3X3,
   Wrench,
   MoreHorizontal,
+  Camera,
+  X,
+  ImagePlus,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
+import { uploadEstimatePhotos } from '@/lib/firebase';
 import { useEffect, useState, useRef } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { EstimatePdfMeta } from './estimate-result';
@@ -396,6 +400,9 @@ export function EstimateForm() {
   const [estimateCount, setEstimateCount] = useState(0);
   const [isCountLoading, setIsCountLoading] = useState(true);
   const [isLimitReached, setIsLimitReached] = useState(false);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const form = useForm<EstimateFormValues>({
@@ -576,7 +583,18 @@ const showCeilingOptions =
     }
 
     setIsPending(true);
-    const result = await submitEstimate({ formData: values, idToken });
+    let photoUrls: string[] = [];
+    if (photos.length > 0) {
+      try {
+        photoUrls = await uploadEstimatePhotos(user.uid, photos);
+      } catch (err) {
+        console.error('Photo upload failed:', err);
+        toast({ variant: 'destructive', title: 'Photo Upload Failed', description: 'Could not upload photos. Please try again.' });
+        setIsPending(false);
+        return;
+      }
+    }
+    const result = await submitEstimate({ formData: values, idToken, photoUrls });
 
     if (result.error) {
       if (result.limitReached) {
@@ -1751,6 +1769,92 @@ const showCeilingOptions =
                   </FormItem>
                 )}
               />
+            </CardContent>
+          </Card>
+
+          {/* Photo Upload */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Camera className="h-5 w-5 text-primary" />
+                Property Photos
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Upload photos to help us better understand your property. Include images of areas to be painted, existing damage, surface conditions, or any special features.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const incoming = Array.from(e.target.files ?? []);
+                  setPhotoError(null);
+                  const oversized = incoming.filter((f) => f.size > 10 * 1024 * 1024);
+                  if (oversized.length > 0) {
+                    setPhotoError(`${oversized.length} file(s) exceed the 10 MB limit and were not added.`);
+                  }
+                  const valid = incoming.filter((f) => f.size <= 10 * 1024 * 1024);
+                  const combined = [...photos, ...valid];
+                  if (combined.length > 10) {
+                    setPhotoError('Maximum 10 photos allowed. Only the first 10 were kept.');
+                    setPhotos(combined.slice(0, 10));
+                  } else {
+                    setPhotos(combined);
+                  }
+                  // Reset input so the same file can be re-added after removal
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={photos.length >= 10}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus className="h-4 w-4" />
+                Add Photos
+                {photos.length > 0 && (
+                  <span className="text-muted-foreground">({photos.length}/10)</span>
+                )}
+              </Button>
+              {photoError && (
+                <p className="text-sm text-destructive">{photoError}</p>
+              )}
+              {photos.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {photos.map((file, idx) => {
+                    const url = URL.createObjectURL(file);
+                    return (
+                      <div key={idx} className="relative h-20 w-20 shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={`Upload preview ${idx + 1}`}
+                          className="h-20 w-20 rounded-md object-cover border"
+                          onLoad={() => URL.revokeObjectURL(url)}
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Remove photo ${idx + 1}`}
+                          onClick={() => {
+                            setPhotoError(null);
+                            setPhotos((prev) => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
 

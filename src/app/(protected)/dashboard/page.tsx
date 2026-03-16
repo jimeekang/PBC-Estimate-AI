@@ -10,5 +10,5 @@ export default function DashboardRedirect() {
     router.replace('/admin');
   }, [router]);
 
-  return null; // Or a loading spinner
+  return null;
 }

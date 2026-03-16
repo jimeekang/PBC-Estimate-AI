@@ -47,11 +47,9 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <Logo className="justify-center mb-4 text-2xl" />
-          <h2 className="text-3xl font-bold tracking-tight text-foreground">
-            Reset your password
-          </h2>
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">Reset your password</h2>
           <p className="mt-2 text-muted-foreground">
-            Enter your email and we'll send you a reset link
+            Enter your email and we&apos;ll send you a reset link
           </p>
         </div>
 
@@ -78,7 +76,10 @@ export default function ForgotPasswordPage() {
               </div>
 
               {status && (
-                <Alert variant={status.type === 'error' ? 'destructive' : 'default'} className={status.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : ''}>
+                <Alert
+                  variant={status.type === 'error' ? 'destructive' : 'default'}
+                  className={status.type === 'success' ? 'border-green-200 bg-green-50 text-green-800' : ''}
+                >
                   {status.type === 'error' ? (
                     <AlertCircle className="h-4 w-4" />
                   ) : (

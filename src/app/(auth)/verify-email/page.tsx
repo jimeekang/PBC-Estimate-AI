@@ -23,7 +23,8 @@ export default function VerifyEmailPage() {
           </div>
           <CardTitle className="mt-4 text-2xl">Check your email</CardTitle>
           <CardDescription>
-            We've sent a verification link to your email address. Please click the link to continue.
+            We&apos;ve sent a verification link to your email address. Please click the link to
+            continue.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -31,7 +32,7 @@ export default function VerifyEmailPage() {
             Return to Login
           </Button>
           <p className="mt-4 text-xs text-muted-foreground">
-            Didn't receive an email? Check your spam folder or try signing up again.
+            Didn&apos;t receive an email? Check your spam folder or try signing up again.
           </p>
         </CardContent>
       </Card>

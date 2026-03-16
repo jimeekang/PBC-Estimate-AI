@@ -31,13 +31,11 @@ export default function LoginPage() {
     <div className="flex min-h-full items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-            <Logo className="justify-center mb-4 text-2xl"/>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">
-                Sign in to your account
-            </h2>
-            <p className="mt-2 text-muted-foreground">
-                to get your AI-powered painting estimate
-            </p>
+          <Logo className="mb-4 justify-center text-2xl" />
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">Sign in to your account</h2>
+          <p className="mt-2 text-muted-foreground">
+            to get your AI-powered painting estimate
+          </p>
         </div>
         <Card className="shadow-lg">
           <CardHeader>
@@ -49,7 +47,7 @@ export default function LoginPage() {
           </CardContent>
         </Card>
         <p className="text-center text-sm text-muted-foreground">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/signup" className="font-medium text-primary hover:underline">
             Sign up
           </Link>

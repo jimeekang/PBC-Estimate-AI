@@ -26,23 +26,19 @@ export default function SignupPage() {
       </div>
     );
   }
-  
+
   return (
     <div className="flex min-h-full items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-md space-y-8">
-      <div className="text-center">
-            <Logo className="justify-center mb-4 text-2xl"/>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">
-                Create a new account
-            </h2>
-            <p className="mt-2 text-muted-foreground">
-                to get started with your first estimate
-            </p>
+        <div className="text-center">
+          <Logo className="mb-4 justify-center text-2xl" />
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">Create your account</h2>
+          <p className="mt-2 text-muted-foreground">Start generating AI-powered painting estimates</p>
         </div>
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>Sign Up</CardTitle>
-            <CardDescription>Enter your details to create an account.</CardDescription>
+            <CardTitle>Get started</CardTitle>
+            <CardDescription>Create an account to access the estimator.</CardDescription>
           </CardHeader>
           <CardContent>
             <SignupForm />

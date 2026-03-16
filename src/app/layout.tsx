@@ -1,10 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { cn } from '@/lib/utils';
-import { AuthProvider } from '@/providers/auth-provider';
-import Header from '@/components/header';
-import Footer from '@/components/footer';
-import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
@@ -48,16 +44,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className={cn('font-body antialiased h-full')}>
-        <AuthProvider>
-          <div className="flex min-h-full flex-col">
-            <Header />
-            <main className="flex-1">{children}</main>
-            <Footer />
-          </div>
-          <Toaster />
-        </AuthProvider>
-      </body>
+      <body className={cn('font-body antialiased h-full')}>{children}</body>
     </html>
   );
 }

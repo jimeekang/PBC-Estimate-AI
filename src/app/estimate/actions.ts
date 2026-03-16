@@ -110,6 +110,7 @@ const estimateFormSchema = z.object({
 const saveEstimateSchema = z.object({
   idToken: z.string().min(1, 'Authentication is required.'),
   formData: estimateFormSchema,
+  photoUrls: z.array(z.string().url()).max(10).optional(),
 });
 
 async function enforceEstimateRateLimit(uid: string) {
@@ -245,6 +246,7 @@ export async function submitEstimate(payload: unknown) {
       userId: decodedToken.uid,
       options: sanitizedOptions,
       estimate,
+      photoUrls: validatedPayload.data.photoUrls ?? [],
       createdAt: FieldValue.serverTimestamp(),
     });
 

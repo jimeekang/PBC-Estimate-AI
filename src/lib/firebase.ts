@@ -24,6 +24,7 @@ import {
   getDoc,
   Firestore,
 } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL, FirebaseStorage } from 'firebase/storage';
 
 function env(name: string) {
   return process.env[name]?.trim();
@@ -204,4 +205,20 @@ export const getEstimate = async (id: string) => {
   return null;
 };
 
-export { auth, db, isFirebaseConfigured };
+const storage: FirebaseStorage = isFirebaseConfigured ? getStorage(app) : ({} as FirebaseStorage);
+
+export const uploadEstimatePhotos = async (uid: string, photos: File[]): Promise<string[]> => {
+  const timestamp = Date.now();
+  const urls = await Promise.all(
+    photos.map(async (file, idx) => {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `estimates/${uid}/${timestamp}/photo_${idx}.${ext}`;
+      const storageRef = ref(storage, path);
+      await uploadBytes(storageRef, file);
+      return getDownloadURL(storageRef);
+    })
+  );
+  return urls;
+};
+
+export { auth, db, storage, isFirebaseConfigured };
