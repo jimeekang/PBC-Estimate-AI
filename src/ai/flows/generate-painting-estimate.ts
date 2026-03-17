@@ -805,6 +805,69 @@ function applyInteriorComplexityUpliftPct(
 }
 
 // -----------------------------
+// Exterior Complexity uplift (%)
+// All rates >= 1.5x interior equivalents.
+// Difficult access is weighted heavily (ladders/scaffolding for exterior).
+// -----------------------------
+function applyExteriorComplexityUpliftPct(
+  input: GeneratePaintingEstimateInput,
+  minVal: number,
+  maxVal: number
+) {
+  const factors = input.jobDifficulty ?? [];
+  const story = input.houseStories ?? '1 storey';
+  const isDouble = story === '2 storey' || story === 'Double story or more';
+  const isTriple = story === '3 storey';
+
+  let minPct = 0;
+  let maxPct = 0;
+
+  for (const f of factors) {
+    if (f === 'Difficult access areas') {
+      // Exterior: ladders/scaffolding cost rises sharply with storey height.
+      // Single: ~3x interior (1/3% → 3/9%). Double: scaffold mandatory (8/16%). Triple: 12/22%.
+      if (isTriple) {
+        minPct += 0.12;
+        maxPct += 0.22;
+      } else if (isDouble) {
+        minPct += 0.08;
+        maxPct += 0.16;
+      } else {
+        minPct += 0.03;
+        maxPct += 0.09;
+      }
+      continue;
+    }
+    if (f === 'Stairs') {
+      // 1.5x interior (1/2% → 1.5/3%)
+      minPct += 0.015;
+      maxPct += 0.03;
+      continue;
+    }
+    if (f === 'High ceilings') {
+      // 1.5x interior (1/2% → 1.5/3%)
+      minPct += 0.015;
+      maxPct += 0.03;
+      continue;
+    }
+    if (f === 'Extensive mouldings or trims') {
+      // 1.5x interior (2/4% → 3/6%)
+      minPct += 0.03;
+      maxPct += 0.06;
+      continue;
+    }
+  }
+
+  minPct = clamp(minPct, 0, 0.30);
+  maxPct = clamp(maxPct, 0, 0.40);
+
+  return {
+    min: Math.round(minVal * (1 + minPct)),
+    max: Math.round(maxVal * (1 + maxPct)),
+  };
+}
+
+// -----------------------------
 // Schemas
 // -----------------------------
 const InteriorRoomItemSchema = z.object({
@@ -1384,20 +1447,11 @@ export const generatePaintingEstimate = ai.defineFlow(
       // NOTE: storyMult is NOT applied here because wall height already
       // captures the story difference via wallArea calculation.
 
-      const diffs = input.jobDifficulty ?? [];
-      const hasDifficultAccess = diffs.includes('Difficult access areas');
-
-      if (hasDifficultAccess) {
-        if (isTriple) {
-          rMin *= 1.05;
-          rMax *= 1.10;
-        } else if (isDouble) {
-          rMin *= 1.03;
-          rMax *= 1.06;
-        } else {
-          rMin *= 1.08;
-          rMax *= 1.12;
-        }
+      // Exterior complexity uplift — all factors, storey-aware, >= 1.5x interior rates
+      {
+        const uplifted = applyExteriorComplexityUpliftPct(input, rMin, rMax);
+        rMin = uplifted.min;
+        rMax = uplifted.max;
       }
 
       // --- Exterior Trim Item-Level Costs (ADDITIVE, not captured by EXTERIOR_AREA_UPLIFT_PCT) ---
