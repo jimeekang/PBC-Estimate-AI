@@ -54,18 +54,22 @@ export async function POST(request: NextRequest) {
         const bucketFile = bucket.file(objectPath);
         const buffer = Buffer.from(await file.arrayBuffer());
 
+        const downloadToken = crypto.randomUUID();
+
         await bucketFile.save(buffer, {
           resumable: false,
-          public: true,
           metadata: {
             contentType: file.type || 'application/octet-stream',
-            cacheControl: 'public, max-age=31536000, immutable',
+            cacheControl: 'private, max-age=3600',
+            metadata: {
+              firebaseStorageDownloadTokens: downloadToken,
+            },
           },
         });
 
         const bucketName = bucket.name;
         const encodedPath = encodeURIComponent(objectPath);
-        const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media`;
+        const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${downloadToken}`;
 
         return downloadUrl;
       })

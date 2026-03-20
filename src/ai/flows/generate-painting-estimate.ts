@@ -150,9 +150,8 @@ const EXTERIOR_WALL_TYPE_FLOORS = {
   default:   { wallOnly: 3500, wallPlusEaves: 5000, fullExterior: 7000, doubleStoreyFullExterior: 10000, tripleStoreyFullExterior: 13500 },
 } as const;
 
-const COMBINED_ANCHOR = { min: 15000, max: 35000, median: 22000 } as const;
-
 const MAX_PRICE_CAP = 35000;
+const EXTERIOR_RESTRICTED_PROPERTY_TYPES = ['Apartment', 'Office'] as const;
 
 // -----------------------------
 // Interior modelling
@@ -183,7 +182,7 @@ const AREA_SHARE = {
   ceilingPaint: 0.25,
   wallPaint: 0.55,
   trimPaint: 0.2,
-  ensuitePaint: 0.12,
+  ensuitePaint: 0.08,
 };
 
 const CONDITION_MULTIPLIER = {
@@ -269,6 +268,105 @@ const INTERIOR_TRIM_ONLY_BASE = {
   house: { min: 3200, max: 4100 },
 } as const;
 
+// Specific-area room anchors use room-level pricing directly instead of
+// distributing whole-property anchors. Base includes wall + ceiling + trim
+// under the standard oil-based trim system.
+const INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL = {
+  'Master Bedroom': { min: 1350, max: 1700, median: 1500 },
+  'Bedroom 1': { min: 980, max: 1280, median: 1130 },
+  'Bedroom 2': { min: 980, max: 1280, median: 1130 },
+  'Bedroom 3': { min: 980, max: 1280, median: 1130 },
+  Bathroom: { min: 1400, max: 2000, median: 1700 },
+  'Living Room': { min: 2200, max: 3200, median: 2650 },
+  Lounge: { min: 2200, max: 3200, median: 2650 },
+  Dining: { min: 1700, max: 2400, median: 2000 },
+  Kitchen: { min: 1900, max: 2700, median: 2250 },
+  'Study / Office': { min: 1500, max: 2100, median: 1800 },
+  Laundry: { min: 1100, max: 1600, median: 1350 },
+  Hallway: { min: 900, max: 1400, median: 1150 },
+  Foyer: { min: 850, max: 1300, median: 1050 },
+  Stairwell: { min: 1800, max: 2800, median: 2250 },
+  'Walk-in robe': { min: 800, max: 1200, median: 1000 },
+  Etc: { min: 1200, max: 1800, median: 1500 },
+} as const;
+
+const INTERIOR_SKIRTING_ROOM_ANCHOR = {
+  'Master Bedroom': { oil_2coat: 200, water_3coat_white_finish: 255 },
+  'Bedroom 1': { oil_2coat: 145, water_3coat_white_finish: 190 },
+  'Bedroom 2': { oil_2coat: 145, water_3coat_white_finish: 190 },
+  'Bedroom 3': { oil_2coat: 145, water_3coat_white_finish: 190 },
+  Bathroom: { oil_2coat: 160, water_3coat_white_finish: 210 },
+  'Living Room': { oil_2coat: 220, water_3coat_white_finish: 280 },
+  Lounge: { oil_2coat: 220, water_3coat_white_finish: 280 },
+  Dining: { oil_2coat: 220, water_3coat_white_finish: 280 },
+  Kitchen: { oil_2coat: 220, water_3coat_white_finish: 280 },
+  'Study / Office': { oil_2coat: 180, water_3coat_white_finish: 230 },
+  Laundry: { oil_2coat: 160, water_3coat_white_finish: 210 },
+  Hallway: { oil_2coat: 160, water_3coat_white_finish: 210 },
+  Foyer: { oil_2coat: 160, water_3coat_white_finish: 210 },
+  Stairwell: { oil_2coat: 260, water_3coat_white_finish: 330 },
+  'Walk-in robe': { oil_2coat: 140, water_3coat_white_finish: 180 },
+  Etc: { oil_2coat: 180, water_3coat_white_finish: 230 },
+} as const;
+
+const INTERIOR_SPECIFIC_ROOM_TYPE_MULTIPLIER: Record<string, number> = {
+  Bathroom: 1.12,
+  Kitchen: 1.08,
+  Laundry: 1.02,
+  Stairwell: 1.18,
+  Hallway: 0.94,
+  Foyer: 0.94,
+  'Walk-in robe': 0.9,
+  'Study / Office': 1.0,
+  Etc: 1.0,
+};
+
+const INTERIOR_SPECIFIC_SURFACE_RATE = {
+  wall: { min: 18, max: 24 },
+  ceiling: { min: 12, max: 18 },
+  trimLinear: { min: 4, max: 7 },
+} as const;
+
+const INTERIOR_SKIRTING_LINEAR_RATE = {
+  oil_2coat: { min: 7, max: 10 },
+  water_3coat_white_finish: { min: 8, max: 11 },
+} as const;
+
+const INTERIOR_HANDRAIL_ITEM_PRICING = {
+  paint_to_paint_oil_2coat: {
+    label: 'Paint to paint, oil 2 coats',
+    rate: { min: 155, max: 180 },
+    minJob: { min: 480, max: 580 },
+  },
+  paint_to_paint_water_3coat: {
+    label: 'Paint to paint, water 3 coats',
+    rate: { min: 180, max: 210 },
+    minJob: { min: 560, max: 680 },
+  },
+  varnish_to_paint_oil_3coat_min: {
+    label: 'Varnish to paint, oil min 3 coats',
+    rate: { min: 185, max: 215 },
+    minJob: { min: 600, max: 720 },
+  },
+  varnish_to_paint_water_4coat_min: {
+    label: 'Varnish to paint, water min 4 coats',
+    rate: { min: 210, max: 245 },
+    minJob: { min: 680, max: 820 },
+  },
+  varnish_to_varnish_stain: {
+    label: 'Varnish to varnish stain',
+    rate: { min: 200, max: 235 },
+    minJob: { min: 650, max: 800 },
+  },
+  varnish_to_varnish_clear: {
+    label: 'Varnish to varnish clear',
+    rate: { min: 170, max: 200 },
+    minJob: { min: 540, max: 660 },
+  },
+} as const;
+
+const TRIM_ONLY_SKIRTING_MARKET_UPLIFT = 20;
+
 // -----------------------------
 // Exterior modelling (UPDATED)
 // -----------------------------
@@ -331,8 +429,8 @@ const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: number;
   Fascia: { minPct: 0.05, maxPct: 0.08 },
   'Exterior Trim': { minPct: 0.04, maxPct: 0.08 },
   Pipes: { minPct: 0.02, maxPct: 0.04 },
-  Deck: { minPct: 0.06, maxPct: 0.12 },
-  Paving: { minPct: 0.04, maxPct: 0.09 },
+  // Deck removed: priced independently via calcDeckCost()
+  // Paving removed: priced independently via calcPavingCost()
   Roof: { minPct: 0.18, maxPct: 0.32 },
   Etc: { minPct: 0.04, maxPct: 0.1 },
 };
@@ -343,14 +441,168 @@ const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: number;
 const EXTERIOR_DETAIL_STANDALONE: Record<string, { min: number; max: number; perStoryMult?: number }> = {
   'Exterior Trim': { min: 400, max: 1500, perStoryMult: 1.4 },
   'Pipes':         { min: 200, max: 600,  perStoryMult: 1.3 },
-  'Deck':          { min: 800, max: 3500 },
-  'Paving':        { min: 500, max: 2500 },
+  // Deck removed: priced independently via calcDeckCost()
+  // Paving removed: priced independently via calcPavingCost()
   'Eaves':         { min: 600, max: 2500, perStoryMult: 1.3 },
   'Gutter':        { min: 400, max: 1500, perStoryMult: 1.3 },
   'Fascia':        { min: 400, max: 1500, perStoryMult: 1.3 },
   'Roof':          { min: 2500, max: 9000 },
   'Etc':           { min: 300, max: 1500 },
 };
+
+// -----------------------------
+// Deck Pricing Anchors (Sydney Northern Beaches 2026, prep included, PBC ×0.7 of market)
+// Applies to House > Exterior > Deck regardless of whether Wall is selected.
+// Prices cover: sanding + cleaning (prep) + application coats.
+// -----------------------------
+
+/** Per-m² rate bands (min, max) by service type. */
+const DECK_RATE_PER_M2: Record<string, { min: number; max: number }> = {
+  'stain-oil':         { min: 32, max: 60 },  // 2-coat oil-based stain
+  'stain-water':       { min: 34, max: 62 },  // 2-coat water-based stain
+  'clear-oil':         { min: 28, max: 53 },  // 2-coat oil-based clear/sealer
+  'clear-water':       { min: 30, max: 55 },  // 2-coat water-based clear/sealer
+  'paint-conversion':  { min: 60, max: 91 },  // 3-coat varnish/stain→paint (strip+prime+2coat)
+  'paint-recoat':      { min: 35, max: 60 },  // 2-coat paint→paint recoat
+};
+
+/** Area band multiplier (small job premium / large job discount). */
+function getDeckAreaBandMult(areaSqm: number): number {
+  if (areaSqm <= 20)  return 1.15;
+  if (areaSqm <= 50)  return 1.00;
+  if (areaSqm <= 100) return 0.90;
+  return 0.82;
+}
+
+/** Timber condition modifier applied on top of base rate. */
+const DECK_CONDITION_MULT: Record<string, number> = {
+  good:      1.00,  // light sand, standard prep
+  weathered: 1.25,  // extra sanding, possible chemical strip
+  damaged:   1.55,  // heavy prep, board repair, deep sand
+};
+
+const DECK_MINIMUM_CHARGE = 600;
+const DECK_PROJECT_CEILING = 22000;
+
+// -----------------------------
+// Paving Pricing Anchors (Sydney Northern Beaches 2026, market-aligned ~88-92%)
+// Applies to Exterior > Paving regardless of whether Wall is selected.
+// Prices cover: pressure wash / etch / prime + 2 coats paving paint.
+// Minimum 2-day job due to inter-coat dry time — reflected in PAVING_MINIMUM_CHARGE.
+// -----------------------------
+
+/** Per-m² rate bands by area bracket (min, max AUD). */
+const PAVING_RATE_PER_M2: { maxArea: number; min: number; max: number }[] = [
+  { maxArea: 25,   min: 44, max: 56 },  // ≤25 m² — small job premium
+  { maxArea: 70,   min: 34, max: 44 },  // 26–70 m² — standard
+  { maxArea: 140,  min: 27, max: 35 },  // 71–140 m² — large
+  { maxArea: Infinity, min: 22, max: 29 }, // >140 m² — commercial scale
+];
+
+/** Surface condition multiplier (prep intensity). */
+const PAVING_CONDITION_MULT: Record<string, number> = {
+  good: 1.00,  // clean, light etch only
+  fair: 1.20,  // stained/oily — acid wash + extra prep
+  poor: 1.45,  // cracked/spalled — crack fill + 2× primer
+};
+
+const PAVING_MINIMUM_CHARGE = 950;
+const PAVING_PROJECT_CEILING = 18000;
+
+/** Returns the per-m² rate for the given area. */
+function getPavingRate(area: number): { min: number; max: number } {
+  return PAVING_RATE_PER_M2.find(b => area <= b.maxArea)!;
+}
+
+/** Computes paving cost range. Returns null if pavingArea is missing or zero. */
+function calcPavingCost(input: {
+  pavingArea?: number;
+  pavingCondition?: string;
+}): { min: number; max: number } | null {
+  const area = input.pavingArea;
+  if (!area || area <= 0) return null;
+
+  const rate     = getPavingRate(area);
+  const condMult = PAVING_CONDITION_MULT[input.pavingCondition ?? 'good'] ?? 1.0;
+
+  return {
+    min: Math.max(PAVING_MINIMUM_CHARGE, Math.round(area * rate.min * condMult)),
+    max: Math.min(PAVING_PROJECT_CEILING, Math.round(area * rate.max * condMult)),
+  };
+}
+
+/** Resolves deck service key from service + product type inputs. */
+function getDeckServiceKey(
+  serviceType: string,
+  productType?: string
+): string {
+  if (serviceType === 'paint-conversion' || serviceType === 'paint-recoat') {
+    return serviceType;
+  }
+  return `${serviceType}-${productType ?? 'oil'}`;
+}
+
+/** Computes deck cost range. Returns null if deckArea is missing or zero. */
+function calcDeckCost(input: {
+  deckArea?: number;
+  deckServiceType?: string;
+  deckProductType?: string;
+  deckCondition?: string;
+}): { min: number; max: number } | null {
+  const area = input.deckArea;
+  if (!area || area <= 0) return null;
+
+  const key = getDeckServiceKey(
+    input.deckServiceType ?? 'stain',
+    input.deckProductType
+  );
+  const rate = DECK_RATE_PER_M2[key];
+  if (!rate) return null;
+
+  const bandMult  = getDeckAreaBandMult(area);
+  const condMult  = DECK_CONDITION_MULT[input.deckCondition ?? 'good'] ?? 1.0;
+
+  const rawMin = area * rate.min * bandMult * condMult;
+  const rawMax = area * rate.max * bandMult * condMult;
+
+  return {
+    min: Math.max(DECK_MINIMUM_CHARGE, Math.round(rawMin)),
+    max: Math.min(DECK_PROJECT_CEILING, Math.round(rawMax)),
+  };
+}
+
+// -----------------------------
+// Interior Door Item-Level Anchors (Sydney Northern Beaches 2026)
+// Fixed unit prices per door component + paint system (ex GST).
+// Used only when Specific areas only + door items only (no wall/ceiling rooms).
+// -----------------------------
+const INTERIOR_DOOR_ITEM_ANCHOR: Record<string, Record<string, number>> = {
+  oil_2coat: {
+    'Door & Frame': 220,
+    'Door only': 160,
+    'Frame only': 60,
+  },
+  water_3coat_white_finish: {
+    'Door & Frame': 295,
+    'Door only': 210,
+    'Frame only': 85,
+  },
+};
+
+const INTERIOR_WINDOW_ITEM_ANCHOR = {
+  oil_2coat: {
+    Normal: { 'Window & Frame': 200, 'Window only': 150, 'Frame only': 110 },
+    Awning: { 'Window & Frame': 235, 'Window only': 180, 'Frame only': 135 },
+    'Double Hung': { 'Window & Frame': 300, 'Window only': 230, 'Frame only': 175 },
+    French: { 'Window & Frame': 400, 'Window only': 310, 'Frame only': 240 },
+  },
+  water_3coat_white_finish: {
+    Normal: { 'Window & Frame': 275, 'Window only': 200, 'Frame only': 135 },
+    Awning: { 'Window & Frame': 310, 'Window only': 230, 'Frame only': 160 },
+    'Double Hung': { 'Window & Frame': 375, 'Window only': 280, 'Frame only': 200 },
+    French: { 'Window & Frame': 475, 'Window only': 360, 'Frame only': 265 },
+  },
+} as const;
 
 // EXTERIOR_FLOORS kept for backward-compat; actual floors resolved via EXTERIOR_WALL_TYPE_FLOORS
 
@@ -368,6 +620,8 @@ const EXTERIOR_DOOR_ANCHOR: Record<string, { min: number; max: number }> = {
   Standard: { min: 250, max: 420 },
   Complex:  { min: 400, max: 680 },
 };
+
+const EXTERIOR_FRONT_DOOR_ANCHOR = { min: 520, max: 880 } as const;
 
 /** Exterior window frame painting price per window (AUD), Sydney Northern Beaches 2026.
  *  Normal = single pane slider; Awning = hinged outward; Double Hung = sash window;
@@ -426,6 +680,25 @@ function calcTrimItemCost(
   return { min: Math.round(totalMin), max: Math.round(totalMax) };
 }
 
+function getFrontDoorCost(input: GeneratePaintingEstimateInput): { min: number; max: number } {
+  if (!input.exteriorFrontDoor) return { min: 0, max: 0 };
+  return EXTERIOR_FRONT_DOOR_ANCHOR;
+}
+
+function isFrontDoorOnlyExteriorTrim(input: GeneratePaintingEstimateInput): boolean {
+  if (!input.exteriorFrontDoor) return false;
+  const trimItems = input.exteriorTrimItems ?? [];
+  return (
+    trimItems.includes('Front Door') &&
+    !trimItems.includes('Doors') &&
+    !trimItems.includes('Window Frames') &&
+    !trimItems.includes('Architraves') &&
+    !(input.exteriorDoors ?? []).some((item) => (item.quantity ?? 0) > 0) &&
+    !(input.exteriorWindows ?? []).some((item) => (item.quantity ?? 0) > 0) &&
+    !(input.exteriorArchitraves ?? []).some((item) => (item.quantity ?? 0) > 0)
+  );
+}
+
 // -----------------------------
 // Helpers
 // -----------------------------
@@ -436,6 +709,45 @@ function clamp(n: number, min: number, max: number) {
 function toNumberOrUndefined(v: unknown): number | undefined {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   return undefined;
+}
+
+function getInteriorHandrailWidthMultiplier(widthMm: number) {
+  if (widthMm <= 50) return 1.0;
+  if (widthMm <= 70) return 1.08;
+  if (widthMm <= 90) return 1.16;
+  return 1.25;
+}
+
+function getInteriorHandrailRange(
+  rooms: z.infer<typeof GeneratePaintingEstimateInputSchema>['interiorRooms']
+) {
+  if (!rooms?.length) return { min: 0, max: 0, details: [] as string[] };
+
+  let min = 0;
+  let max = 0;
+  const details: string[] = [];
+
+  for (const room of rooms) {
+    if (room.roomName !== 'Handrail' || !room.handrailDetails?.system) continue;
+
+    const lengthLm = toNumberOrUndefined(room.handrailDetails.lengthLm);
+    const widthMm = toNumberOrUndefined(room.handrailDetails.widthMm);
+    if (!lengthLm || !widthMm) continue;
+
+    const system = room.handrailDetails.system;
+    const pricing = INTERIOR_HANDRAIL_ITEM_PRICING[system];
+    const widthMultiplier = getInteriorHandrailWidthMultiplier(widthMm);
+    const lineMin = Math.round(Math.max(pricing.minJob.min, lengthLm * pricing.rate.min * widthMultiplier));
+    const lineMax = Math.round(Math.max(pricing.minJob.max, lengthLm * pricing.rate.max * widthMultiplier));
+
+    min += lineMin;
+    max += lineMax;
+    details.push(
+      `Interior handrail set (${lengthLm} lm, ${widthMm}mm, ${pricing.label}) = AUD ${lineMin.toLocaleString('en-AU')} - ${lineMax.toLocaleString('en-AU')}`
+    );
+  }
+
+  return { min, max, details };
 }
 
 /**
@@ -471,6 +783,132 @@ function pickExteriorBand(wallArea?: number): { minMult: number; maxMult: number
 
 function formatMoney(n: number) {
   return n.toLocaleString('en-AU');
+}
+
+function trimPaintTypeToSystem(paintType: 'Oil-based' | 'Water-based') {
+  return paintType === 'Water-based' ? 'water_3coat_white_finish' as const : 'oil_2coat' as const;
+}
+
+function getSpecificInteriorRoomBaseAnchor(roomName: string) {
+  return (
+    INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL[
+      roomName as keyof typeof INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL
+    ] ?? INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL.Etc
+  );
+}
+
+function getInteriorSkirtingRoomAnchor(roomName: string, paintType: 'Oil-based' | 'Water-based') {
+  const system = trimPaintTypeToSystem(paintType);
+  const anchor =
+    INTERIOR_SKIRTING_ROOM_ANCHOR[
+      roomName as keyof typeof INTERIOR_SKIRTING_ROOM_ANCHOR
+    ] ?? INTERIOR_SKIRTING_ROOM_ANCHOR.Etc;
+  return anchor[system];
+}
+
+function estimateInteriorRoomPerimeter(sqm: number) {
+  return 4.1 * Math.sqrt(sqm);
+}
+
+function getInteriorSpecificRoomMultiplier(roomName: string) {
+  return INTERIOR_SPECIFIC_ROOM_TYPE_MULTIPLIER[roomName] ?? 1.0;
+}
+
+function getMeasuredInteriorSkirtingRange(
+  sqm: number,
+  paintType: 'Oil-based' | 'Water-based'
+) {
+  const perimeter = estimateInteriorRoomPerimeter(sqm);
+  const system = trimPaintTypeToSystem(paintType);
+  const rate = INTERIOR_SKIRTING_LINEAR_RATE[system];
+  return {
+    min: Math.round(perimeter * rate.min),
+    max: Math.round(perimeter * rate.max),
+  };
+}
+
+function getTrimOnlySkirtingLinearMetres(
+  input: GeneratePaintingEstimateInput
+) {
+  if ((input.skirtingPricingMode ?? 'linear_metres') === 'linear_metres') {
+    return toNumberOrUndefined(input.skirtingLinearMetres) ?? 0;
+  }
+
+  return (input.skirtingCalculatorRooms ?? []).reduce((sum, room) => {
+    const length = toNumberOrUndefined(room.length) ?? 0;
+    const width = toNumberOrUndefined(room.width) ?? 0;
+    if (!length || !width) return sum;
+    return sum + 2 * (length + width);
+  }, 0);
+}
+
+function getTrimOnlySkirtingRange(
+  input: GeneratePaintingEstimateInput,
+  paintType: 'Oil-based' | 'Water-based'
+) {
+  const linearMetres = getTrimOnlySkirtingLinearMetres(input);
+  if (linearMetres <= 0) return { min: 0, max: 0 };
+
+  const system = trimPaintTypeToSystem(paintType);
+  const rate = INTERIOR_SKIRTING_LINEAR_RATE[system];
+  return {
+    min: Math.round(linearMetres * rate.min) + TRIM_ONLY_SKIRTING_MARKET_UPLIFT,
+    max: Math.round(linearMetres * rate.max) + TRIM_ONLY_SKIRTING_MARKET_UPLIFT,
+  };
+}
+
+function isSkirtingOnlyTrimSpecific(input: GeneratePaintingEstimateInput) {
+  const trimItems = input.trimPaintOptions?.trimItems ?? [];
+  return (
+    input.scopeOfPainting === 'Specific areas only' &&
+    !!input.specificInteriorTrimOnly &&
+    trimItems.includes('Skirting Boards') &&
+    !trimItems.includes('Doors') &&
+    !trimItems.includes('Window Frames')
+  );
+}
+
+function calculateMeasuredSpecificInteriorBase(
+  rooms: z.infer<typeof GeneratePaintingEstimateInputSchema>['interiorRooms'],
+  interiorWallHeight?: number
+) {
+  if (!rooms?.length || !interiorWallHeight || !Number.isFinite(interiorWallHeight)) return undefined;
+
+  let min = 0;
+  let max = 0;
+
+  for (const room of rooms) {
+    if (room.roomName === 'Handrail') continue;
+    const sqm = room.approxRoomSize;
+    if (!sqm || !Number.isFinite(sqm) || sqm <= 0) return undefined;
+
+    const perimeter = estimateInteriorRoomPerimeter(sqm);
+    const wallArea = perimeter * interiorWallHeight;
+    const multiplier = getInteriorSpecificRoomMultiplier(room.roomName);
+    const paintAreas = room.paintAreas ?? {};
+
+    if (paintAreas.wallPaint) {
+      min += wallArea * INTERIOR_SPECIFIC_SURFACE_RATE.wall.min * multiplier;
+      max += wallArea * INTERIOR_SPECIFIC_SURFACE_RATE.wall.max * multiplier;
+    }
+
+    if (paintAreas.ceilingPaint) {
+      min += sqm * INTERIOR_SPECIFIC_SURFACE_RATE.ceiling.min * multiplier;
+      max += sqm * INTERIOR_SPECIFIC_SURFACE_RATE.ceiling.max * multiplier;
+    }
+
+    if (paintAreas.trimPaint) {
+      min += perimeter * INTERIOR_SPECIFIC_SURFACE_RATE.trimLinear.min * multiplier;
+      max += perimeter * INTERIOR_SPECIFIC_SURFACE_RATE.trimLinear.max * multiplier;
+    }
+
+    if (paintAreas.ensuitePaint) {
+      min += 420 * multiplier;
+      max += 720 * multiplier;
+    }
+  }
+
+  return { min: Math.round(min), max: Math.round(max) };
 }
 
 function inferApartmentClassFromSqm(sqm?: number) {
@@ -511,7 +949,21 @@ function sumAreaFactor(flags: {
   if (flags.wallPaint) f += AREA_SHARE.wallPaint;
   if (flags.trimPaint) f += AREA_SHARE.trimPaint;
   if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
-  return f > 0 ? f : 1.0;
+  return f; // 0 when no surfaces selected — filtered out in scoring
+}
+
+/** True when the job is interior-only, Specific areas only, with itemised
+ *  trim items and NO rooms that have wall or ceiling painting selected.
+ *  In this case we bypass room-based pricing entirely. */
+function isInteriorTrimItemOnly(
+  input: z.infer<typeof GeneratePaintingEstimateInputSchema>
+): boolean {
+  if (!input.typeOfWork.includes('Interior Painting')) return false;
+  if (input.typeOfWork.includes('Exterior Painting')) return false;
+  if (input.scopeOfPainting !== 'Specific areas only') return false;
+  if (!input.interiorDoorItems?.length && !input.interiorWindowItems?.length) return false;
+  const rooms = input.interiorRooms ?? [];
+  return !rooms.some((r) => r.paintAreas.wallPaint || r.paintAreas.ceilingPaint);
 }
 
 function isTrimOnlySpecificInterior(
@@ -536,6 +988,10 @@ function hasSelectedTrimOptions(input: z.infer<typeof GeneratePaintingEstimateIn
   return !!input.trimPaintOptions?.trimItems?.length;
 }
 
+function hasSelectedFrontDoor(input: z.infer<typeof GeneratePaintingEstimateInputSchema>) {
+  return !!input.exteriorFrontDoor;
+}
+
 function withTrimPricingNote(
   text: string,
   includeTrimPricingNote: boolean
@@ -543,6 +999,16 @@ function withTrimPricingNote(
   if (!includeTrimPricingNote) return text;
   const trimNote = 'Pricing varies depending on the number of trim items included.';
   return text.includes(trimNote) ? text : `${text} ${trimNote}`;
+}
+
+function withFrontDoorPricingNote(
+  text: string,
+  includeFrontDoorPricingNote: boolean
+) {
+  if (!includeFrontDoorPricingNote) return text;
+  const frontDoorNote =
+    'Front door pricing can vary depending on the door style, size, paint system, surface condition, and labour required for preparation and application.';
+  return text.includes(frontDoorNote) ? text : `${text} ${frontDoorNote}`;
 }
 
 function sumAreaFactorWholeApartment(flags: {
@@ -683,7 +1149,13 @@ function shouldApply3B2BFairSingleHouseCalibration(
   const isHouse = input.propertyType === 'House / Townhouse';
   const condition = input.paintCondition ?? 'Fair';
   const story = input.houseStories ?? '1 storey';
-  return isHouse && houseKey === '3B2B' && condition === 'Fair' && (story === 'Single story' || story === '1 storey');
+  return (
+    input.scopeOfPainting === 'Entire property' &&
+    isHouse &&
+    houseKey === '3B2B' &&
+    condition === 'Fair' &&
+    (story === 'Single story' || story === '1 storey')
+  );
 }
 
 function calibrate3B2BFairSingleHouse(
@@ -723,7 +1195,13 @@ function applyDoubleStorey3B2BUplift(
   const condition = input.paintCondition ?? 'Fair';
   const story = input.houseStories ?? '1 storey';
 
-  if (!isHouse || houseKey !== '3B2B' || condition !== 'Fair' || (story !== 'Double story or more' && story !== '2 storey')) {
+  if (
+    input.scopeOfPainting !== 'Entire property' ||
+    !isHouse ||
+    houseKey !== '3B2B' ||
+    condition !== 'Fair' ||
+    (story !== 'Double story or more' && story !== '2 storey')
+  ) {
     return { min: minVal, max: maxVal };
   }
 
@@ -870,6 +1348,21 @@ function applyExteriorComplexityUpliftPct(
 // -----------------------------
 // Schemas
 // -----------------------------
+const HANDRAIL_SYSTEM_OPTIONS = [
+  'paint_to_paint_oil_2coat',
+  'paint_to_paint_water_3coat',
+  'varnish_to_paint_oil_3coat_min',
+  'varnish_to_paint_water_4coat_min',
+  'varnish_to_varnish_stain',
+  'varnish_to_varnish_clear',
+] as const;
+
+const InteriorHandrailDetailsSchema = z.object({
+  lengthLm: z.number().positive().optional(),
+  widthMm: z.number().positive().optional(),
+  system: z.enum(HANDRAIL_SYSTEM_OPTIONS).optional(),
+});
+
 const InteriorRoomItemSchema = z.object({
   roomName: z.string(),
   otherRoomName: z.string().optional(),
@@ -880,6 +1373,49 @@ const InteriorRoomItemSchema = z.object({
     ensuitePaint: z.boolean().optional(),
   }),
   approxRoomSize: z.number().optional(),
+  handrailDetails: InteriorHandrailDetailsSchema.optional(),
+}).superRefine((room, ctx) => {
+  if (room.roomName === 'Handrail') {
+    if (!(typeof room.handrailDetails?.lengthLm === 'number' && room.handrailDetails.lengthLm > 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['handrailDetails', 'lengthLm'],
+        message: 'Enter the total handrail length in linear metres.',
+      });
+    }
+
+    if (!(typeof room.handrailDetails?.widthMm === 'number' && room.handrailDetails.widthMm > 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['handrailDetails', 'widthMm'],
+        message: 'Enter the handrail width in millimetres.',
+      });
+    }
+
+    if (!room.handrailDetails?.system) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['handrailDetails', 'system'],
+        message: 'Select a handrail coating system.',
+      });
+    }
+    return;
+  }
+
+  const paintAreas = room.paintAreas ?? {};
+  if (!paintAreas.ceilingPaint && !paintAreas.wallPaint && !paintAreas.trimPaint && !paintAreas.ensuitePaint) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['paintAreas'],
+      message: 'At least one surface must be selected per room.',
+    });
+  }
+});
+
+const SkirtingCalculatorRoomSchema = z.object({
+  label: z.string().optional(),
+  length: z.number().positive().optional(),
+  width: z.number().positive().optional(),
 });
 
 const GeneratePaintingEstimateInputSchema = z.object({
@@ -906,10 +1442,14 @@ const GeneratePaintingEstimateInputSchema = z.object({
     .optional(),
 
   interiorRooms: z.array(InteriorRoomItemSchema).optional(),
+  specificInteriorTrimOnly: z.boolean().optional(),
   otherInteriorArea: z.string().optional(),
+  apartmentStructure: z.enum(['Studio', '1Bed', '2Bed2Bath', '3Bed2Bath']).optional(),
 
   exteriorAreas: z.array(z.string()).optional(),
   otherExteriorArea: z.string().optional(),
+  exteriorTrimItems: z.array(z.enum(['Doors', 'Window Frames', 'Architraves', 'Front Door'])).optional(),
+  exteriorFrontDoor: z.boolean().optional(),
   wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
   wallHeight: z.number().optional(),
 
@@ -928,7 +1468,18 @@ const GeneratePaintingEstimateInputSchema = z.object({
   })).optional(),
 
   approxSize: z.number().optional(),
+  interiorWallHeight: z.number().optional(),
   location: z.string().optional(),
+
+  /** Deck-specific inputs — used by calcDeckCost() for area-based pricing */
+  deckArea: z.number().positive().optional(),
+  deckServiceType: z.enum(['stain', 'clear', 'paint-conversion', 'paint-recoat']).optional(),
+  deckProductType: z.enum(['oil', 'water']).optional(),
+  deckCondition: z.enum(['good', 'weathered', 'damaged']).optional(),
+
+  /** Paving-specific inputs — used by calcPavingCost() for area-based pricing */
+  pavingArea: z.number().positive().optional(),
+  pavingCondition: z.enum(['good', 'fair', 'poor']).optional(),
 
   timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
   paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
@@ -946,9 +1497,133 @@ const GeneratePaintingEstimateInputSchema = z.object({
       interiorWindowFrameTypes: z.array(z.enum(['Normal', 'Awning', 'Double Hung', 'French'])).optional(),
     })
     .optional(),
+  skirtingPricingMode: z.enum(['linear_metres', 'room_calculator']).optional(),
+  skirtingLinearMetres: z.number().positive().optional(),
+  skirtingCalculatorRooms: z.array(SkirtingCalculatorRoomSchema).optional(),
 
   ceilingType: z.enum(['Flat', 'Decorative']).optional(),
-});
+
+  /** Interior door item-level pricing (Specific areas only) */
+  interiorDoorItems: z
+    .array(
+      z.object({
+        scope: z.enum(['Door & Frame', 'Door only', 'Frame only']),
+        system: z.enum(['oil_2coat', 'water_3coat_white_finish']),
+        quantity: z.number().min(1).max(50),
+      })
+    )
+    .optional(),
+  interiorWindowItems: z
+    .array(
+      z.object({
+        type: z.enum(['Normal', 'Awning', 'Double Hung', 'French']),
+        scope: z.enum(['Window & Frame', 'Window only', 'Frame only']),
+        system: z.enum(['oil_2coat', 'water_3coat_white_finish']),
+        quantity: z.number().min(1).max(50),
+      })
+    )
+    .optional(),
+}).refine(
+  (data) => {
+    const hasExterior = data.typeOfWork.includes('Exterior Painting');
+    if (!hasExterior) return true;
+    return !EXTERIOR_RESTRICTED_PROPERTY_TYPES.includes(
+      data.propertyType as (typeof EXTERIOR_RESTRICTED_PROPERTY_TYPES)[number]
+    );
+  },
+  { path: ['typeOfWork'], message: 'Exterior painting is only available for house-style properties.' }
+).refine(
+  (data) => {
+    const hasExterior = data.typeOfWork.includes('Exterior Painting');
+    if (!hasExterior) return true;
+    return (data.exteriorAreas ?? []).length > 0;
+  },
+  { path: ['exteriorAreas'], message: 'Please select at least one exterior area.' }
+).refine(
+  (data) => {
+    const hasInterior = data.typeOfWork.includes('Interior Painting');
+    if (!hasInterior || data.scopeOfPainting !== 'Entire property') return true;
+    return !!(
+      data.paintAreas?.ceilingPaint ||
+      data.paintAreas?.wallPaint ||
+      data.paintAreas?.trimPaint ||
+      data.paintAreas?.ensuitePaint
+    );
+  },
+  { path: ['paintAreas'], message: 'Please select at least one interior surface.' }
+).refine(
+  (data) => {
+    const hasInterior = data.typeOfWork.includes('Interior Painting');
+    const needsApartmentSizing =
+      hasInterior && data.scopeOfPainting === 'Entire property' && data.propertyType === 'Apartment';
+    if (!needsApartmentSizing) return true;
+    return !!data.apartmentStructure || typeof data.approxSize === 'number';
+  },
+  { path: ['apartmentStructure'], message: 'Select an apartment structure or enter an approximate size.' }
+).refine(
+  (data) => {
+    const hasInterior = data.typeOfWork.includes('Interior Painting');
+    const needsWholePropertySizing =
+      hasInterior && data.scopeOfPainting === 'Entire property' && data.propertyType !== 'Apartment';
+    if (!needsWholePropertySizing) return true;
+    const hasCounts =
+      typeof data.bedroomCount === 'number' && typeof data.bathroomCount === 'number';
+    return hasCounts || typeof data.approxSize === 'number';
+  },
+  {
+    path: ['bedroomCount'],
+    message: 'Enter bedroom and bathroom counts or provide an approximate size for a whole-property estimate.',
+  }
+).refine(
+  (data) => {
+    const selectedMeasuredRooms =
+      data.scopeOfPainting === 'Specific areas only'
+        ? (data.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail')
+        : [];
+    if (!selectedMeasuredRooms.length) return true;
+    return typeof data.interiorWallHeight === 'number';
+  },
+  { path: ['interiorWallHeight'], message: 'Enter the interior wall height for specific-area pricing.' }
+).refine(
+  (data) => {
+    const selectedMeasuredRooms =
+      data.scopeOfPainting === 'Specific areas only'
+        ? (data.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail')
+        : [];
+    if (!selectedMeasuredRooms.length) return true;
+    return selectedMeasuredRooms.every((room) => typeof room.approxRoomSize === 'number' && room.approxRoomSize > 0);
+  },
+  { path: ['interiorRooms'], message: 'Enter an approximate room size for each selected room.' }
+).refine(
+  (data) => {
+    const needsSkirtingRoom =
+      data.typeOfWork.includes('Interior Painting') &&
+      data.scopeOfPainting === 'Specific areas only' &&
+      !data.specificInteriorTrimOnly &&
+      (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
+    if (!needsSkirtingRoom) return true;
+    return (data.interiorRooms ?? []).some((room) => room.paintAreas?.trimPaint);
+  },
+  { path: ['interiorRooms'], message: 'Select at least one trim room when including skirting boards.' }
+).refine(
+  (data) => {
+    const needsTrimOnlySkirting =
+      data.typeOfWork.includes('Interior Painting') &&
+      data.scopeOfPainting === 'Specific areas only' &&
+      !!data.specificInteriorTrimOnly &&
+      (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
+    if (!needsTrimOnlySkirting) return true;
+
+    if ((data.skirtingPricingMode ?? 'linear_metres') === 'linear_metres') {
+      return typeof data.skirtingLinearMetres === 'number' && data.skirtingLinearMetres > 0;
+    }
+
+    return (data.skirtingCalculatorRooms ?? []).some(
+      (room) => typeof room.length === 'number' && room.length > 0 && typeof room.width === 'number' && room.width > 0
+    );
+  },
+  { path: ['skirtingLinearMetres'], message: 'Enter skirting length or add room dimensions for skirting-only pricing.' }
+);
 
 const GeneratePaintingEstimateOutputSchema = z.object({
   priceRange: z.string(),
@@ -978,6 +1653,16 @@ const GeneratePaintingEstimateOutputSchema = z.object({
       }),
     })
     .optional(),
+
+  /** Present when pricing metadata is available. Itemized trim quotes use `interior_itemized`. */
+  pricingMeta: z
+    .object({
+      mode: z.enum(['interior_itemized', 'estimate']),
+      subtotalExGst: z.number(),
+      gst: z.number(),
+      totalIncGst: z.number(),
+    })
+    .optional(),
 });
 
 export type GeneratePaintingEstimateInput = z.infer<typeof GeneratePaintingEstimateInputSchema>;
@@ -998,6 +1683,10 @@ const explanationPrompt = ai.definePrompt({
       priceMin: z.number(),
       priceMax: z.number(),
       wallTypeSurfaceNote: z.string().optional(),
+      deckMin: z.number().optional(),
+      deckMax: z.number().optional(),
+      pavingMin: z.number().optional(),
+      pavingMax: z.number().optional(),
     }),
   },
   output: { schema: GeneratePaintingEstimateOutputSchema },
@@ -1017,6 +1706,21 @@ CONTEXT
 - Ceiling Style: {{#if input.ceilingType}}{{input.ceilingType}}{{else}}Flat{{/if}}
 - Custom Interior Area (if selected 'Etc'): {{#if input.otherInteriorArea}}{{input.otherInteriorArea}}{{else}}N/A{{/if}}
 - Custom Exterior Area (if selected 'Etc'): {{#if input.otherExteriorArea}}{{input.otherExteriorArea}}{{else}}N/A{{/if}}
+{{#if input.deckArea}}
+DECK DETAILS
+- Deck area: {{input.deckArea}}sqm
+- Service type: {{#if input.deckServiceType}}{{input.deckServiceType}}{{else}}stain{{/if}}
+- Product base: {{#if input.deckProductType}}{{input.deckProductType}}-based{{else}}oil-based{{/if}}
+- Timber condition: {{#if input.deckCondition}}{{input.deckCondition}}{{else}}good{{/if}}
+- Deck cost range: AUD {{deckMin}} – {{deckMax}}
+{{/if}}
+{{#if input.pavingArea}}
+PAVING DETAILS
+- Paving area: {{input.pavingArea}}sqm
+- Surface condition: {{#if input.pavingCondition}}{{input.pavingCondition}}{{else}}good{{/if}}
+- Application: 2-coat Dulux paving system (pressure wash + etch/prime + 2 coats), minimum 2-day job due to inter-coat dry time
+- Paving cost range: AUD {{pavingMin}} – {{pavingMax}}
+{{/if}}
 
 GENERATED PRICE DATA (AUD)
 Interior: {{intMin}} - {{intMax}}
@@ -1032,19 +1736,25 @@ SURFACE NOTE (incorporate this naturally into the explanation):
 {{/if}}
 
 INSTRUCTIONS
-1) explanation: 3–5 sentences, Australian English, professional tone.
+1) explanation: 3–5 sentences, Australian English, professional tone. All text MUST be in English.
    Focus on the main cost drivers: scope, condition, selected areas, stories, wall finish (if exterior), and complexity factors.
    If wallType is "rendered" or "brick", incorporate the relevant SURFACE NOTE above into the explanation naturally.
-   If trim-related options are selected, include this idea naturally in English: "Pricing varies depending on the number of trim items included."
+   If trim-related options are selected, include this idea naturally: "Pricing varies depending on the number of trim items included."
+   If DECK DETAILS are present: mention the deck area, service type, and timber condition naturally in one sentence.
+   If PAVING DETAILS are present: mention the paving area and surface condition, and note that the 2-coat system requires a minimum 2-day application process due to inter-coat drying time.
 2) priceRange:
    - Use commas as thousands separators.
    - If Total priceMax >= 35,000 format: "From AUD {{priceMin}}+ (Site Inspection Required)"
    - Else: "AUD {{priceMin}} - {{priceMax}}"
-3) details: 4–7 bullet points.
+3) details: 4–7 bullet points. All text MUST be in English.
    - MUST include a clear breakdown line if both Interior and Exterior are selected:
      "Interior: AUD X - Y"
      "Exterior: AUD X - Y"
      "Total: AUD X - Y"
+   - If DECK DETAILS are present, MUST include a dedicated line:
+     "Deck (X sqm) — [service type] / [condition] timber: AUD X – Y"
+   - If PAVING DETAILS are present, MUST include a dedicated line:
+     "Paving (X sqm) — [surface condition] surface, 2-coat system: AUD X – Y"
 4) breakdown:
    - Return breakdown object with interior/exterior/total (min, max, priceRange).
 `,
@@ -1076,6 +1786,61 @@ export const generatePaintingEstimate = ai.defineFlow(
     const isMultiStorey = isDouble || isTriple;
 
     // -----------------------------
+    // Interior door item-level pricing (early return — bypasses room-based model)
+    // Triggered when: Interior only + Specific areas only + door items + no wall/ceiling rooms
+    // -----------------------------
+    if (isInteriorTrimItemOnly(input)) {
+      let subtotalExGst = 0;
+      const lineItems: string[] = [];
+
+      for (const item of input.interiorDoorItems ?? []) {
+        const unitPrice = INTERIOR_DOOR_ITEM_ANCHOR[item.system]?.[item.scope] ?? 0;
+        const lineTotal = unitPrice * item.quantity;
+        subtotalExGst += lineTotal;
+        const systemLabel =
+          item.system === 'oil_2coat'
+            ? '2 coats (oil-based)'
+            : '3 coats (water-based, white finish)';
+        lineItems.push(
+          `${item.scope} × ${item.quantity} — ${systemLabel} @ AUD ${unitPrice} each = AUD ${lineTotal.toLocaleString('en-AU')}`
+        );
+      }
+
+      for (const item of input.interiorWindowItems ?? []) {
+        const unitPrice = INTERIOR_WINDOW_ITEM_ANCHOR[item.system]?.[item.type]?.[item.scope] ?? 0;
+        const lineTotal = unitPrice * item.quantity;
+        subtotalExGst += lineTotal;
+        const systemLabel =
+          item.system === 'oil_2coat'
+            ? '2 coats (oil-based)'
+            : '3 coats (water-based, white finish)';
+        lineItems.push(
+          `Window: ${item.type} / ${item.scope} x ${item.quantity} - ${systemLabel} @ AUD ${unitPrice} each = AUD ${lineTotal.toLocaleString('en-AU')}`
+        );
+      }
+
+      const gst = Math.round(subtotalExGst * 0.1);
+      const totalIncGst = subtotalExGst + gst;
+      const priceStr = `AUD ${subtotalExGst.toLocaleString('en-AU')} + GST`;
+
+      return {
+        priceRange: priceStr,
+        explanation: `This is a fixed-price itemised quote for interior trim painting. Doors and windows are priced per unit, based on the selected type, painted area, and paint system, so room-based modelling does not apply. All prices are exclusive of GST (10%). GST of AUD ${gst.toLocaleString('en-AU')} applies, making the total AUD ${totalIncGst.toLocaleString('en-AU')} including GST.`,
+        details: lineItems,
+        breakdown: {
+          interior: { min: subtotalExGst, max: subtotalExGst, priceRange: priceStr },
+          total: { min: subtotalExGst, max: subtotalExGst, priceRange: priceStr },
+        },
+        pricingMeta: {
+          mode: 'interior_itemized' as const,
+          subtotalExGst,
+          gst,
+          totalIncGst,
+        },
+      };
+    }
+
+    // -----------------------------
     // 1) Interior
     // -----------------------------
     let intMin = 0;
@@ -1084,12 +1849,13 @@ export const generatePaintingEstimate = ai.defineFlow(
     if (isInt) {
       const isWhole = input.scopeOfPainting === 'Entire property';
       const aptLike = isApartmentLike(input.propertyType);
+      const isSkirtingOnlySpecific = isSkirtingOnlyTrimSpecific(input);
 
       let selectedRooms: string[] = [];
       let areaFactor = 1.0;
 
       if (isWhole) {
-        selectedRooms = (input.roomsToPaint ?? []).length ? (input.roomsToPaint ?? []) : [];
+        selectedRooms = (input.roomsToPaint ?? []).filter((room) => room !== 'Handrail');
         const globalAreas = input.paintAreas ?? {
           ceilingPaint: true,
           wallPaint: true,
@@ -1101,22 +1867,46 @@ export const generatePaintingEstimate = ai.defineFlow(
           : sumAreaFactor(globalAreas);
       } else {
         const rooms = input.interiorRooms ?? [];
-        selectedRooms = rooms.map((r) => r.roomName);
-        const scored = rooms.map((r) => ({
-          score: roomScore(r.roomName),
-          af: sumAreaFactor(r.paintAreas),
-        }));
-        const denom = scored.reduce((a, b) => a + b.score, 0) || 1;
-        areaFactor = scored.reduce((a, b) => a + b.score * b.af, 0) / denom;
+        selectedRooms = rooms.filter((r) => r.roomName !== 'Handrail').map((r) => r.roomName);
+        areaFactor = 1.0;
       }
 
-      if (!selectedRooms.length) {
-        selectedRooms = isWhole
-          ? ['Bedroom 1', 'Bathroom', 'Living Room', 'Kitchen']
-          : ['Bedroom 1'];
+      if (!selectedRooms.length && isWhole) {
+        selectedRooms = ['Bedroom 1', 'Bathroom', 'Living Room', 'Kitchen'];
       }
 
       const hasMaster = selectedRooms.includes('Master Bedroom');
+      const measuredSpecificBase = !isWhole
+        ? calculateMeasuredSpecificInteriorBase(
+            input.interiorRooms ?? [],
+            toNumberOrUndefined(input.interiorWallHeight)
+          )
+        : undefined;
+
+      if (!isWhole) {
+        const rooms = (input.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail');
+        const conditionBand = aptLike ? CONDITION_MULTIPLIER[condition] : HOUSE_CONDITION_MULTIPLIER[condition];
+        if (measuredSpecificBase) {
+          intMin = Math.round(measuredSpecificBase.min * conditionBand.min);
+          intMax = Math.round(measuredSpecificBase.max * conditionBand.max);
+        } else {
+          let baseSpecificMin = 0;
+          let baseSpecificMax = 0;
+
+          for (const room of rooms) {
+            const roomName = room.roomName || 'Etc';
+            const roomAnchor = getSpecificInteriorRoomBaseAnchor(roomName);
+            const roomAreaFactor = sumAreaFactor(room.paintAreas ?? {});
+            if (roomAreaFactor <= 0) continue;
+
+            baseSpecificMin += roomAnchor.min * roomAreaFactor;
+            baseSpecificMax += roomAnchor.max * roomAreaFactor;
+          }
+
+          intMin = Math.round(baseSpecificMin * conditionBand.min);
+          intMax = Math.round(baseSpecificMax * conditionBand.max);
+        }
+      }
 
       // -----------------------------------------------
       // Apartment interior
@@ -1139,7 +1929,7 @@ export const generatePaintingEstimate = ai.defineFlow(
         }
 
         // ── SPECIFIC AREAS: use class-based anchor + room scoring ────────────
-        else {
+        else if (false) {
           const sqmForClass = toNumberOrUndefined(input.approxSize);
           const classFromBedrooms = inferApartmentClassFromBedroomNumbers(
             input.bedroomCount,
@@ -1190,7 +1980,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       // -----------------------------------------------
       let computedHouseKey: keyof typeof HOUSE_INTERIOR_ANCHORS | undefined;
 
-      if (!aptLike) {
+      if (!aptLike && (isWhole || selectedRooms.length > 0) && !measuredSpecificBase) {
         // bathroomCount 가 있으면 (House Entire property 신규 UI) 직접 사용, 없으면 rooms에서 추정
         const hasBathroomCountField =
           typeof input.bathroomCount === 'number' && Number.isFinite(input.bathroomCount);
@@ -1311,23 +2101,41 @@ export const generatePaintingEstimate = ai.defineFlow(
           }
         } else {
           const rooms = input.interiorRooms ?? [];
-          const roomsWithTrim = rooms.filter((r) => r.paintAreas?.trimPaint).length;
-          const scale = clamp(roomsWithTrim || 0, 0, 10);
+          const roomsWithTrim = rooms.filter((r) => r.paintAreas?.trimPaint);
+          const interiorDoorItems = trimItems.includes('Doors') ? input.interiorDoorItems ?? [] : [];
+          const interiorWindowItems = trimItems.includes('Window Frames') ? input.interiorWindowItems ?? [] : [];
+          const includeSkirting = trimItems.includes('Skirting Boards');
+          const onlySkirtingTrimOnly = isSkirtingOnlySpecific;
 
-          if (scale > 0) {
-            const p = TRIM_PREMIUM_SPECIFIC_PER_ROOM[paintType];
-            intMin += p.min * scale;
-            intMax += p.max * scale;
+          // Specific-room anchors are oil-based by default. Only water-based trim
+          // needs an uplift on the trim share; oil-based trim is already included.
+          if (paintType === 'Water-based' && roomsWithTrim.length > 0) {
+            const p = TRIM_PREMIUM_SPECIFIC_PER_ROOM['Water-based'];
+            intMin += p.min * roomsWithTrim.length;
+            intMax += p.max * roomsWithTrim.length;
+          }
 
-            if (paintType === 'Water-based') {
-              const premMin = p.min * scale;
-              const premMax = p.max * scale;
-              intMin += Math.round(premMin * WATER_BASED_UPLIFT.minPct);
-              intMax += Math.round(premMax * WATER_BASED_UPLIFT.maxPct);
+          if (includeSkirting) {
+            if (onlySkirtingTrimOnly) {
+              const skirtingCost = getTrimOnlySkirtingRange(input, paintType);
+              intMin += skirtingCost.min;
+              intMax += skirtingCost.max;
+            } else {
+              for (const room of roomsWithTrim) {
+                if (room.approxRoomSize && Number.isFinite(room.approxRoomSize)) {
+                  const skirtingCost = getMeasuredInteriorSkirtingRange(room.approxRoomSize, paintType);
+                  intMin += skirtingCost.min;
+                  intMax += skirtingCost.max;
+                } else {
+                  const skirtingCost = getInteriorSkirtingRoomAnchor(room.roomName, paintType);
+                  intMin += skirtingCost;
+                  intMax += skirtingCost;
+                }
+              }
             }
           }
 
-          if (interiorWindowFrameTypes.length > 0) {
+          if (interiorWindowFrameTypes.length > 0 && interiorWindowItems.length === 0) {
             for (const type of interiorWindowFrameTypes) {
               const unitPrice = INTERIOR_WINDOW_PRICE[paintType][type];
               intMin += unitPrice;
@@ -1335,13 +2143,35 @@ export const generatePaintingEstimate = ai.defineFlow(
             }
           }
 
-          if (trimOnlySpecific) {
+          if (interiorDoorItems.length > 0) {
+            for (const item of interiorDoorItems) {
+              const unitPrice = INTERIOR_DOOR_ITEM_ANCHOR[item.system]?.[item.scope] ?? 0;
+              const lineTotal = unitPrice * item.quantity;
+              intMin += lineTotal;
+              intMax += lineTotal;
+            }
+          }
+
+          if (interiorWindowItems.length > 0) {
+            for (const item of interiorWindowItems) {
+              const unitPrice = INTERIOR_WINDOW_ITEM_ANCHOR[item.system]?.[item.type]?.[item.scope] ?? 0;
+              const lineTotal = unitPrice * item.quantity;
+              intMin += lineTotal;
+              intMax += lineTotal;
+            }
+          }
+
+          if (trimOnlySpecific && !onlySkirtingTrimOnly) {
             const trimBase = aptLike ? INTERIOR_TRIM_ONLY_BASE.apartment : INTERIOR_TRIM_ONLY_BASE.house;
             intMin = Math.max(intMin, trimBase.min);
             intMax = Math.max(intMax, trimBase.max);
           }
         }
       }
+
+      const handrailCost = getInteriorHandrailRange(input.interiorRooms ?? []);
+      intMin += handrailCost.min;
+      intMax += handrailCost.max;
 
       // % complexity uplift (interior)
       {
@@ -1353,7 +2183,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       // 3B2B + Fair curve calibration (House / Townhouse)
       let finalHouseKey: keyof typeof HOUSE_INTERIOR_ANCHORS | undefined;
 
-      if (!isApartmentLike(input.propertyType)) {
+      if (!isApartmentLike(input.propertyType) && isWhole) {
         const bedroomsTotal =
           (typeof input.bedroomCount === 'number' && Number.isFinite(input.bedroomCount)
             ? input.bedroomCount
@@ -1378,12 +2208,17 @@ export const generatePaintingEstimate = ai.defineFlow(
         intMax = upliftedDouble.max;
       }
 
-      intMin = clamp(intMin, 800, MAX_PRICE_CAP);
-      intMax = clamp(intMax, 1200, MAX_PRICE_CAP);
+      if (isSkirtingOnlySpecific) {
+        intMin = clamp(intMin, 0, MAX_PRICE_CAP);
+        intMax = clamp(intMax, 0, MAX_PRICE_CAP);
+      } else {
+        intMin = clamp(intMin, 800, MAX_PRICE_CAP);
+        intMax = clamp(intMax, 1200, MAX_PRICE_CAP);
+      }
       if (intMax < intMin) intMax = Math.round(intMin * 1.18);
 
       // Range cap (dynamic)
-      {
+      if (!isSkirtingOnlySpecific) {
         const capped = capRangeWidthSmart(intMin, intMax, input, 'interior');
         intMin = capped.min;
         intMax = capped.max;
@@ -1401,118 +2236,231 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       if (!areas.length) areas = ['Wall', 'Eaves'];
 
-      // Exterior = always includes wall painting (cladding board = full wall scope)
-      if (!areas.includes('Wall')) areas = ['Wall', ...areas];
+      const hasWall = areas.includes('Wall');
 
-      // wallType 기반 앵커 선택 (cladding / rendered / brick / default)
-      const wallTypeKey = (input.wallType ?? 'default') as keyof typeof EXTERIOR_WALL_TYPE_ANCHOR;
-      const wallAnchor = EXTERIOR_WALL_TYPE_ANCHOR[wallTypeKey] ?? EXTERIOR_WALL_TYPE_ANCHOR.default;
-      const wallFloors = EXTERIOR_WALL_TYPE_FLOORS[wallTypeKey] ?? EXTERIOR_WALL_TYPE_FLOORS.default;
+      if (!hasWall) {
+        // -----------------------------------------------------------------
+        // Detail-only path: user selected exterior details WITHOUT Wall.
+        // Use EXTERIOR_DETAIL_STANDALONE anchors — do NOT force-add Wall.
+        // -----------------------------------------------------------------
+        const storyMult = isTriple ? 1.6 : isMultiStorey ? 1.3 : 1.0;
 
-      // Wall area calculation: perimeter × height (captures story difference)
-      const floorSqm = toNumberOrUndefined(input.approxSize) ?? 150;
-      const wallHeight = toNumberOrUndefined(input.wallHeight)
-        ?? DEFAULT_WALL_HEIGHT[story] ?? 2.7;
-      const wallArea = estimateWallArea(floorSqm, wallHeight);
-      const band = pickExteriorBand(wallArea);
+        const frontDoorOnlyTrim = isFrontDoorOnlyExteriorTrim(input);
+        let rMin = 0;
+        let rMax = 0;
 
-      let baseMin = wallAnchor.median * band.minMult;
-      let baseMax = wallAnchor.median * band.maxMult;
+        for (const a of areas) {
+          if (a === 'Exterior Trim' && frontDoorOnlyTrim) continue;
+          if (a === 'Deck') continue;   // priced separately via calcDeckCost()
+          if (a === 'Paving') continue; // priced separately via calcPavingCost()
+          const anchor = EXTERIOR_DETAIL_STANDALONE[a];
+          if (!anchor) continue;
+          const mult = anchor.perStoryMult !== undefined && storyMult > 1
+            ? 1 + (storyMult - 1) * (anchor.perStoryMult - 1)
+            : 1;
+          rMin += anchor.min * mult;
+          rMax += anchor.max * mult;
+        }
 
-      baseMin = Math.max(baseMin, wallAnchor.min * band.minMult);
-      baseMax = Math.min(
-        Math.max(baseMax, wallAnchor.min * 1.25),
-        wallAnchor.max * band.maxMult
-      );
+        rMin *= exteriorCondMult.min;
+        rMax *= exteriorCondMult.max;
 
-      let upliftMinPct = 0;
-      let upliftMaxPct = 0;
+        // Deck: area-based flat addition (not multiplied by exterior cond — deck has own condition logic)
+        if (areas.includes('Deck')) {
+          const deckCost = calcDeckCost(input);
+          if (deckCost) {
+            rMin += deckCost.min;
+            rMax += deckCost.max;
+          }
+        }
 
-      for (const a of areas) {
-        const u = EXTERIOR_AREA_UPLIFT_PCT[a];
-        if (!u) continue;
-        upliftMinPct += u.minPct;
-        upliftMaxPct += u.maxPct;
-      }
+        // Paving: area-based flat addition (not multiplied by exterior cond — paving has own condition logic)
+        if (areas.includes('Paving')) {
+          const pavingCost = calcPavingCost(input);
+          if (pavingCost) {
+            rMin += pavingCost.min;
+            rMax += pavingCost.max;
+          }
+        }
 
-      upliftMinPct = clamp(upliftMinPct, 0, 0.95);
-      upliftMaxPct = clamp(upliftMaxPct, 0, 1.2);
+        // Trim item costs (doors/windows/architraves) under "Exterior Trim" detail
+        if (areas.includes('Exterior Trim')) {
+          if (input.exteriorDoors?.length) {
+            const doorCost = calcTrimItemCost(input.exteriorDoors, EXTERIOR_DOOR_ANCHOR);
+            rMin += doorCost.min;
+            rMax += doorCost.max;
+          }
+          if (input.exteriorWindows?.length) {
+            const windowCost = calcTrimItemCost(input.exteriorWindows, EXTERIOR_WINDOW_ANCHOR);
+            rMin += windowCost.min;
+            rMax += windowCost.max;
+          }
+          if (input.exteriorArchitraves?.length) {
+            const archCost = calcTrimItemCost(input.exteriorArchitraves, EXTERIOR_ARCHITRAVE_ANCHOR);
+            rMin += archCost.min;
+            rMax += archCost.max;
+          }
+          const frontDoorCost = getFrontDoorCost(input);
+          rMin += frontDoorCost.min;
+          rMax += frontDoorCost.max;
+        }
 
-      let rMin = baseMin * (1 + upliftMinPct);
-      let rMax = baseMax * (1 + upliftMaxPct);
+        // Fall back only when nothing priceable was selected at all.
+        if (rMin === 0 && rMax === 0) {
+          rMin = 300;
+          rMax = 800;
+        }
 
-      rMin *= exteriorCondMult.min;
-      rMax *= exteriorCondMult.max;
+        extMin = Math.round(Math.max(rMin, 300));
+        extMax = Math.round(Math.max(rMax, Math.round(extMin * 1.3)));
+        extMin = clamp(extMin, 300, MAX_PRICE_CAP);
+        extMax = clamp(extMax, 400, MAX_PRICE_CAP);
+        if (extMax < extMin) extMax = Math.round(extMin * 1.3);
 
-      // NOTE: storyMult is NOT applied here because wall height already
-      // captures the story difference via wallArea calculation.
+        {
+          const capped = capRangeWidthSmart(extMin, extMax, input, 'exterior');
+          extMin = capped.min;
+          extMax = capped.max;
+        }
+      } else {
+        // -----------------------------------------------------------------
+        // Wall-included path: use wall-based pricing with uplift percentages
+        // -----------------------------------------------------------------
 
-      // Exterior complexity uplift — all factors, storey-aware, >= 1.5x interior rates
-      {
-        const uplifted = applyExteriorComplexityUpliftPct(input, rMin, rMax);
-        rMin = uplifted.min;
-        rMax = uplifted.max;
-      }
+        // wallType 기반 앵커 선택 (cladding / rendered / brick / default)
+        const wallTypeKey = (input.wallType ?? 'default') as keyof typeof EXTERIOR_WALL_TYPE_ANCHOR;
+        const wallAnchor = EXTERIOR_WALL_TYPE_ANCHOR[wallTypeKey] ?? EXTERIOR_WALL_TYPE_ANCHOR.default;
+        const wallFloors = EXTERIOR_WALL_TYPE_FLOORS[wallTypeKey] ?? EXTERIOR_WALL_TYPE_FLOORS.default;
 
-      // --- Exterior Trim Item-Level Costs (ADDITIVE, not captured by EXTERIOR_AREA_UPLIFT_PCT) ---
-      // These are added AFTER condition and difficulty multipliers but BEFORE floor enforcement.
-      // Stacking rule: trim item costs are flat additions — they do not multiply with base.
-      // This prevents double-counting with the 'Exterior Trim' uplift percentage which covers
-      // general trim scope (fascia boards, bargeboards etc.), not individual doors/windows/architraves.
-      if (input.exteriorDoors?.length) {
-        const doorCost = calcTrimItemCost(input.exteriorDoors, EXTERIOR_DOOR_ANCHOR);
-        rMin += doorCost.min;
-        rMax += doorCost.max;
-      }
-      if (input.exteriorWindows?.length) {
-        const windowCost = calcTrimItemCost(input.exteriorWindows, EXTERIOR_WINDOW_ANCHOR);
-        rMin += windowCost.min;
-        rMax += windowCost.max;
-      }
-      if (input.exteriorArchitraves?.length) {
-        const archCost = calcTrimItemCost(input.exteriorArchitraves, EXTERIOR_ARCHITRAVE_ANCHOR);
-        rMin += archCost.min;
-        rMax += archCost.max;
-      }
+        // Wall area calculation: perimeter × height (captures story difference)
+        const floorSqm = toNumberOrUndefined(input.approxSize) ?? 150;
+        const wallHeight = toNumberOrUndefined(input.wallHeight)
+          ?? DEFAULT_WALL_HEIGHT[story] ?? 2.7;
+        const wallArea = estimateWallArea(floorSqm, wallHeight);
+        const band = pickExteriorBand(wallArea);
 
-      const hasEaves = areas.includes('Eaves');
-      const isWallOnly = areas.length === 1 && areas.includes('Wall');
-      const isFullExterior =
-        areas.includes('Wall') &&
-        areas.includes('Eaves') &&
-        areas.includes('Gutter') &&
-        areas.includes('Fascia') &&
-        areas.includes('Exterior Trim');
+        let baseMin = wallAnchor.median * band.minMult;
+        let baseMax = wallAnchor.median * band.maxMult;
 
-      const floor =
-        isFullExterior && isTriple
-          ? wallFloors.tripleStoreyFullExterior
-          : isFullExterior && isMultiStorey
-            ? wallFloors.doubleStoreyFullExterior
-            : isFullExterior
-              ? wallFloors.fullExterior
-              : hasEaves
-                ? wallFloors.wallPlusEaves
-                : wallFloors.wallOnly;
+        baseMin = Math.max(baseMin, wallAnchor.min * band.minMult);
+        baseMax = Math.min(
+          Math.max(baseMax, wallAnchor.min * 1.25),
+          wallAnchor.max * band.maxMult
+        );
 
-      rMin = Math.max(rMin, floor);
-      rMax = Math.max(rMax, Math.round(floor * 1.25));
+        const frontDoorOnlyTrim = isFrontDoorOnlyExteriorTrim(input);
+        let upliftMinPct = 0;
+        let upliftMaxPct = 0;
 
-      extMin = Math.round(rMin);
-      extMax = Math.round(rMax);
+        for (const a of areas) {
+          if (a === 'Exterior Trim' && frontDoorOnlyTrim) continue;
+          if (a === 'Deck') continue;   // priced separately via calcDeckCost()
+          if (a === 'Paving') continue; // priced separately via calcPavingCost()
+          const u = EXTERIOR_AREA_UPLIFT_PCT[a];
+          if (!u) continue;
+          upliftMinPct += u.minPct;
+          upliftMaxPct += u.maxPct;
+        }
 
-      extMin = clamp(extMin, 1200, MAX_PRICE_CAP);
-      extMax = clamp(extMax, 1800, MAX_PRICE_CAP);
-      if (extMax < extMin) extMax = Math.round(extMin * 1.25);
+        upliftMinPct = clamp(upliftMinPct, 0, 0.95);
+        upliftMaxPct = clamp(upliftMaxPct, 0, 1.2);
 
-      const selectedRoof = areas.includes('Roof');
-      if (!selectedRoof && extMax > 30000) extMax = 30000;
-      if (!selectedRoof && extMin > 28000) extMin = 28000;
+        let rMin = baseMin * (1 + upliftMinPct);
+        let rMax = baseMax * (1 + upliftMaxPct);
 
-      {
-        const capped = capRangeWidthSmart(extMin, extMax, input, 'exterior');
-        extMin = capped.min;
-        extMax = capped.max;
+        rMin *= exteriorCondMult.min;
+        rMax *= exteriorCondMult.max;
+
+        // NOTE: storyMult is NOT applied here because wall height already
+        // captures the story difference via wallArea calculation.
+
+        // Exterior complexity uplift — all factors, storey-aware, >= 1.5x interior rates
+        {
+          const uplifted = applyExteriorComplexityUpliftPct(input, rMin, rMax);
+          rMin = uplifted.min;
+          rMax = uplifted.max;
+        }
+
+        // --- Deck Cost (ADDITIVE, flat — not multiplied by wall base) ---
+        if (areas.includes('Deck')) {
+          const deckCost = calcDeckCost(input);
+          if (deckCost) {
+            rMin += deckCost.min;
+            rMax += deckCost.max;
+          }
+        }
+
+        // --- Paving Cost (ADDITIVE, flat — not multiplied by wall base or cond) ---
+        if (areas.includes('Paving')) {
+          const pavingCost = calcPavingCost(input);
+          if (pavingCost) {
+            rMin += pavingCost.min;
+            rMax += pavingCost.max;
+          }
+        }
+
+        // --- Exterior Trim Item-Level Costs (ADDITIVE, not captured by EXTERIOR_AREA_UPLIFT_PCT) ---
+        // These are added AFTER condition and difficulty multipliers but BEFORE floor enforcement.
+        // Stacking rule: trim item costs are flat additions — they do not multiply with base.
+        // This prevents double-counting with the 'Exterior Trim' uplift percentage which covers
+        // general trim scope (fascia boards, bargeboards etc.), not individual doors/windows/architraves.
+        if (input.exteriorDoors?.length) {
+          const doorCost = calcTrimItemCost(input.exteriorDoors, EXTERIOR_DOOR_ANCHOR);
+          rMin += doorCost.min;
+          rMax += doorCost.max;
+        }
+        if (input.exteriorWindows?.length) {
+          const windowCost = calcTrimItemCost(input.exteriorWindows, EXTERIOR_WINDOW_ANCHOR);
+          rMin += windowCost.min;
+          rMax += windowCost.max;
+        }
+        if (input.exteriorArchitraves?.length) {
+          const archCost = calcTrimItemCost(input.exteriorArchitraves, EXTERIOR_ARCHITRAVE_ANCHOR);
+          rMin += archCost.min;
+          rMax += archCost.max;
+        }
+        const frontDoorCost = getFrontDoorCost(input);
+        rMin += frontDoorCost.min;
+        rMax += frontDoorCost.max;
+
+        const hasEaves = areas.includes('Eaves');
+        const isFullExterior =
+          areas.includes('Wall') &&
+          areas.includes('Eaves') &&
+          areas.includes('Gutter') &&
+          areas.includes('Fascia') &&
+          areas.includes('Exterior Trim');
+
+        const floor =
+          isFullExterior && isTriple
+            ? wallFloors.tripleStoreyFullExterior
+            : isFullExterior && isMultiStorey
+              ? wallFloors.doubleStoreyFullExterior
+              : isFullExterior
+                ? wallFloors.fullExterior
+                : hasEaves
+                  ? wallFloors.wallPlusEaves
+                  : wallFloors.wallOnly;
+
+        rMin = Math.max(rMin, floor);
+        rMax = Math.max(rMax, Math.round(floor * 1.25));
+
+        extMin = Math.round(rMin);
+        extMax = Math.round(rMax);
+
+        extMin = clamp(extMin, 1200, MAX_PRICE_CAP);
+        extMax = clamp(extMax, 1800, MAX_PRICE_CAP);
+        if (extMax < extMin) extMax = Math.round(extMin * 1.25);
+
+        const selectedRoof = areas.includes('Roof');
+        if (!selectedRoof && extMax > 30000) extMax = 30000;
+        if (!selectedRoof && extMin > 28000) extMin = 28000;
+
+        {
+          const capped = capRangeWidthSmart(extMin, extMax, input, 'exterior');
+          extMin = capped.min;
+          extMax = capped.max;
+        }
       }
     }
 
@@ -1522,18 +2470,13 @@ export const generatePaintingEstimate = ai.defineFlow(
     let totalMin = intMin + extMin;
     let totalMax = intMax + extMax;
 
-    if (isBoth) {
-      totalMin = Math.max(totalMin, COMBINED_ANCHOR.min);
-      if (totalMax < COMBINED_ANCHOR.median) totalMax = Math.round(COMBINED_ANCHOR.median * 1.2);
-    }
-
     totalMin = Math.round(totalMin);
     totalMax = Math.round(totalMax);
 
     if (totalMax > MAX_PRICE_CAP) totalMax = MAX_PRICE_CAP;
-    if (totalMin > MAX_PRICE_CAP - 1000) totalMin = MAX_PRICE_CAP - 5000;
+    if (totalMin > MAX_PRICE_CAP) totalMin = MAX_PRICE_CAP;
 
-    {
+    if (!isBoth) {
       const capped = capRangeWidthSmart(totalMin, totalMax, input, 'total');
       totalMin = capped.min;
       totalMax = capped.max;
@@ -1564,7 +2507,11 @@ export const generatePaintingEstimate = ai.defineFlow(
     if (isInt) breakdown.interior = { min: intMin, max: intMax, priceRange: interiorPriceRange };
     if (isExt) breakdown.exterior = { min: extMin, max: extMax, priceRange: exteriorPriceRange };
     const includeTrimPricingNote = hasSelectedTrimOptions(input);
+    const includeFrontDoorPricingNote = hasSelectedFrontDoor(input);
+    const handrailPricingDetails = getInteriorHandrailRange(input.interiorRooms ?? []).details;
     const trimPricingDetail = 'Pricing varies depending on the number of trim items included.';
+    const frontDoorPricingDetail =
+      'Front door pricing can vary depending on the door style, size, paint system, surface condition, and labour required for preparation and application.';
 
     // -----------------------------
     // 5) AI Explanation
@@ -1577,6 +2524,9 @@ export const generatePaintingEstimate = ai.defineFlow(
     };
     const wallTypeSurfaceNote = input.wallType ? WALL_TYPE_SURFACE_NOTES[input.wallType] : undefined;
 
+    const deckCostForPrompt  = calcDeckCost(input);
+    const pavingCostForPrompt = calcPavingCost(input);
+
     const { output } = await explanationPrompt({
       input,
       intMin,
@@ -1586,41 +2536,66 @@ export const generatePaintingEstimate = ai.defineFlow(
       priceMin: totalMin,
       priceMax: totalMax,
       wallTypeSurfaceNote,
+      deckMin:   deckCostForPrompt?.min,
+      deckMax:   deckCostForPrompt?.max,
+      pavingMin: pavingCostForPrompt?.min,
+      pavingMax: pavingCostForPrompt?.max,
     });
 
     if (output?.priceRange) {
-      return {
-        ...output,
-        explanation: withTrimPricingNote(
-          output.explanation,
-          includeTrimPricingNote
-        ),
-        breakdown: output.breakdown ?? breakdown,
-        details:
-          output.details && output.details.length
-            ? includeTrimPricingNote && !output.details.includes(trimPricingDetail)
-              ? [...output.details, trimPricingDetail]
-              : output.details
+        return {
+          ...output,
+          explanation: withFrontDoorPricingNote(
+            withTrimPricingNote(
+              output.explanation,
+              includeTrimPricingNote
+            ),
+            includeFrontDoorPricingNote
+          ),
+          breakdown: output.breakdown ?? breakdown,
+          details:
+            output.details && output.details.length
+            ? [
+                ...output.details,
+                ...handrailPricingDetails.filter((detail) => !output.details?.includes(detail)),
+                ...(includeTrimPricingNote && !output.details.includes(trimPricingDetail)
+                  ? [trimPricingDetail]
+                  : []),
+                ...(includeFrontDoorPricingNote && !output.details.includes(frontDoorPricingDetail)
+                  ? [frontDoorPricingDetail]
+                  : []),
+              ]
             : [
                 ...(isInt ? [`Interior: ${interiorPriceRange}`] : []),
                 ...(isExt ? [`Exterior: ${exteriorPriceRange}`] : []),
                 `Total: ${totalPriceRange}`,
+                ...handrailPricingDetails,
                 ...(includeTrimPricingNote ? [trimPricingDetail] : []),
+                ...(includeFrontDoorPricingNote ? [frontDoorPricingDetail] : []),
               ],
+        pricingMeta:
+          output.pricingMeta?.mode === 'interior_itemized'
+            ? output.pricingMeta
+            : undefined,
       };
     }
 
     return {
       priceRange: totalPriceRange,
-      explanation: withTrimPricingNote(
-        'This is an indicative estimate based on the information provided and is subject to site inspection for a final quote.',
-        includeTrimPricingNote
+      explanation: withFrontDoorPricingNote(
+        withTrimPricingNote(
+          'This is an indicative estimate based on the information provided and is subject to site inspection for a final quote.',
+          includeTrimPricingNote
+        ),
+        includeFrontDoorPricingNote
       ),
       details: [
         ...(isInt ? [`Interior: ${interiorPriceRange}`] : []),
         ...(isExt ? [`Exterior: ${exteriorPriceRange}`] : []),
         `Total: ${totalPriceRange}`,
+        ...handrailPricingDetails,
         ...(includeTrimPricingNote ? [trimPricingDetail] : []),
+        ...(includeFrontDoorPricingNote ? [frontDoorPricingDetail] : []),
       ],
       breakdown,
     };

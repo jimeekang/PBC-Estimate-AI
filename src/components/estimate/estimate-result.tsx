@@ -195,7 +195,7 @@ function EstimateCard({
             </div>
 
             {isPdf ? (
-              <div className="grid min-w-[260px] grid-cols-2 gap-2 rounded-2xl border border-primary/10 bg-white/90 p-3 text-xs shadow-sm">
+              <div className="grid min-w-[260px] grid-cols-2 gap-2 rounded-2xl border border-primary/10 bg-card p-3 text-xs shadow-sm">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Recipient</p>
                   <p className="mt-1 font-semibold text-foreground">{pdfMeta?.recipientName || 'Customer'}</p>
@@ -228,9 +228,16 @@ function EstimateCard({
         <CardContent className={cn(isPdf ? 'space-y-3 px-4 pb-3' : 'space-y-6')}>
           <div>
             <p className="text-sm font-medium text-muted-foreground">
-              {hasBoth ? 'Total Estimated Price Range' : 'Estimated Price Range'}
+              {result.pricingMeta?.mode === 'interior_itemized'
+                ? 'Interior Trim Painting — Fixed Item Price'
+                : hasBoth
+                  ? 'Total Estimated Price Range'
+                  : 'Estimated Price Range'}
             </p>
-            <p className={cn('mt-1 font-bold text-primary', isPdf ? 'text-2xl' : 'text-3xl')}>{result.priceRange}</p>
+            <p className={cn('mt-1 font-bold text-primary', isPdf ? 'text-2xl' : 'text-3xl')}>
+              {result.priceRange}{' '}
+              <span className={cn('font-normal text-muted-foreground', isPdf ? 'text-base' : 'text-lg')}>(+GST)</span>
+            </p>
             {isPdf && pdfMeta?.typeOfWork?.length ? (
               <p className="mt-2 text-sm font-medium text-muted-foreground">
                 Scope: <span className="text-foreground">{pdfMeta.typeOfWork.join(' + ')}</span>
@@ -247,7 +254,7 @@ function EstimateCard({
                 max={bd.interior.max}
                 totalMax={bd.total.max}
                 icon={Home}
-                color="text-blue-500"
+                color="text-primary"
                 mode={mode}
               />
               <PriceBar
@@ -256,7 +263,7 @@ function EstimateCard({
                 max={bd.exterior.max}
                 totalMax={bd.total.max}
                 icon={TreePine}
-                color="text-emerald-500"
+                color="text-primary"
                 mode={mode}
               />
             </div>
@@ -266,7 +273,7 @@ function EstimateCard({
             <div className="border-t border-primary/10 pt-2">
               {bd?.interior && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Home className="h-4 w-4 text-blue-500" />
+                  <Home className="h-4 w-4 text-primary" />
                   <span>
                     Interior: <span className="font-semibold text-foreground">{bd.interior.priceRange}</span>
                   </span>
@@ -274,7 +281,7 @@ function EstimateCard({
               )}
               {bd?.exterior && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <TreePine className="h-4 w-4 text-emerald-500" />
+                  <TreePine className="h-4 w-4 text-primary" />
                   <span>
                     Exterior: <span className="font-semibold text-foreground">{bd.exterior.priceRange}</span>
                   </span>
@@ -306,14 +313,14 @@ function EstimateCard({
           )}
 
           {isPdf && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <p className="font-semibold">Restricted use notice</p>
               <p className="mt-1 leading-relaxed">
                 This document is an indicative AI estimate only for the named recipient and reference.
                 It is not a final quote, invoice, or transferable approval document.
               </p>
               {pdfMeta?.verificationUrl ? (
-                <p className="mt-1 text-xs text-rose-800">Verification: {pdfMeta.verificationUrl}</p>
+                <p className="mt-1 text-xs text-destructive/80">Verification: {pdfMeta.verificationUrl}</p>
               ) : null}
             </div>
           )}

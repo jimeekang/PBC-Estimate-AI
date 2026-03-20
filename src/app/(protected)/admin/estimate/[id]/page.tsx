@@ -41,6 +41,11 @@ interface InteriorRoom {
     ensuitePaint?: boolean;
   };
   approxRoomSize?: number;
+  handrailDetails?: {
+    lengthLm?: number;
+    widthMm?: number;
+    system?: string;
+  };
 }
 
 interface ExteriorDoor {
@@ -429,7 +434,27 @@ export default function EstimateDetailsPage() {
                                   </span>
                                 )}
                               </div>
-                              <PaintAreaBadges areas={room.paintAreas} />
+                              {room.roomName === 'Handrail' ? (
+                                <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                                  {room.handrailDetails?.lengthLm !== undefined && (
+                                    <Badge variant="secondary" className="text-[10px]">
+                                      {room.handrailDetails.lengthLm} lm
+                                    </Badge>
+                                  )}
+                                  {room.handrailDetails?.widthMm !== undefined && (
+                                    <Badge variant="secondary" className="text-[10px]">
+                                      {room.handrailDetails.widthMm} mm
+                                    </Badge>
+                                  )}
+                                  {room.handrailDetails?.system && (
+                                    <Badge variant="secondary" className="text-[10px]">
+                                      {room.handrailDetails.system}
+                                    </Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                <PaintAreaBadges areas={room.paintAreas} />
+                              )}
                             </div>
                           );
                         })}
