@@ -1,17 +1,21 @@
 /**
  * pricing-engine.ts
  *
- * Pure function extraction from generate-painting-estimate.ts for unit testing.
- * All constants and helpers are copied EXACTLY from the source — no logic changes.
+ * Single source of truth for PBC Estimate AI pure pricing functions and constants.
+ * Used by both the AI flow (generate-painting-estimate.ts) and unit tests.
  *
- * Purpose: allow Jest to import pricing logic without pulling in 'use server',
- * genkit, or Next.js server-only dependencies.
+ * Rules:
+ * - No 'use server', no genkit, no Next.js server-only dependencies.
+ * - All functions are pure (no side effects).
+ * - All constants reflect Sydney Northern Beaches market (2026).
  */
 
 // ─────────────────────────────────────────────────────────────
-// CONSTANTS (copied verbatim)
+// CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
+// NOTE: APARTMENT_ANCHORS_OIL is used for "Specific areas only" mode.
+// For "Entire property" mode, the APARTMENT_SQM_CURVE is used instead.
 export const APARTMENT_ANCHORS_OIL = {
   Studio:    { min: 2200, max: 3500, median: 2700 },
   OneBed:    { min: 2800, max: 4200, median: 3300 },
@@ -26,7 +30,7 @@ export const APARTMENT_SQM_CURVE: readonly { sqm: number; rawMedian: number }[] 
   { sqm: 55,  rawMedian: 3100 },
   { sqm: 65,  rawMedian: 3450 },
   { sqm: 80,  rawMedian: 3800 },
-  { sqm: 85,  rawMedian: 4350 },  // avg 2bed apartment ← key calibration point
+  { sqm: 85,  rawMedian: 4350 },  // avg 2bed apartment — key calibration point
   { sqm: 90,  rawMedian: 4300 },
   { sqm: 105, rawMedian: 4850 },
   { sqm: 120, rawMedian: 5800 },
@@ -119,8 +123,7 @@ export const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: 
   Fascia: { minPct: 0.05, maxPct: 0.08 },
   'Exterior Trim': { minPct: 0.04, maxPct: 0.08 },
   Pipes: { minPct: 0.02, maxPct: 0.04 },
-  Deck: { minPct: 0.06, maxPct: 0.12 },
-  Paving: { minPct: 0.04, maxPct: 0.09 },
+  // Deck and Paving are priced independently via calcDeckCost() / calcPavingCost()
   Roof: { minPct: 0.18, maxPct: 0.32 },
   Etc: { minPct: 0.04, maxPct: 0.1 },
 };
@@ -246,11 +249,15 @@ export const DOUBLE_STOREY_3B2B_UPLIFT = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// HELPER FUNCTIONS (copied verbatim)
+// PURE HELPER FUNCTIONS
 // ─────────────────────────────────────────────────────────────
 
 export function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
+}
+
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }
 
 export function getRawMedianFromSqm(sqmInput: number | undefined | null): number {
@@ -413,10 +420,6 @@ export function interpolateBySqm(
   return { min: last.min * scaleUp, max: last.max * scaleUp };
 }
 
-export function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
 export function sumAreaFactor(flags: {
   ceilingPaint?: boolean;
   wallPaint?: boolean;
@@ -427,7 +430,6 @@ export function sumAreaFactor(flags: {
   if (flags.ceilingPaint) f += AREA_SHARE.ceilingPaint;
   if (flags.wallPaint) f += AREA_SHARE.wallPaint;
   if (flags.trimPaint) f += AREA_SHARE.trimPaint;
-  if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
   return f;
 }
 
@@ -441,6 +443,5 @@ export function sumAreaFactorWholeApartment(flags: {
   if (flags.ceilingPaint) f += AREA_SHARE.ceilingPaint;
   if (flags.wallPaint) f += AREA_SHARE.wallPaint;
   if (flags.trimPaint) f += AREA_SHARE.trimPaint;
-  if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
   return f > 0 ? f : 1.0;
 }
