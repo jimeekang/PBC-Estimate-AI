@@ -2,13 +2,18 @@
 
 import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
+import { EXTERIOR_RESTRICTED_PROPERTY_TYPES } from '@/lib/estimate-constants';
+import {
+  InteriorHandrailDetailsSchema,
+  InteriorRoomItemSchema,
+  SkirtingCalculatorRoomSchema,
+} from '@/schemas/estimate';
 import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 const MIN_SUBMIT_INTERVAL_MS = 30 * 1000;
 const MAX_SUBMITS_PER_HOUR = 5;
 const MAX_SUBMITS_PER_DAY = 10;
-const EXTERIOR_RESTRICTED_PROPERTY_TYPES = ['Apartment', 'Office'] as const;
 
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -31,76 +36,6 @@ function stripUndefined<T>(value: T): T {
   return value;
 }
 
-const HANDRAIL_SYSTEM_OPTIONS = [
-  'paint_to_paint_oil_2coat',
-  'paint_to_paint_water_3coat',
-  'varnish_to_paint_oil_3coat_min',
-  'varnish_to_paint_water_4coat_min',
-  'varnish_to_varnish_stain',
-  'varnish_to_varnish_clear',
-] as const;
-
-const InteriorHandrailDetailsSchema = z.object({
-  lengthLm: z.coerce.number().positive().optional(),
-  widthMm: z.coerce.number().positive().optional(),
-  system: z.enum(HANDRAIL_SYSTEM_OPTIONS).optional(),
-});
-
-const InteriorRoomItemSchema = z.object({
-  roomName: z.string().min(1).max(100),
-  otherRoomName: z.string().trim().max(120).optional(),
-  paintAreas: z
-    .object({
-      ceilingPaint: z.boolean().default(false),
-      wallPaint: z.boolean().default(false),
-      trimPaint: z.boolean().default(false),
-      ensuitePaint: z.boolean().optional().default(false),
-    }),
-  approxRoomSize: z.number().optional(),
-  handrailDetails: InteriorHandrailDetailsSchema.optional(),
-}).superRefine((room, ctx) => {
-  if (room.roomName === 'Handrail') {
-    if (!(typeof room.handrailDetails?.lengthLm === 'number' && room.handrailDetails.lengthLm > 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'lengthLm'],
-        message: 'Enter the total handrail length in linear metres.',
-      });
-    }
-
-    if (!(typeof room.handrailDetails?.widthMm === 'number' && room.handrailDetails.widthMm > 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'widthMm'],
-        message: 'Enter the handrail width in millimetres.',
-      });
-    }
-
-    if (!room.handrailDetails?.system) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'system'],
-        message: 'Select a handrail coating system.',
-      });
-    }
-    return;
-  }
-
-  const paintAreas = room.paintAreas ?? {};
-  if (!paintAreas.ceilingPaint && !paintAreas.wallPaint && !paintAreas.trimPaint && !paintAreas.ensuitePaint) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['paintAreas'],
-      message: 'At least one surface must be selected per room.',
-    });
-  }
-});
-
-const SkirtingCalculatorRoomSchema = z.object({
-  label: z.string().trim().max(80).optional(),
-  length: z.number().positive().optional(),
-  width: z.number().positive().optional(),
-});
 
 const estimateFormSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.').max(100),

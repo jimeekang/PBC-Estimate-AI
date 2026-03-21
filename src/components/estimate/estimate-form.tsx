@@ -1,9 +1,14 @@
 'use client';
 
-import type React from 'react';
+import React from 'react';
 import { useForm, useFieldArray, useWatch, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import {
+  InteriorHandrailDetailsSchema,
+  InteriorRoomItemSchema,
+  SkirtingCalculatorRoomSchema,
+} from '@/schemas/estimate';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -46,11 +51,19 @@ import {
   Camera,
   X,
   ImagePlus,
+  Check,
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { AnimatePresence, motion } from 'framer-motion';
 import { submitEstimate } from '@/app/estimate/actions';
 import { uploadEstimatePhotos } from '@/lib/firebase';
-import { useEffect, useState, useRef } from 'react';
+import { EXTERIOR_RESTRICTED_PROPERTY_TYPES, HANDRAIL_SYSTEM_OPTIONS } from '@/lib/estimate-constants';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { EstimatePdfMeta } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
@@ -122,6 +135,12 @@ const WALL_FINISH_OPTIONS = [
   { id: 'brick', label: 'Brick' },
 ] as const;
 
+const WALL_FINISH_TOOLTIPS: Record<string, string> = {
+  cladding: 'Timber, vinyl or fibre cement boards fixed to the exterior wall frame.',
+  rendered: 'Cement or acrylic render coat applied directly to masonry — smooth or textured finish.',
+  brick: 'Exposed brick surface, typically painted with masonry or specialty paint.',
+};
+
 const EXTERIOR_TRIM_OPTIONS = [
   { id: 'Doors', label: 'Doors', icon: DoorOpen },
   { id: 'Window Frames', label: 'Window Frames', icon: Layout },
@@ -139,20 +158,10 @@ const APARTMENT_STRUCTURE_OPTIONS = [
 ] as const;
 
 const propertyTypes = ['Apartment', 'House / Townhouse', 'Office', 'Other'] as const;
-const EXTERIOR_RESTRICTED_PROPERTY_TYPES = ['Apartment', 'Office'] as const;
 
 const typeOfWorkItems = [
   { id: 'Interior Painting', label: 'Interior Painting' },
   { id: 'Exterior Painting', label: 'Exterior Painting' },
-] as const;
-
-const HANDRAIL_SYSTEM_OPTIONS = [
-  'paint_to_paint_oil_2coat',
-  'paint_to_paint_water_3coat',
-  'varnish_to_paint_oil_3coat_min',
-  'varnish_to_paint_water_4coat_min',
-  'varnish_to_varnish_stain',
-  'varnish_to_varnish_clear',
 ] as const;
 
 const HANDRAIL_SYSTEM_LABELS: Record<(typeof HANDRAIL_SYSTEM_OPTIONS)[number], string> = {
@@ -173,66 +182,6 @@ const HANDRAIL_SYSTEM_DESCRIPTIONS: Record<(typeof HANDRAIL_SYSTEM_OPTIONS)[numb
   varnish_to_varnish_clear: 'Refresh existing varnish with clear protective coats.',
 };
 
-const InteriorHandrailDetailsSchema = z.object({
-  lengthLm: z.number().positive().optional(),
-  widthMm: z.number().positive().optional(),
-  system: z.enum(HANDRAIL_SYSTEM_OPTIONS).optional(),
-});
-
-const InteriorRoomItemSchema = z.object({
-  roomName: z.string(),
-  otherRoomName: z.string().optional(),
-  paintAreas: z.object({
-    ceilingPaint: z.boolean(),
-    wallPaint: z.boolean(),
-    trimPaint: z.boolean(),
-    ensuitePaint: z.boolean().optional(),
-  }),
-  approxRoomSize: z.number().optional(),
-  handrailDetails: InteriorHandrailDetailsSchema.optional(),
-}).superRefine((room, ctx) => {
-  if (room.roomName === 'Handrail') {
-    if (!(typeof room.handrailDetails?.lengthLm === 'number' && room.handrailDetails.lengthLm > 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'lengthLm'],
-        message: 'Enter the total handrail length in linear metres.',
-      });
-    }
-
-    if (!(typeof room.handrailDetails?.widthMm === 'number' && room.handrailDetails.widthMm > 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'widthMm'],
-        message: 'Enter the handrail width in millimetres.',
-      });
-    }
-
-    if (!room.handrailDetails?.system) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'system'],
-        message: 'Select a handrail coating system.',
-      });
-    }
-    return;
-  }
-
-  const paintAreas = room.paintAreas ?? {};
-  if (!paintAreas.ceilingPaint && !paintAreas.wallPaint && !paintAreas.trimPaint && !paintAreas.ensuitePaint) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['paintAreas'],
-      message: 'Select at least one surface for this room.',
-    });
-  }
-});
-
-const SkirtingCalculatorRoomSchema = z.object({
-  label: z.string().optional(),
-  length: z.number().positive().optional(),
-  width: z.number().positive().optional(),
-});
 
 const estimateFormSchema = z
   .object({
@@ -259,7 +208,6 @@ const estimateFormSchema = z
     wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).optional(),
     wallHeight: z.coerce.number().positive().optional(),
 
-    // ✅ 추가: Exterior Trim 멀티 옵션
     exteriorTrimItems: z
       .array(z.enum(['Doors', 'Window Frames', 'Architraves', 'Front Door']))
       .optional(),
@@ -440,7 +388,6 @@ const estimateFormSchema = z
     },
     { path: ['interiorRooms'], message: 'Enter an approximate room size for each selected room.' }
   )
-  // ✅ Wall 선택 시 wallFinishes 최소 1개
   .refine(
     (data) => {
       const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
@@ -450,7 +397,6 @@ const estimateFormSchema = z
     },
     { path: ['wallFinishes'], message: 'Please select at least one wall finish.' }
   )
-  // ✅ Exterior Trim 선택 시 exteriorTrimItems 최소 1개
   .refine(
     (data) => {
       const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
@@ -534,6 +480,20 @@ const estimateFormSchema = z
 type EstimateFormValues = z.infer<typeof estimateFormSchema>;
 
 const BOOKING_URL = 'https://clienthub.getjobber.com/booking/3a242065-0473-4039-ac49-e0a471328f15/';
+
+const WIZARD_STEPS = [
+  { id: 'job', label: 'Job Details' },
+  { id: 'interior', label: 'Interior' },
+  { id: 'exterior', label: 'Exterior' },
+  { id: 'your-details', label: 'Your Details' },
+] as const;
+
+const STEP_FIELDS: Record<number, string[]> = {
+  0: ['propertyType', 'typeOfWork', 'scopeOfPainting', 'houseStories', 'bedroomCount', 'bathroomCount', 'apartmentStructure', 'approxSize'],
+  1: ['paintAreas', 'interiorWallHeight', 'interiorRooms', 'roomsToPaint', 'trimPaintOptions', 'skirtingLinearMetres', 'skirtingPricingMode', 'skirtingCalculatorRooms', 'otherInteriorArea'],
+  2: ['exteriorAreas', 'wallFinishes', 'wallHeight', 'exteriorTrimItems', 'exteriorDoors', 'exteriorWindows', 'exteriorArchitraves', 'deckArea', 'deckServiceType', 'deckProductType', 'deckCondition', 'pavingArea', 'pavingCondition', 'otherExteriorArea'],
+  3: ['name', 'email', 'phone', 'location', 'timingPurpose', 'paintCondition', 'jobDifficulty'],
+};
 
 function AutocompleteInput({ field }: { field: any }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -649,36 +609,7 @@ type InteriorDoorSystem = 'oil_2coat' | 'water_3coat_white_finish';
 type InteriorWindowScope = 'Window & Frame' | 'Window only' | 'Frame only';
 type TrimPaintType = 'Oil-based' | 'Water-based';
 
-const INTERIOR_DOOR_PRICES: Record<InteriorDoorSystem, Record<InteriorDoorScope, number>> = {
-  oil_2coat: { 'Door & Frame': 250, 'Door only': 180, 'Frame only': 70 },
-  water_3coat_white_finish: { 'Door & Frame': 325, 'Door only': 230, 'Frame only': 95 },
-};
-
-const INTERIOR_WINDOW_ITEM_PRICES: Record<
-  InteriorDoorSystem,
-  Record<WindowType, Record<InteriorWindowScope, number>>
-> = {
-  oil_2coat: {
-    Normal: { 'Window & Frame': 240, 'Window only': 180, 'Frame only': 140 },
-    Awning: { 'Window & Frame': 280, 'Window only': 210, 'Frame only': 165 },
-    'Double Hung': { 'Window & Frame': 350, 'Window only': 265, 'Frame only': 210 },
-    French: { 'Window & Frame': 470, 'Window only': 360, 'Frame only': 290 },
-  },
-  water_3coat_white_finish: {
-    Normal: { 'Window & Frame': 315, 'Window only': 230, 'Frame only': 165 },
-    Awning: { 'Window & Frame': 355, 'Window only': 260, 'Frame only': 190 },
-    'Double Hung': { 'Window & Frame': 425, 'Window only': 315, 'Frame only': 235 },
-    French: { 'Window & Frame': 545, 'Window only': 410, 'Frame only': 315 },
-  },
-};
-
-const DOOR_SYSTEM_LABELS: Record<InteriorDoorSystem, string> = {
-  oil_2coat: '2 coats (oil base)',
-  water_3coat_white_finish: '3 coats (water base, white finish)',
-};
-
 const DOOR_SCOPES: InteriorDoorScope[] = ['Door & Frame', 'Door only', 'Frame only'];
-const DOOR_SYSTEMS: InteriorDoorSystem[] = ['oil_2coat', 'water_3coat_white_finish'];
 const WINDOW_SCOPES: InteriorWindowScope[] = ['Window & Frame', 'Window only', 'Frame only'];
 
 function getSystemFromTrimPaintType(paintType: TrimPaintType | undefined): InteriorDoorSystem {
@@ -757,70 +688,49 @@ function InteriorDoorDetail({ form }: { form: ReturnType<typeof useForm<Estimate
     );
   };
 
-  const subtotal = items.reduce(
-    (sum, item) =>
-      item.system === activeSystem ? sum + (INTERIOR_DOOR_PRICES[item.system]?.[item.scope] ?? 0) * item.quantity : sum,
-    0
-  );
-
   return (
-    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
+    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-2">
       <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
         <DoorOpen className="h-3.5 w-3.5" />
-        Interior Doors — Fixed Item Pricing
+        Interior Doors
       </div>
-      <p className="text-xs text-muted-foreground">
-        Showing {DOOR_SYSTEM_LABELS[activeSystem]} pricing from the selected trim paint type.
-      </p>
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-1.5">
         {DOOR_SCOPES.map((scope) => {
           const qty = getQty(scope);
-          const unitPrice = INTERIOR_DOOR_PRICES[activeSystem][scope];
           return (
-            <div key={scope} className="space-y-1">
-              <div className="text-xs font-semibold text-foreground">{scope}</div>
-              <div
-                className={cn(
-                  'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
-                  qty > 0 ? 'border-primary bg-primary/10' : 'bg-background'
-                )}
-              >
-                <div className="min-w-0">
-                  <span className="text-muted-foreground">{DOOR_SYSTEM_LABELS[activeSystem]}</span>
-                  <span className="ml-2 font-semibold text-primary">AUD {unitPrice}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    aria-label={`Decrease ${scope}`}
-                    onClick={() => setQty(scope, Math.max(0, qty - 1))}
-                    disabled={qty === 0}
-                    className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
-                  >
-                    -
-                  </button>
-                  <span className="w-5 text-center tabular-nums">{qty}</span>
-                  <button
-                    type="button"
-                    aria-label={`Increase ${scope}`}
-                    onClick={() => setQty(scope, Math.min(50, qty + 1))}
-                    disabled={qty >= 50}
-                    className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
+            <div
+              key={scope}
+              className={cn(
+                'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
+                qty > 0 ? 'border-primary bg-primary/10' : 'bg-background'
+              )}
+            >
+              <span className="font-medium">{scope}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={`Decrease ${scope}`}
+                  onClick={() => setQty(scope, Math.max(0, qty - 1))}
+                  disabled={qty === 0}
+                  className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
+                >
+                  -
+                </button>
+                <span className="w-5 text-center tabular-nums">{qty}</span>
+                <button
+                  type="button"
+                  aria-label={`Increase ${scope}`}
+                  onClick={() => setQty(scope, Math.min(50, qty + 1))}
+                  disabled={qty >= 50}
+                  className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
+                >
+                  +
+                </button>
               </div>
             </div>
           );
         })}
       </div>
-      {subtotal > 0 && (
-        <div className="border-t border-primary/20 pt-2 text-xs flex justify-between font-semibold text-primary">
-          <span>Estimated Subtotal</span>
-          <span>AUD {subtotal.toLocaleString('en-AU')} <span className="font-normal text-muted-foreground">(+GST)</span></span>
-        </div>
-      )}
     </div>
   );
 }
@@ -843,44 +753,29 @@ function InteriorWindowDetail({ form }: { form: ReturnType<typeof useForm<Estima
     );
   };
 
-  const subtotal = items.reduce(
-    (sum, item) =>
-      item.system === activeSystem
-        ? sum + (INTERIOR_WINDOW_ITEM_PRICES[item.system][item.type]?.[item.scope] ?? 0) * item.quantity
-        : sum,
-    0
-  );
-
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
       <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
         <Layout className="h-3.5 w-3.5" />
-        Interior Windows - Fixed Item Pricing
+        Interior Windows
       </div>
-      <p className="text-xs text-muted-foreground">
-        Showing {DOOR_SYSTEM_LABELS[activeSystem]} pricing from the selected trim paint type.
-      </p>
       <div className="space-y-3">
         {WINDOW_TYPE_OPTIONS.map((type) => (
           <div key={type} className="space-y-1">
             <div className="text-xs font-semibold text-foreground">{type}</div>
-            {WINDOW_SCOPES.map((scope) => {
-              const qty = getQty(type, scope);
-              const unitPrice = INTERIOR_WINDOW_ITEM_PRICES[activeSystem][type][scope];
-              return (
-                <div key={scope} className="space-y-1">
-                  <div className="text-xs font-medium text-muted-foreground">{scope}</div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {WINDOW_SCOPES.map((scope) => {
+                const qty = getQty(type, scope);
+                return (
                   <div
+                    key={scope}
                     className={cn(
                       'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
                       qty > 0 ? 'border-primary bg-primary/10' : 'bg-background'
                     )}
                   >
-                    <div className="min-w-0">
-                      <span className="text-muted-foreground">{DOOR_SYSTEM_LABELS[activeSystem]}</span>
-                      <span className="ml-2 font-semibold text-primary">AUD {unitPrice}</span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-medium">{scope}</span>
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         aria-label={`Decrease ${type} ${scope}`}
@@ -902,20 +797,12 @@ function InteriorWindowDetail({ form }: { form: ReturnType<typeof useForm<Estima
                       </button>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
-      {subtotal > 0 && (
-        <div className="border-t border-primary/20 pt-2 text-xs flex justify-between font-semibold text-primary">
-          <span>Estimated Subtotal</span>
-          <span>
-            AUD {subtotal.toLocaleString('en-AU')} <span className="font-normal text-muted-foreground">(+GST)</span>
-          </span>
-        </div>
-      )}
     </div>
   );
 }
@@ -935,6 +822,8 @@ export function EstimateForm() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const [currentStep, setCurrentStep] = useState(0);
 
   const form = useForm<EstimateFormValues>({
     resolver: zodResolver(estimateFormSchema),
@@ -1042,6 +931,26 @@ export function EstimateForm() {
   const watchTypeOfWork = useWatch({ control: form.control, name: 'typeOfWork' }) || [];
   const isInterior = watchTypeOfWork.includes('Interior Painting');
   const isExterior = watchTypeOfWork.includes('Exterior Painting');
+
+  const activeSteps = useMemo(() => {
+    const steps = [0];
+    if (isInterior) steps.push(1);
+    if (isExterior) steps.push(2);
+    steps.push(3);
+    return steps;
+  }, [isInterior, isExterior]);
+
+  const goNext = async () => {
+    const valid = await form.trigger(STEP_FIELDS[currentStep] as any);
+    if (!valid) return;
+    const idx = activeSteps.indexOf(currentStep);
+    if (idx < activeSteps.length - 1) setCurrentStep(activeSteps[idx + 1]);
+  };
+
+  const goBack = () => {
+    const idx = activeSteps.indexOf(currentStep);
+    if (idx > 0) setCurrentStep(activeSteps[idx - 1]);
+  };
   const watchScope = useWatch({ control: form.control, name: 'scopeOfPainting' });
   const watchInteriorRooms = useWatch({ control: form.control, name: 'interiorRooms' });
   const watchSpecificTrimOnly = useWatch({ control: form.control, name: 'specificInteriorTrimOnly' }) ?? false;
@@ -1304,6 +1213,14 @@ const showCeilingOptions =
   }
 
   function onInvalid(errors: FieldErrors<EstimateFormValues>) {
+    // Find the first step that has an error and navigate there
+    for (const [stepIdx, stepFields] of Object.entries(STEP_FIELDS)) {
+      if (stepFields.some((f) => f in errors)) {
+        setCurrentStep(Number(stepIdx));
+        break;
+      }
+    }
+
     const roomErrors = Array.isArray(errors.interiorRooms) ? errors.interiorRooms : [];
     const hasRoomSurfaceError = roomErrors.some((room) => {
       const paintAreas = (room as { paintAreas?: { message?: string } } | undefined)?.paintAreas;
@@ -1357,6 +1274,7 @@ const showCeilingOptions =
 
   return (
     <APIProvider apiKey={googleMapsApiKey!}>
+    <TooltipProvider>
       <AnimatePresence>
         {isLimitReached && !isCountLoading && !isAdmin && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
@@ -1385,93 +1303,74 @@ const showCeilingOptions =
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8">
-          {/* Your Details */}
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-6 w-6 text-primary" />
-                <span>Your Details</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid sm:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. John Smith" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email Address</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="e.g. john@example.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone Number</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="tel"
-                        inputMode="tel"
-                        placeholder="e.g. 0412 345 678"
-                        pattern="[0-9\s\-\+\(\)]*"
-                        maxLength={15}
-                        onKeyDown={(e) => {
-                          if (
-                            !/[\d\s\-\+\(\)Backspace Tab ArrowLeft ArrowRight Delete Home End]/.test(e.key) &&
-                            !e.ctrlKey &&
-                            !e.metaKey
-                          ) {
-                            e.preventDefault();
-                          }
+          {/* Wizard Stepper */}
+          <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+            <div className="max-w-2xl mx-auto px-4 py-3">
+              <div className="flex items-center justify-between">
+                {WIZARD_STEPS.map((step, idx) => {
+                  const isActive = currentStep === idx;
+                  const isCompleted = activeSteps.includes(idx) && activeSteps.indexOf(currentStep) > activeSteps.indexOf(idx);
+                  const isSkipped = !activeSteps.includes(idx);
+                  return (
+                    <React.Fragment key={step.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isCompleted) setCurrentStep(idx);
                         }}
-                        onPaste={(e) => {
-                          const paste = e.clipboardData.getData('text');
-                          if (!/^[\d\s\-\+\(\)]+$/.test(paste)) {
-                            e.preventDefault();
-                          }
-                        }}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="location"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Location / Suburb</FormLabel>
-                    <FormControl>
-                      <AutocompleteInput field={field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+                        disabled={!isCompleted}
+                        className={cn(
+                          'flex flex-col items-center gap-1 transition-colors',
+                          isCompleted ? 'cursor-pointer' : 'cursor-default'
+                        )}
+                      >
+                        <div className={cn(
+                          'h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors',
+                          isActive ? 'border-primary bg-primary text-primary-foreground' :
+                          isCompleted ? 'border-primary bg-primary/10 text-primary' :
+                          isSkipped ? 'border-muted-foreground/30 bg-muted/30 text-muted-foreground/50' :
+                          'border-muted-foreground/40 bg-muted/50 text-muted-foreground'
+                        )}>
+                          {isCompleted ? <Check className="h-4 w-4" /> : idx + 1}
+                        </div>
+                        <span className={cn(
+                          'text-[10px] font-medium hidden sm:block',
+                          isActive ? 'text-primary' :
+                          isSkipped ? 'text-muted-foreground/40' :
+                          'text-muted-foreground'
+                        )}>
+                          {step.label}
+                        </span>
+                      </button>
+                      {idx < WIZARD_STEPS.length - 1 && (
+                        <div className={cn(
+                          'flex-1 h-px mx-2',
+                          isCompleted ? 'bg-primary' :
+                          isSkipped ? 'bg-muted-foreground/20' :
+                          'bg-muted-foreground/20'
+                        )} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
-          {/* Job Details */}
+          {/* Step Content */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStep}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-8"
+            >
+
+          {/* Step 0: Job Details */}
+          {currentStep === 0 && (
+          <div className="space-y-6">
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1665,16 +1564,43 @@ const showCeilingOptions =
                 )}
               />
 
-              {/* Interior (원본 유지) */}
+              {/* Scope info card — shown when Specific areas only */}
               <AnimatePresence>
-  {isInterior && (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      className="sm:col-span-2 overflow-hidden space-y-8 pt-4"
-    >
-      {watchScope === 'Entire property' ? (
+                {watchScope === 'Specific areas only' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="sm:col-span-2 overflow-hidden"
+                  >
+                    <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 p-4 text-sm">
+                      <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+                      <div className="space-y-1">
+                        <p className="font-semibold text-blue-800 dark:text-blue-300">Room-by-room selection active</p>
+                        <p className="text-blue-700 dark:text-blue-400">In the section below, choose which rooms need painting and configure each one individually. Pricing is calculated per room based on your selections.</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+          </div>
+          )} {/* end Step 0 */}
+
+          {/* Step 1: Interior Details */}
+          {currentStep === 1 && isInterior && (
+          <div className="space-y-6">
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PaintRoller className="h-6 w-6 text-primary" />
+                <span>Interior Details</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <div className="sm:col-span-2 overflow-hidden space-y-8">
+              {watchScope === 'Entire property' ? (
         isApartmentType ? (
           /* ── Apartment: simplified structure selection ── */
           <div className="space-y-6">
@@ -1703,9 +1629,10 @@ const showCeilingOptions =
                             )}
                           >
                             <FormControl>
-                              <RadioGroupItem value={opt.id} />
+                              <RadioGroupItem value={opt.id} className="sr-only" />
                             </FormControl>
-                            <span className="text-sm">{opt.label}</span>
+                            <span className="text-sm flex-1">{opt.label}</span>
+                            {field.value === opt.id && <Check className="h-4 w-4 text-primary shrink-0" />}
                           </FormLabel>
                         </FormItem>
                       ))}
@@ -2142,8 +2069,12 @@ const showCeilingOptions =
             />
 
             {watchSpecificTrimOnly ? (
-              <div className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.02] p-4 text-sm text-muted-foreground">
-                Trim-only pricing is active. Use the Trim Options section below for doors, window frames, and skirting boards.
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 p-4 text-sm">
+                <Info className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300">Trim-only mode active</p>
+                  <p className="text-amber-700 dark:text-amber-400">Room anchors are skipped. Scroll to the Trim Options section below to add doors, window frames, and skirting boards.</p>
+                </div>
               </div>
             ) : (
               <>
@@ -2217,7 +2148,18 @@ const showCeilingOptions =
                         <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <Checkbox checked={isSelected} onCheckedChange={() => handleToggleRoom(roomName)} />
-                            <span className="font-bold text-sm shrink-0">{roomName}</span>
+                            {roomName === 'Handrail' ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="font-bold text-sm shrink-0 cursor-help underline decoration-dotted underline-offset-2">{roomName}</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-[220px] text-xs">
+                                  Stair or balcony handrail system — priced per linear metre.
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="font-bold text-sm shrink-0">{roomName}</span>
+                            )}
 
                             {isEtc && isSelected && (
                               <div className="ml-2 flex-1" onClick={(e) => e.stopPropagation()}>
@@ -2573,7 +2515,16 @@ const showCeilingOptions =
                         name="skirtingLinearMetres"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Total Skirting Length (lm)</FormLabel>
+                            <FormLabel>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help underline decoration-dotted underline-offset-2">Total Skirting Length (lm)</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-[220px] text-xs">
+                                  Total running length of skirting boards along the base of all walls.
+                                </TooltipContent>
+                              </Tooltip>
+                            </FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
@@ -2765,19 +2716,23 @@ const showCeilingOptions =
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
-  )}
-</AnimatePresence>
+              </div>
+            </CardContent>
+          </Card>
+          </div>
+          )} {/* end Step 1 */}
 
-              {/* ✅ Exterior (구조 수정 핵심) */}
-              <AnimatePresence>
-                {isExterior && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="sm:col-span-2 overflow-hidden pt-4"
-                  >
+          {/* Step 2: Exterior Details */}
+          {currentStep === 2 && isExterior && (
+          <div className="space-y-6">
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Home className="h-6 w-6 text-primary" />
+                <span>Exterior Details</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
                     <div className="space-y-6">
                       {watchPropertyType === 'House / Townhouse' && (
                         <FormField
@@ -2869,7 +2824,18 @@ const showCeilingOptions =
 
                                   <div className="flex items-center gap-2 min-w-0">
                                     <item.icon className="h-4 w-4 shrink-0" />
-                                    <CardTitle className="text-sm truncate">{item.label}</CardTitle>
+                                    {item.id === 'Eaves' ? (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <CardTitle className="text-sm truncate cursor-help underline decoration-dotted underline-offset-2">{item.label}</CardTitle>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="max-w-[220px] text-xs">
+                                          The underside of the roof overhang that extends past the exterior wall.
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    ) : (
+                                      <CardTitle className="text-sm truncate">{item.label}</CardTitle>
+                                    )}
                                   </div>
                                 </div>
                               </CardHeader>
@@ -2925,7 +2891,18 @@ const showCeilingOptions =
                                                     field.onChange(next);
                                                   }}
                                                 />
-                                                <span className="cursor-pointer">{opt.label}</span>
+                                                {WALL_FINISH_TOOLTIPS[opt.id] ? (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <span className="cursor-help underline decoration-dotted underline-offset-2">{opt.label}</span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="right" className="max-w-[200px] text-xs">
+                                                      {WALL_FINISH_TOOLTIPS[opt.id]}
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                ) : (
+                                                  <span className="cursor-pointer">{opt.label}</span>
+                                                )}
                                               </div>
                                             );
                                           })}
@@ -3178,7 +3155,18 @@ const showCeilingOptions =
                                                 />
                                                 <div className="flex items-center gap-2">
                                                   <opt.icon className="h-3.5 w-3.5" />
-                                                  <span className="cursor-pointer">{opt.label}</span>
+                                                  {opt.id === 'Architraves' ? (
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <span className="cursor-help underline decoration-dotted underline-offset-2">{opt.label}</span>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent side="right" className="max-w-[220px] text-xs">
+                                                        Decorative moulding trim around door and window openings on the exterior.
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  ) : (
+                                                    <span className="cursor-pointer">{opt.label}</span>
+                                                  )}
                                                 </div>
                                               </div>
                                             );
@@ -3241,13 +3229,102 @@ const showCeilingOptions =
                       </div>
                     </div>
                     </div>
-                  </motion.div>
+            </CardContent>
+          </Card>
+          </div>
+          )} {/* end Step 2 */}
+
+          {/* Step 3: Your Details + Conditions + Photos */}
+          {currentStep === 3 && (
+          <div className="space-y-6">
+
+          {/* Your Details */}
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-6 w-6 text-primary" />
+                <span>Your Details</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid sm:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. John Smith" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </AnimatePresence>
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="e.g. john@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="tel"
+                        inputMode="tel"
+                        placeholder="e.g. 0412 345 678"
+                        pattern="[0-9\s\-\+\(\)]*"
+                        maxLength={15}
+                        onKeyDown={(e) => {
+                          if (
+                            !/[\d\s\-\+\(\)Backspace Tab ArrowLeft ArrowRight Delete Home End]/.test(e.key) &&
+                            !e.ctrlKey &&
+                            !e.metaKey
+                          ) {
+                            e.preventDefault();
+                          }
+                        }}
+                        onPaste={(e) => {
+                          const paste = e.clipboardData.getData('text');
+                          if (!/^[\d\s\-\+\(\)]+$/.test(paste)) {
+                            e.preventDefault();
+                          }
+                        }}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Location / Suburb</FormLabel>
+                    <FormControl>
+                      <AutocompleteInput field={field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 
-          {/* Conditions & Difficulty (원본 유지) */}
+          {/* Conditions & Difficulty */}
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -3435,38 +3512,84 @@ const showCeilingOptions =
               )}
             </CardContent>
           </Card>
+          </div>
+          )} {/* end Step 3 */}
 
-          {/* Submit */}
-          <div className="space-y-4">
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Wizard Navigation */}
+          <div className="flex items-center justify-between pt-4 border-t">
             <Button
-              type="submit"
-              size="lg"
-              className="w-full text-lg h-14"
-              disabled={isPending || (isLimitReached && !isAdmin) || isCountLoading}
+              type="button"
+              variant="outline"
+              onClick={goBack}
+              disabled={activeSteps.indexOf(currentStep) === 0}
+              className="gap-2"
             >
-              {isPending ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <WandSparkles className="mr-2 h-6 w-6" />}
-              {isLimitReached && !isAdmin ? 'Limit Reached' : isCountLoading ? 'Syncing...' : 'Generate AI Estimate'}
+              ← Back
             </Button>
 
-            <div className="text-center p-6 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm space-y-2">
-              <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap">
-                <Calendar className="h-5 w-5 text-primary" />
-                <span>Need an on-site assessment?</span>
-                <a
-                  href={BOOKING_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary font-bold underline hover:text-primary/80 transition-all inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-primary/20 shadow-sm"
+            {currentStep < 3 ? (
+              <Button
+                type="button"
+                onClick={goNext}
+                className="gap-2"
+              >
+                Next →
+              </Button>
+            ) : (
+              <div className="space-y-4 flex-1 ml-4">
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full text-lg h-14"
+                  disabled={isPending || (isLimitReached && !isAdmin) || isCountLoading}
                 >
-                  Book Free Quote <ExternalLink className="h-3 w-3" />
-                </a>
-              </p>
-            </div>
+                  {isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                      Generating Estimate…
+                    </>
+                  ) : isCountLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                      Loading…
+                    </>
+                  ) : isLimitReached && !isAdmin ? (
+                    <>
+                      <ShieldAlert className="mr-2 h-6 w-6" />
+                      Free Limit Reached
+                    </>
+                  ) : (
+                    <>
+                      <WandSparkles className="mr-2 h-6 w-6" />
+                      Generate AI Estimate
+                    </>
+                  )}
+                </Button>
 
-            {!isAdmin && !isCountLoading && (
-              <div className="text-center text-xs font-medium text-muted-foreground">
-                Remaining free estimates:{' '}
-                <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span>
+                <div className="text-center p-6 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm space-y-2">
+                  <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    <span>Need an on-site assessment?</span>
+                    <a
+                      href={BOOKING_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary font-bold underline hover:text-primary/80 transition-all inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-primary/20 shadow-sm"
+                    >
+                      Book Free Quote <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </p>
+                </div>
+
+                {!isAdmin && !isCountLoading && (
+                  <div className="text-center text-xs font-medium text-muted-foreground">
+                    Remaining free estimates:{' '}
+                    <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3488,6 +3611,7 @@ const showCeilingOptions =
       </AnimatePresence>
 
       {state.data && <EstimateResult result={state.data} pdfMeta={state.pdfMeta} />}
+    </TooltipProvider>
     </APIProvider>
   );
 }

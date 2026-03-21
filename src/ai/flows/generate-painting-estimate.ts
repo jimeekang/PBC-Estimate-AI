@@ -51,107 +51,59 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { EXTERIOR_RESTRICTED_PROPERTY_TYPES } from '@/lib/estimate-constants';
+import {
+  InteriorHandrailDetailsSchema,
+  InteriorRoomItemSchema,
+  SkirtingCalculatorRoomSchema,
+} from '@/schemas/estimate';
+import {
+  APARTMENT_ANCHORS_OIL,
+  APARTMENT_SQM_CURVE,
+  HOUSE_INTERIOR_ANCHORS,
+  EXTERIOR_WALL_TYPE_ANCHOR,
+  EXTERIOR_WALL_TYPE_FLOORS,
+  MAX_PRICE_CAP,
+  AREA_SHARE,
+  CONDITION_MULTIPLIER,
+  HOUSE_CONDITION_MULTIPLIER,
+  EXTERIOR_CONDITION_MULTIPLIER,
+  STORY_MODIFIER,
+  DEFAULT_WALL_HEIGHT,
+  EXTERIOR_WALL_AREA_BANDS,
+  EXTERIOR_AREA_UPLIFT_PCT,
+  EXTERIOR_DOOR_ANCHOR,
+  EXTERIOR_WINDOW_ANCHOR,
+  EXTERIOR_ARCHITRAVE_ANCHOR,
+  EXTERIOR_FRONT_DOOR_ANCHOR,
+  INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL,
+  INTERIOR_DOOR_ITEM_ANCHOR,
+  INTERIOR_WINDOW_ITEM_ANCHOR,
+  INTERIOR_SKIRTING_LINEAR_RATE,
+  INTERIOR_HANDRAIL_ITEM_PRICING,
+  CAL_3B2B_FAIR_SINGLE_POINTS,
+  DOUBLE_STOREY_3B2B_UPLIFT,
+  clamp,
+  lerp,
+  getRawMedianFromSqm,
+  pickExteriorBand,
+  estimateWallArea,
+  getInteriorHandrailWidthMultiplier,
+  getQtyScaleFactor,
+  calcTrimItemCost,
+  inferHouseKey,
+  capRangeWidthSmart,
+  interpolateBySqm,
+  sumAreaFactor,
+  sumAreaFactorWholeApartment,
+} from '@/lib/pricing-engine';
 
 // -----------------------------
 // Anchors (Sydney averages)
 // -----------------------------
 
-// NOTE: APARTMENT_ANCHORS_OIL is still used for "Specific areas only" mode.
-// For "Entire property" mode, the SQM_CURVE below is used instead.
-// Base = wall + ceiling + trim oil-based. Northern Beaches, Sydney.
-// TwoBed split: TwoBedStd (≤90sqm) / TwoBedLg (91~110sqm)
-const APARTMENT_ANCHORS_OIL = {
-  Studio:    { min: 2200, max: 3500, median: 2700 },
-  OneBed:    { min: 2800, max: 4200, median: 3300 },
-  TwoBedStd: { min: 4300, max: 6200, median: 5000 },
-  TwoBedLg:  { min: 5000, max: 7500, median: 6000 },
-  ThreeBed:  { min: 6500, max: 9500, median: 7500 },
-} as const;
-
-// -----------------------------
-// SQM CURVE (Apartment, Entire property mode only)
-// -----------------------------
-// rawMedian = price before areaFactor is applied.
-// Calibrated so that:
-//   85sqm × af(1.0 ceil+wall+trim) × Fair band(0.92) + Normal window → ~$4,080 min ✅
-//   90sqm × af(1.12 ensuite) × Excellent band(0.95~1.05) → high-$4k to low-$5k ✅
-// Interpolates smoothly — no class boundary cliffs.
-const APARTMENT_SQM_CURVE: readonly { sqm: number; rawMedian: number }[] = [
-  { sqm: 35,  rawMedian: 2200 },
-  { sqm: 45,  rawMedian: 2800 },
-  { sqm: 55,  rawMedian: 3100 },
-  { sqm: 65,  rawMedian: 3450 },
-  { sqm: 80,  rawMedian: 3800 },
-  { sqm: 85,  rawMedian: 4350 },  // avg 2bed apartment ← key calibration point
-  { sqm: 90,  rawMedian: 4300 },
-  { sqm: 105, rawMedian: 4850 },
-  { sqm: 120, rawMedian: 5800 },
-  { sqm: 140, rawMedian: 6900 },
-  { sqm: 160, rawMedian: 7900 },
-  { sqm: 200, rawMedian: 9500 },
-] as const;
-
-function getRawMedianFromSqm(sqmInput: number | undefined | null): number {
-  // Guard: if sqm is missing, NaN, or not a finite number → use default 90sqm
-  const sqm =
-    sqmInput == null || !Number.isFinite(sqmInput) || isNaN(sqmInput)
-      ? 90
-      : sqmInput;
-
-  const curve = APARTMENT_SQM_CURVE;
-  if (sqm <= curve[0].sqm) return curve[0].rawMedian;
-  for (let i = 0; i < curve.length - 1; i++) {
-    const a = curve[i];
-    const b = curve[i + 1];
-    if (sqm >= a.sqm && sqm <= b.sqm) {
-      const t = (sqm - a.sqm) / (b.sqm - a.sqm);
-      return a.rawMedian + (b.rawMedian - a.rawMedian) * t;
-    }
-  }
-  // Beyond last point: linear extrapolation
-  const a = curve[curve.length - 2];
-  const b = curve[curve.length - 1];
-  const t = (sqm - a.sqm) / (b.sqm - a.sqm);
-  return a.rawMedian + (b.rawMedian - a.rawMedian) * t;
-}
-
-// Base = wall + ceiling + trim oil-based. Northern Beaches, Sydney.
-const HOUSE_INTERIOR_ANCHORS = {
-  '2B1B': { min: 7500,  max: 11000, median: 9000  },
-  '3B2B': { min: 9500,  max: 14000, median: 11500 },
-  '4B2B': { min: 13000, max: 18500, median: 15500 },
-  '5B3B': { min: 17000, max: 25000, median: 20000 },
-} as const;
-
-/**
- * Exterior anchors by wall type (Northern Beaches, Sydney).
- * All use 3-coat system (1 undercoat + 2 finish coats).
- * cladding = cheapest (standard prep, normal absorption)
- * rendered = mid-range (high absorption, textured/porous finish, more prep)
- * brick    = most expensive (mortar joint labour, highest material consumption)
- * default  = fallback when wallType not specified
- */
-const EXTERIOR_WALL_TYPE_ANCHOR = {
-  cladding: { min: 3000, max: 12000, median: 5500 },
-  rendered:  { min: 4500, max: 17000, median: 9000 },
-  brick:     { min: 5500, max: 20000, median: 11500 },
-  default:   { min: 3500, max: 14000, median: 7000 },
-} as const;
-
-/** Wall-type-aware minimum floor prices per scope category.
- *  Brick is highest due to mortar joint labour and material consumption.
- *  All types use 3-coat system (BASE_COAT_COUNT): 1 undercoat + 2 finish coats.
- *  tripleStoreyFullExterior added for 3-storey support.
- */
-const EXTERIOR_WALL_TYPE_FLOORS = {
-  cladding: { wallOnly: 3000, wallPlusEaves: 4500, fullExterior: 6000, doubleStoreyFullExterior: 9000, tripleStoreyFullExterior: 13000 },
-  rendered:  { wallOnly: 4000, wallPlusEaves: 6000, fullExterior: 8000, doubleStoreyFullExterior: 12000, tripleStoreyFullExterior: 16000 },
-  brick:     { wallOnly: 5000, wallPlusEaves: 7000, fullExterior: 9500, doubleStoreyFullExterior: 14000, tripleStoreyFullExterior: 18500 },
-  default:   { wallOnly: 3500, wallPlusEaves: 5000, fullExterior: 7000, doubleStoreyFullExterior: 10000, tripleStoreyFullExterior: 13500 },
-} as const;
-
-const MAX_PRICE_CAP = 35000;
-const EXTERIOR_RESTRICTED_PROPERTY_TYPES = ['Apartment', 'Office'] as const;
+// NOTE: Anchors, SQM curve, and pricing constants are imported from '@/lib/pricing-engine'.
+// See that file for Sydney Northern Beaches 2026 calibration values.
 
 // -----------------------------
 // Interior modelling
@@ -178,25 +130,6 @@ const ROOM_WEIGHT: Record<string, number> = {
 const BASE_FULL_APT_SCORE = 6.3;
 const BASE_FULL_HOUSE_SCORE = 8.8;
 
-const AREA_SHARE = {
-  ceilingPaint: 0.25,
-  wallPaint: 0.55,
-  trimPaint: 0.2,
-  ensuitePaint: 0.08,
-};
-
-const CONDITION_MULTIPLIER = {
-  Excellent: { min: 0.95, max: 1.05 },
-  Fair: { min: 1.08, max: 1.22 },
-  Poor: { min: 1.22, max: 1.55 },
-} as const;
-
-const HOUSE_CONDITION_MULTIPLIER = {
-  Excellent: { min: 1.0, max: 1.08 },
-  Fair: { min: 1.1, max: 1.24 },
-  Poor: { min: 1.22, max: 1.4 },
-} as const;
-
 const ENTIRE_HOUSE_BAND = {
   Excellent: { min: 0.96, max: 1.04 },
   Fair: { min: 0.97, max: 1.06 },
@@ -212,15 +145,6 @@ const ENTIRE_APT_BAND = {
   Fair:      { min: 0.92, max: 1.08 },
   Poor:      { min: 0.90, max: 1.25 },
 } as const;
-
-const STORY_MODIFIER: Record<string, number> = {
-  '1 storey': 1.0,
-  '2 storey': 1.18,
-  '3 storey': 1.35,
-  // Legacy aliases for backward compatibility
-  'Single story': 1.0,
-  'Double story or more': 1.18,
-};
 
 /** Standard coat system: 1 undercoat + 2 finish coats */
 const BASE_COAT_COUNT = 3;
@@ -268,28 +192,6 @@ const INTERIOR_TRIM_ONLY_BASE = {
   house: { min: 3200, max: 4100 },
 } as const;
 
-// Specific-area room anchors use room-level pricing directly instead of
-// distributing whole-property anchors. Base includes wall + ceiling + trim
-// under the standard oil-based trim system.
-const INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL = {
-  'Master Bedroom': { min: 1350, max: 1700, median: 1500 },
-  'Bedroom 1': { min: 980, max: 1280, median: 1130 },
-  'Bedroom 2': { min: 980, max: 1280, median: 1130 },
-  'Bedroom 3': { min: 980, max: 1280, median: 1130 },
-  Bathroom: { min: 1400, max: 2000, median: 1700 },
-  'Living Room': { min: 2200, max: 3200, median: 2650 },
-  Lounge: { min: 2200, max: 3200, median: 2650 },
-  Dining: { min: 1700, max: 2400, median: 2000 },
-  Kitchen: { min: 1900, max: 2700, median: 2250 },
-  'Study / Office': { min: 1500, max: 2100, median: 1800 },
-  Laundry: { min: 1100, max: 1600, median: 1350 },
-  Hallway: { min: 900, max: 1400, median: 1150 },
-  Foyer: { min: 850, max: 1300, median: 1050 },
-  Stairwell: { min: 1800, max: 2800, median: 2250 },
-  'Walk-in robe': { min: 800, max: 1200, median: 1000 },
-  Etc: { min: 1200, max: 1800, median: 1500 },
-} as const;
-
 const INTERIOR_SKIRTING_ROOM_ANCHOR = {
   'Master Bedroom': { oil_2coat: 200, water_3coat_white_finish: 255 },
   'Bedroom 1': { oil_2coat: 145, water_3coat_white_finish: 190 },
@@ -327,113 +229,13 @@ const INTERIOR_SPECIFIC_SURFACE_RATE = {
   trimLinear: { min: 4, max: 7 },
 } as const;
 
-const INTERIOR_SKIRTING_LINEAR_RATE = {
-  oil_2coat: { min: 7, max: 10 },
-  water_3coat_white_finish: { min: 8, max: 11 },
-} as const;
-
-const INTERIOR_HANDRAIL_ITEM_PRICING = {
-  paint_to_paint_oil_2coat: {
-    label: 'Paint to paint, oil 2 coats',
-    rate: { min: 155, max: 180 },
-    minJob: { min: 480, max: 580 },
-  },
-  paint_to_paint_water_3coat: {
-    label: 'Paint to paint, water 3 coats',
-    rate: { min: 180, max: 210 },
-    minJob: { min: 560, max: 680 },
-  },
-  varnish_to_paint_oil_3coat_min: {
-    label: 'Varnish to paint, oil min 3 coats',
-    rate: { min: 185, max: 215 },
-    minJob: { min: 600, max: 720 },
-  },
-  varnish_to_paint_water_4coat_min: {
-    label: 'Varnish to paint, water min 4 coats',
-    rate: { min: 210, max: 245 },
-    minJob: { min: 680, max: 820 },
-  },
-  varnish_to_varnish_stain: {
-    label: 'Varnish to varnish stain',
-    rate: { min: 200, max: 235 },
-    minJob: { min: 650, max: 800 },
-  },
-  varnish_to_varnish_clear: {
-    label: 'Varnish to varnish clear',
-    rate: { min: 170, max: 200 },
-    minJob: { min: 540, max: 660 },
-  },
-} as const;
-
 const TRIM_ONLY_SKIRTING_MARKET_UPLIFT = 20;
 
 // -----------------------------
 // Exterior modelling (UPDATED)
 // -----------------------------
-const EXTERIOR_CONDITION_MULTIPLIER = {
-  Excellent: { min: 1.0, max: 1.08 },
-  Fair: { min: 1.1, max: 1.24 },
-  Poor: { min: 1.22, max: 1.4 },
-} as const;
-
-/**
- * Exterior wall-area bands (m²).
- * wallArea = estimatedPerimeter × wallHeight
- * perimeter ≈ 4.2 × √(floorSqm)  (rectangular adjustment)
- *
- * Reference points:
- * - 100sqm single(2.7m) → wallArea ≈ 113m²
- * - 150sqm single(2.7m) → wallArea ≈ 139m²
- * - 200sqm single(2.7m) → wallArea ≈ 161m²
- * - 150sqm double(5.4m) → wallArea ≈ 278m²
- * - 250sqm double(5.4m) → wallArea ≈ 359m²
- */
-/**
- * Exterior wall-area bands — 10 bands for finer sqm sensitivity.
- * Linear interpolation is applied within each band (see pickExteriorBand).
- *
- * Approx sqm → wallArea mapping (perimeter = 4.2×√sqm, height 2.7m single / 5.4m double):
- *  50sqm single  →  ~64m²   |  80sqm single  → ~101m²
- * 100sqm single  → ~113m²   | 120sqm single  → ~124m²
- * 150sqm single  → ~139m²   | 180sqm single  → ~152m²
- * 200sqm single  → ~161m²   | 100sqm double  → ~227m²
- * 150sqm double  → ~278m²   | 200sqm double  → ~321m²
- * 250sqm double  → ~359m²
- */
-const EXTERIOR_WALL_AREA_BANDS = [
-  { minArea: 0,   maxArea: 75,   minMult: 0.45, maxMult: 0.58 }, // ~50sqm 단층
-  { minArea: 76,  maxArea: 108,  minMult: 0.58, maxMult: 0.73 }, // ~80sqm 단층
-  { minArea: 109, maxArea: 128,  minMult: 0.73, maxMult: 0.86 }, // ~100sqm 단층
-  { minArea: 129, maxArea: 144,  minMult: 0.86, maxMult: 0.97 }, // ~120sqm 단층
-  { minArea: 145, maxArea: 158,  minMult: 0.97, maxMult: 1.08 }, // ~150sqm 단층
-  { minArea: 159, maxArea: 175,  minMult: 1.08, maxMult: 1.20 }, // ~180sqm 단층
-  { minArea: 176, maxArea: 220,  minMult: 1.20, maxMult: 1.38 }, // ~200-250sqm 단층 / 소형 복층
-  { minArea: 221, maxArea: 290,  minMult: 1.38, maxMult: 1.58 }, // ~100sqm 복층
-  { minArea: 291, maxArea: 345,  minMult: 1.58, maxMult: 1.76 }, // ~150-200sqm 복층
-  { minArea: 346, maxArea: 9999, minMult: 1.76, maxMult: 1.98 }, // ~250sqm+ 복층
-] as const;
-
-const DEFAULT_WALL_HEIGHT: Record<string, number> = {
-  '1 storey': 2.7,
-  '2 storey': 5.4,
-  '3 storey': 8.1,
-  // Legacy aliases
-  'Single story': 2.7,
-  'Double story or more': 5.4,
-};
-
-const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: number; notes?: string }> = {
-  Wall: { minPct: 0.0, maxPct: 0.0, notes: 'Base includes walls for typical full exterior scope.' },
-  Eaves: { minPct: 0.09, maxPct: 0.14 },
-  Gutter: { minPct: 0.05, maxPct: 0.08 },
-  Fascia: { minPct: 0.05, maxPct: 0.08 },
-  'Exterior Trim': { minPct: 0.04, maxPct: 0.08 },
-  Pipes: { minPct: 0.02, maxPct: 0.04 },
-  // Deck removed: priced independently via calcDeckCost()
-  // Paving removed: priced independently via calcPavingCost()
-  Roof: { minPct: 0.18, maxPct: 0.32 },
-  Etc: { minPct: 0.04, maxPct: 0.1 },
-};
+// EXTERIOR_CONDITION_MULTIPLIER, EXTERIOR_WALL_AREA_BANDS, DEFAULT_WALL_HEIGHT,
+// and EXTERIOR_AREA_UPLIFT_PCT are imported from '@/lib/pricing-engine'.
 
 /** Standalone pricing for exterior detail areas selected WITHOUT Wall painting.
  *  Calibrated for Sydney Northern Beaches 2026.
@@ -571,39 +373,7 @@ function calcDeckCost(input: {
   };
 }
 
-// -----------------------------
-// Interior Door Item-Level Anchors (Sydney Northern Beaches 2026)
-// Fixed unit prices per door component + paint system (ex GST).
-// Used only when Specific areas only + door items only (no wall/ceiling rooms).
-// -----------------------------
-const INTERIOR_DOOR_ITEM_ANCHOR: Record<string, Record<string, number>> = {
-  oil_2coat: {
-    'Door & Frame': 220,
-    'Door only': 160,
-    'Frame only': 60,
-  },
-  water_3coat_white_finish: {
-    'Door & Frame': 295,
-    'Door only': 210,
-    'Frame only': 85,
-  },
-};
-
-const INTERIOR_WINDOW_ITEM_ANCHOR = {
-  oil_2coat: {
-    Normal: { 'Window & Frame': 200, 'Window only': 150, 'Frame only': 110 },
-    Awning: { 'Window & Frame': 235, 'Window only': 180, 'Frame only': 135 },
-    'Double Hung': { 'Window & Frame': 300, 'Window only': 230, 'Frame only': 175 },
-    French: { 'Window & Frame': 400, 'Window only': 310, 'Frame only': 240 },
-  },
-  water_3coat_white_finish: {
-    Normal: { 'Window & Frame': 275, 'Window only': 200, 'Frame only': 135 },
-    Awning: { 'Window & Frame': 310, 'Window only': 230, 'Frame only': 160 },
-    'Double Hung': { 'Window & Frame': 375, 'Window only': 280, 'Frame only': 200 },
-    French: { 'Window & Frame': 475, 'Window only': 360, 'Frame only': 265 },
-  },
-} as const;
-
+// INTERIOR_DOOR_ITEM_ANCHOR, INTERIOR_WINDOW_ITEM_ANCHOR imported from '@/lib/pricing-engine'.
 // EXTERIOR_FLOORS kept for backward-compat; actual floors resolved via EXTERIOR_WALL_TYPE_FLOORS
 
 // -----------------------------
@@ -612,73 +382,8 @@ const INTERIOR_WINDOW_ITEM_ANCHOR = {
 // These are ADDITIVE to the base exterior estimate — not captured by EXTERIOR_AREA_UPLIFT_PCT.
 // -----------------------------
 
-/** Exterior door painting price per door (AUD), Sydney Northern Beaches 2026.
- *  Simple = flush/flat door; Standard = panel door; Complex = French/glazed/ornate.
- */
-const EXTERIOR_DOOR_ANCHOR: Record<string, { min: number; max: number }> = {
-  Simple:   { min: 150, max: 280 },
-  Standard: { min: 250, max: 420 },
-  Complex:  { min: 400, max: 680 },
-};
-
-const EXTERIOR_FRONT_DOOR_ANCHOR = { min: 520, max: 880 } as const;
-
-/** Exterior window frame painting price per window (AUD), Sydney Northern Beaches 2026.
- *  Normal = single pane slider; Awning = hinged outward; Double Hung = sash window;
- *  French = multi-pane French window.
- */
-const EXTERIOR_WINDOW_ANCHOR: Record<string, { min: number; max: number }> = {
-  Normal:       { min: 80,  max: 160 },
-  Awning:       { min: 130, max: 220 },
-  'Double Hung': { min: 180, max: 320 },
-  French:       { min: 280, max: 500 },
-};
-
-/** Exterior architrave painting price per set (AUD), Sydney Northern Beaches 2026.
- *  Simple = flat profile; Standard = ogee/colonial; Complex = ornate/multi-step.
- */
-const EXTERIOR_ARCHITRAVE_ANCHOR: Record<string, { min: number; max: number }> = {
-  Simple:   { min: 50,  max: 110 },
-  Standard: { min: 80,  max: 170 },
-  Complex:  { min: 140, max: 300 },
-};
-
-/** Quantity scale discount factor — batch pricing for multiple identical items.
- *  1-3 items: full price (mobilisation cost dominates)
- *  4-7 items: 8% discount (trade efficiency gain)
- *  8-12 items: 15% discount (significant batch savings)
- *  13+ items: 20% discount (maximum batch discount)
- */
-function getQtyScaleFactor(qty: number): number {
-  if (qty <= 3)  return 1.00;
-  if (qty <= 7)  return 0.92;
-  if (qty <= 12) return 0.85;
-  return 0.80;
-}
-
-/** Calculate total cost for a set of exterior trim items using per-item anchors + quantity scaling.
- *  Stacking rule: each item group gets its own qty scale factor (not shared across groups).
- *  E.g., 5 doors + 3 windows → doors get 0.92 scale, windows get 1.00 scale.
- */
-function calcTrimItemCost(
-  items: { style?: string; type?: string; quantity: number }[],
-  anchor: Record<string, { min: number; max: number }>
-): { min: number; max: number } {
-  let totalMin = 0;
-  let totalMax = 0;
-  for (const item of items) {
-    const key = item.style ?? item.type ?? 'Standard';
-    const anchorKeys = Object.keys(anchor);
-    // Fallback to middle tier if key not found
-    const a = anchor[key] ?? anchor[anchorKeys[Math.floor(anchorKeys.length / 2)]] ?? { min: 0, max: 0 };
-    const qty = Math.max(0, item.quantity ?? 0);
-    if (qty === 0) continue;
-    const scale = getQtyScaleFactor(qty);
-    totalMin += a.min * qty * scale;
-    totalMax += a.max * qty * scale;
-  }
-  return { min: Math.round(totalMin), max: Math.round(totalMax) };
-}
+// EXTERIOR_DOOR_ANCHOR, EXTERIOR_FRONT_DOOR_ANCHOR, EXTERIOR_WINDOW_ANCHOR,
+// EXTERIOR_ARCHITRAVE_ANCHOR, getQtyScaleFactor, calcTrimItemCost — imported from '@/lib/pricing-engine'.
 
 function getFrontDoorCost(input: GeneratePaintingEstimateInput): { min: number; max: number } {
   if (!input.exteriorFrontDoor) return { min: 0, max: 0 };
@@ -702,20 +407,12 @@ function isFrontDoorOnlyExteriorTrim(input: GeneratePaintingEstimateInput): bool
 // -----------------------------
 // Helpers
 // -----------------------------
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
+// clamp, getInteriorHandrailWidthMultiplier, estimateWallArea, pickExteriorBand
+// are imported from '@/lib/pricing-engine'.
 
 function toNumberOrUndefined(v: unknown): number | undefined {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   return undefined;
-}
-
-function getInteriorHandrailWidthMultiplier(widthMm: number) {
-  if (widthMm <= 50) return 1.0;
-  if (widthMm <= 70) return 1.08;
-  if (widthMm <= 90) return 1.16;
-  return 1.25;
 }
 
 function getInteriorHandrailRange(
@@ -748,37 +445,6 @@ function getInteriorHandrailRange(
   }
 
   return { min, max, details };
-}
-
-/**
- * Estimate exterior wall area from floor sqm and wall height.
- * perimeter ≈ 4.2 × √(sqm), then wallArea = perimeter × height
- */
-function estimateWallArea(sqm: number, wallHeight: number): number {
-  const perimeter = 4.2 * Math.sqrt(sqm);
-  return perimeter * wallHeight;
-}
-
-/**
- * Returns interpolated multipliers for the given wallArea.
- * Uses linear interpolation within each band for continuous sqm sensitivity.
- */
-function pickExteriorBand(wallArea?: number): { minMult: number; maxMult: number } {
-  const bands = EXTERIOR_WALL_AREA_BANDS;
-  if (!wallArea || wallArea <= 0) return { minMult: bands[0].minMult, maxMult: bands[0].maxMult };
-
-  for (let i = 0; i < bands.length - 1; i++) {
-    const curr = bands[i];
-    const next = bands[i + 1];
-    if (wallArea >= curr.minArea && wallArea <= curr.maxArea) {
-      const t = (wallArea - curr.minArea) / (curr.maxArea - curr.minArea);
-      return {
-        minMult: +(curr.minMult + t * (next.minMult - curr.minMult)).toFixed(3),
-        maxMult: +(curr.maxMult + t * (next.maxMult - curr.maxMult)).toFixed(3),
-      };
-    }
-  }
-  return { minMult: bands[bands.length - 1].minMult, maxMult: bands[bands.length - 1].maxMult };
 }
 
 function formatMoney(n: number) {
@@ -938,19 +604,7 @@ function pseudoSqmFromRooms(selectedRooms: string[]) {
   return base + bonus;
 }
 
-function sumAreaFactor(flags: {
-  ceilingPaint?: boolean;
-  wallPaint?: boolean;
-  trimPaint?: boolean;
-  ensuitePaint?: boolean;
-}) {
-  let f = 0;
-  if (flags.ceilingPaint) f += AREA_SHARE.ceilingPaint;
-  if (flags.wallPaint) f += AREA_SHARE.wallPaint;
-  if (flags.trimPaint) f += AREA_SHARE.trimPaint;
-  if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
-  return f; // 0 when no surfaces selected — filtered out in scoring
-}
+// sumAreaFactor imported from '@/lib/pricing-engine'.
 
 /** True when the job is interior-only, Specific areas only, with itemised
  *  trim items and NO rooms that have wall or ceiling painting selected.
@@ -1011,19 +665,7 @@ function withFrontDoorPricingNote(
   return text.includes(frontDoorNote) ? text : `${text} ${frontDoorNote}`;
 }
 
-function sumAreaFactorWholeApartment(flags: {
-  ceilingPaint?: boolean;
-  wallPaint?: boolean;
-  trimPaint?: boolean;
-  ensuitePaint?: boolean;
-}) {
-  let f = 0;
-  if (flags.ceilingPaint) f += AREA_SHARE.ceilingPaint;
-  if (flags.wallPaint) f += AREA_SHARE.wallPaint;
-  if (flags.trimPaint) f += AREA_SHARE.trimPaint;
-  if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
-  return f > 0 ? f : 1.0;
-}
+// sumAreaFactorWholeApartment imported from '@/lib/pricing-engine'.
 
 function inferApartmentClassFromBedroomNumbers(
   bedroomCountInput?: number,
@@ -1054,93 +696,17 @@ function applyWaterBasedUpliftTrimShareWholeJob(minVal: number, maxVal: number) 
   };
 }
 
-function inferHouseKey(opts: {
-  bedroomsTotal?: number;
-  bathroomsTotal?: number;
-  approxSizeSqm?: number;
-}): keyof typeof HOUSE_INTERIOR_ANCHORS {
-  const b = opts.bedroomsTotal ?? 0;
-  const ba = opts.bathroomsTotal ?? 0;
-  const sqm = opts.approxSizeSqm;
-
-  if (b >= 5 || ba >= 3) return '5B3B';
-  if (b === 4) return '4B2B';
-  if (b === 3) return '3B2B';
-  if (b === 2) return '2B1B';
-
-  if (sqm) {
-    if (sqm <= 105) return '2B1B';
-    if (sqm <= 140) return '3B2B';
-    if (sqm <= 190) return '4B2B';
-    return '5B3B';
-  }
-  return '3B2B';
-}
+// inferHouseKey imported from '@/lib/pricing-engine'.
 
 // -----------------------------
-// RANGE CAP POLICY (dynamic)
+// RANGE CAP POLICY (dynamic) — capRangeWidthSmart, lerp, interpolateBySqm imported from '@/lib/pricing-engine'.
 // Interior/Total: $0~5k→1,200 / $5k~10k→1,800 / $10k~18k→2,500 / $18k+→3,500
 // Exterior:       $0~10k→1,500 / $10k~20k→2,500 / $20k+→4,000
 // -----------------------------
-function capRangeWidthSmart(
-  minVal: number,
-  maxVal: number,
-  _input: GeneratePaintingEstimateInput,
-  context: 'interior' | 'exterior' | 'total' = 'interior'
-) {
-  const gap = maxVal - minVal;
-  let cap: number;
-
-  if (context === 'exterior') {
-    if (minVal <= 10000) cap = 800;
-    else if (minVal <= 20000) cap = 1500;
-    else cap = 2500;
-  } else {
-    if (minVal <= 5000) cap = 1200;
-    else if (minVal <= 10000) cap = 1800;
-    else if (minVal <= 18000) cap = 2500;
-    else cap = 3500;
-  }
-
-  if (gap <= cap) return { min: minVal, max: maxVal };
-  return { min: minVal, max: Math.round(minVal + cap) };
-}
 
 // -----------------------------
-// 3B2B FAIR (House) curve with 135sqm smoothing point
+// 3B2B FAIR (House) curve — CAL_3B2B_FAIR_SINGLE_POINTS imported from '@/lib/pricing-engine'.
 // -----------------------------
-const CAL_3B2B_FAIR_SINGLE_POINTS = [
-  { sqm: 120, min: 8500,  max: 11000 },
-  { sqm: 135, min: 10000, max: 13500 },
-  { sqm: 150, min: 12000, max: 15500 },
-  { sqm: 180, min: 14500, max: 19000 },
-] as const;
-
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
-}
-
-function interpolateBySqm(
-  points: readonly { sqm: number; min: number; max: number }[],
-  sqm: number
-) {
-  if (sqm <= points[0].sqm) {
-    const p = points[0];
-    const scale = sqm / p.sqm;
-    return { min: p.min * scale, max: p.max * scale };
-  }
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i];
-    const b = points[i + 1];
-    if (sqm >= a.sqm && sqm <= b.sqm) {
-      const t = (sqm - a.sqm) / (b.sqm - a.sqm);
-      return { min: lerp(a.min, b.min, t), max: lerp(a.max, b.max, t) };
-    }
-  }
-  const last = points[points.length - 1];
-  const scaleUp = sqm / last.sqm;
-  return { min: last.min * scaleUp, max: last.max * scaleUp };
-}
 
 function shouldApply3B2BFairSingleHouseCalibration(
   input: GeneratePaintingEstimateInput,
@@ -1176,14 +742,8 @@ function calibrate3B2BFairSingleHouse(
 }
 
 // -----------------------------
-// Double storey 3B2B uplift with overlap control
+// Double storey 3B2B uplift — DOUBLE_STOREY_3B2B_UPLIFT imported from '@/lib/pricing-engine'.
 // -----------------------------
-const DOUBLE_STOREY_3B2B_UPLIFT = {
-  baseMinPct: 0.03,
-  baseMaxPct: 0.05,
-  autoStairwellPct: 0.01,
-  highCeilingReductionPct: 0.02,
-};
 
 function applyDoubleStorey3B2BUplift(
   input: GeneratePaintingEstimateInput,
@@ -1344,79 +904,6 @@ function applyExteriorComplexityUpliftPct(
     max: Math.round(maxVal * (1 + maxPct)),
   };
 }
-
-// -----------------------------
-// Schemas
-// -----------------------------
-const HANDRAIL_SYSTEM_OPTIONS = [
-  'paint_to_paint_oil_2coat',
-  'paint_to_paint_water_3coat',
-  'varnish_to_paint_oil_3coat_min',
-  'varnish_to_paint_water_4coat_min',
-  'varnish_to_varnish_stain',
-  'varnish_to_varnish_clear',
-] as const;
-
-const InteriorHandrailDetailsSchema = z.object({
-  lengthLm: z.number().positive().optional(),
-  widthMm: z.number().positive().optional(),
-  system: z.enum(HANDRAIL_SYSTEM_OPTIONS).optional(),
-});
-
-const InteriorRoomItemSchema = z.object({
-  roomName: z.string(),
-  otherRoomName: z.string().optional(),
-  paintAreas: z.object({
-    ceilingPaint: z.boolean(),
-    wallPaint: z.boolean(),
-    trimPaint: z.boolean(),
-    ensuitePaint: z.boolean().optional(),
-  }),
-  approxRoomSize: z.number().optional(),
-  handrailDetails: InteriorHandrailDetailsSchema.optional(),
-}).superRefine((room, ctx) => {
-  if (room.roomName === 'Handrail') {
-    if (!(typeof room.handrailDetails?.lengthLm === 'number' && room.handrailDetails.lengthLm > 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'lengthLm'],
-        message: 'Enter the total handrail length in linear metres.',
-      });
-    }
-
-    if (!(typeof room.handrailDetails?.widthMm === 'number' && room.handrailDetails.widthMm > 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'widthMm'],
-        message: 'Enter the handrail width in millimetres.',
-      });
-    }
-
-    if (!room.handrailDetails?.system) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['handrailDetails', 'system'],
-        message: 'Select a handrail coating system.',
-      });
-    }
-    return;
-  }
-
-  const paintAreas = room.paintAreas ?? {};
-  if (!paintAreas.ceilingPaint && !paintAreas.wallPaint && !paintAreas.trimPaint && !paintAreas.ensuitePaint) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['paintAreas'],
-      message: 'At least one surface must be selected per room.',
-    });
-  }
-});
-
-const SkirtingCalculatorRoomSchema = z.object({
-  label: z.string().optional(),
-  length: z.number().positive().optional(),
-  width: z.number().positive().optional(),
-});
 
 const GeneratePaintingEstimateInputSchema = z.object({
   name: z.string(),
@@ -1929,7 +1416,11 @@ export const generatePaintingEstimate = ai.defineFlow(
         }
 
         // ── SPECIFIC AREAS: use class-based anchor + room scoring ────────────
-        else if (false) {
+        else if (!isWhole) {
+          const specificRooms = (input.interiorRooms ?? [])
+            .filter((r) => r.roomName !== 'Handrail')
+            .map((r) => r.roomName);
+
           const sqmForClass = toNumberOrUndefined(input.approxSize);
           const classFromBedrooms = inferApartmentClassFromBedroomNumbers(
             input.bedroomCount,
@@ -1943,7 +1434,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
           const anchor = APARTMENT_ANCHORS_OIL[aptClass];
 
-          const totalRoomScore = selectedRooms.reduce((sum, r) => sum + roomScore(r), 0);
+          const totalRoomScore = specificRooms.reduce((sum, r) => sum + roomScore(r), 0);
           const partialRatio = clamp(totalRoomScore / BASE_FULL_APT_SCORE, 0.22, 0.9);
 
           const baseMid = anchor.median * partialRatio;
@@ -1954,7 +1445,7 @@ export const generatePaintingEstimate = ai.defineFlow(
           baseMin *= areaFactor;
           baseMax *= areaFactor;
 
-          const pseudoSqm = pseudoSqmFromRooms(selectedRooms);
+          const pseudoSqm = pseudoSqmFromRooms(specificRooms);
           if (pseudoSqm >= 24) {
             baseMin *= 1.08;
             baseMax *= 1.15;
@@ -1963,7 +1454,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             baseMax *= 1.1;
           }
 
-          const roomCount = selectedRooms.length;
+          const roomCount = specificRooms.length;
           const hardFloor =
             roomCount <= 1 ? 1100 : roomCount === 2 ? 1700 : roomCount === 3 ? 2300 : 2900;
 

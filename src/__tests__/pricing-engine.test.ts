@@ -4,8 +4,7 @@
  * Full test suite for PBC Estimate AI pricing logic.
  * All ranges validated against Sydney Northern Beaches market (2026).
  *
- * Tests import from pricing-engine.ts which is an exact copy of the
- * pure-function logic from generate-painting-estimate.ts.
+ * Tests import from src/lib/pricing-engine.ts — the single source of truth.
  */
 
 import {
@@ -50,7 +49,7 @@ import {
   lerp,
   sumAreaFactor,
   sumAreaFactorWholeApartment,
-} from './pricing-engine';
+} from '../lib/pricing-engine';
 
 // ─────────────────────────────────────────────────────────────
 // GROUP A: Interior Apartment – Entire Property (SQM Curve)
@@ -529,15 +528,15 @@ describe('F: Helper Functions', () => {
     expect(factor).toBeCloseTo(0.80, 10);
   });
 
-  test('F10: sumAreaFactor — full set (wall+ceil+trim+ensuite) = 1.08', () => {
+  test('F10: sumAreaFactor — full set (wall+ceil+trim+ensuite) = 1.0 (ensuite is data-only, not priced)', () => {
     const factor = sumAreaFactor({
       wallPaint: true,
       ceilingPaint: true,
       trimPaint: true,
       ensuitePaint: true,
     });
-    // 0.55 + 0.25 + 0.20 + 0.08 = 1.08
-    expect(factor).toBeCloseTo(1.08, 10);
+    // ensuitePaint does not contribute to pricing — base anchor covers the full property
+    expect(factor).toBeCloseTo(1.0, 10);
   });
 
   test('F10: sumAreaFactor — no flags = 0 (filtered out in scoring)', () => {
