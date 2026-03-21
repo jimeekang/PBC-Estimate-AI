@@ -1028,6 +1028,34 @@ const GeneratePaintingEstimateInputSchema = z.object({
   { path: ['exteriorAreas'], message: 'Please select at least one exterior area.' }
 ).refine(
   (data) => {
+    const needsExteriorWallSize =
+      data.typeOfWork.includes('Exterior Painting') &&
+      data.scopeOfPainting === 'Specific areas only' &&
+      (data.exteriorAreas ?? []).includes('Wall');
+    if (!needsExteriorWallSize) return true;
+    return typeof data.approxSize === 'number' && data.approxSize > 0;
+  },
+  { path: ['approxSize'], message: 'Enter the approximate size in sqm when Wall is selected.' }
+).refine(
+  (data) => {
+    const needsDeckArea =
+      data.typeOfWork.includes('Exterior Painting') &&
+      (data.exteriorAreas ?? []).includes('Deck');
+    if (!needsDeckArea) return true;
+    return typeof data.deckArea === 'number' && data.deckArea > 0;
+  },
+  { path: ['deckArea'], message: 'Enter the deck area in sqm when Deck is selected.' }
+).refine(
+  (data) => {
+    const needsPavingArea =
+      data.typeOfWork.includes('Exterior Painting') &&
+      (data.exteriorAreas ?? []).includes('Paving');
+    if (!needsPavingArea) return true;
+    return typeof data.pavingArea === 'number' && data.pavingArea > 0;
+  },
+  { path: ['pavingArea'], message: 'Enter the paving area in sqm when Paving is selected.' }
+).refine(
+  (data) => {
     const hasInterior = data.typeOfWork.includes('Interior Painting');
     if (!hasInterior || data.scopeOfPainting !== 'Entire property') return true;
     return !!(
@@ -1155,6 +1183,45 @@ const GeneratePaintingEstimateOutputSchema = z.object({
 export type GeneratePaintingEstimateInput = z.infer<typeof GeneratePaintingEstimateInputSchema>;
 export type GeneratePaintingEstimateOutput = z.infer<typeof GeneratePaintingEstimateOutputSchema>;
 
+function formatSelectedOptionList(values: string[] | undefined): string | undefined {
+  if (!values?.length) return undefined;
+  return values.join(', ');
+}
+
+function getSelectedOptionLines(input: GeneratePaintingEstimateInput): string[] {
+  const lines: string[] = [];
+  const exteriorAreas = (input.exteriorAreas ?? []).map((area) => {
+    if (area === 'Etc' && input.otherExteriorArea?.trim()) {
+      return `Etc (${input.otherExteriorArea.trim()})`;
+    }
+    return area;
+  });
+  const interiorAreas = (input.roomsToPaint ?? []).map((area) => {
+    if (area === 'Etc' && input.otherInteriorArea?.trim()) {
+      return `Etc (${input.otherInteriorArea.trim()})`;
+    }
+    return area;
+  });
+
+  const exteriorAreaText = formatSelectedOptionList(exteriorAreas);
+  if (exteriorAreaText) lines.push(`Selected exterior areas: ${exteriorAreaText}`);
+
+  const exteriorTrimText = formatSelectedOptionList(input.exteriorTrimItems);
+  if (exteriorTrimText) lines.push(`Selected exterior trim items: ${exteriorTrimText}`);
+
+  const interiorAreaText = formatSelectedOptionList(interiorAreas);
+  if (interiorAreaText) lines.push(`Selected interior areas: ${interiorAreaText}`);
+
+  const difficultyText = formatSelectedOptionList(input.jobDifficulty);
+  if (difficultyText) lines.push(`Selected difficulty factors: ${difficultyText}`);
+
+  if ((input.exteriorAreas ?? []).includes('Wall') && input.wallType) {
+    lines.push(`Selected wall finish: ${input.wallType}`);
+  }
+
+  return lines;
+}
+
 // -----------------------------
 // AI explanation prompt
 // -----------------------------
@@ -1174,6 +1241,7 @@ const explanationPrompt = ai.definePrompt({
       deckMax: z.number().optional(),
       pavingMin: z.number().optional(),
       pavingMax: z.number().optional(),
+      selectedOptionLines: z.array(z.string()),
     }),
   },
   output: { schema: GeneratePaintingEstimateOutputSchema },
@@ -1193,6 +1261,10 @@ CONTEXT
 - Ceiling Style: {{#if input.ceilingType}}{{input.ceilingType}}{{else}}Flat{{/if}}
 - Custom Interior Area (if selected 'Etc'): {{#if input.otherInteriorArea}}{{input.otherInteriorArea}}{{else}}N/A{{/if}}
 - Custom Exterior Area (if selected 'Etc'): {{#if input.otherExteriorArea}}{{input.otherExteriorArea}}{{else}}N/A{{/if}}
+SELECTED OPTIONS ONLY
+{{#each selectedOptionLines}}
+- {{this}}
+{{/each}}
 {{#if input.deckArea}}
 DECK DETAILS
 - Deck area: {{input.deckArea}}sqm
@@ -1225,6 +1297,8 @@ SURFACE NOTE (incorporate this naturally into the explanation):
 INSTRUCTIONS
 1) explanation: 3–5 sentences, Australian English, professional tone. All text MUST be in English.
    Focus on the main cost drivers: scope, condition, selected areas, stories, wall finish (if exterior), and complexity factors.
+   Mention only options that are explicitly present in SELECTED OPTIONS ONLY, DECK DETAILS, or PAVING DETAILS.
+   Do not mention unselected areas, trim items, wall finishes, service types, product bases, or complexity factors.
    If wallType is "rendered" or "brick", incorporate the relevant SURFACE NOTE above into the explanation naturally.
    If trim-related options are selected, include this idea naturally: "Pricing varies depending on the number of trim items included."
    If DECK DETAILS are present: mention the deck area, service type, and timber condition naturally in one sentence.
@@ -2013,10 +2087,14 @@ export const generatePaintingEstimate = ai.defineFlow(
       brick:
         'Brick surfaces require significantly more labour and preparation than other wall types. The deep mortar joints absorb more paint and demand careful brushwork to achieve full coverage, along with more complex surface preparation. While the same 3-coat system applies (1 undercoat + 2 finish coats), the increased application complexity and higher material consumption are reflected in the estimate.',
     };
-    const wallTypeSurfaceNote = input.wallType ? WALL_TYPE_SURFACE_NOTES[input.wallType] : undefined;
+    const wallTypeSurfaceNote =
+      (input.exteriorAreas ?? []).includes('Wall') && input.wallType
+        ? WALL_TYPE_SURFACE_NOTES[input.wallType]
+        : undefined;
 
     const deckCostForPrompt  = calcDeckCost(input);
     const pavingCostForPrompt = calcPavingCost(input);
+    const selectedOptionLines = getSelectedOptionLines(input);
 
     const { output } = await explanationPrompt({
       input,
@@ -2031,6 +2109,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       deckMax:   deckCostForPrompt?.max,
       pavingMin: pavingCostForPrompt?.min,
       pavingMax: pavingCostForPrompt?.max,
+      selectedOptionLines,
     });
 
     if (output?.priceRange) {

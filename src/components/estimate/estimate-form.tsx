@@ -330,6 +330,37 @@ const estimateFormSchema = z
   )
   .refine(
     (data) => {
+      const needsExteriorWallSize =
+        (data.typeOfWork ?? []).includes('Exterior Painting') &&
+        data.scopeOfPainting === 'Specific areas only' &&
+        (data.exteriorAreas ?? []).includes('Wall');
+      if (!needsExteriorWallSize) return true;
+      return typeof data.approxSize === 'number' && data.approxSize > 0;
+    },
+    { path: ['approxSize'], message: 'Enter the approximate size in sqm when Wall is selected.' }
+  )
+  .refine(
+    (data) => {
+      const needsDeckArea =
+        (data.typeOfWork ?? []).includes('Exterior Painting') &&
+        (data.exteriorAreas ?? []).includes('Deck');
+      if (!needsDeckArea) return true;
+      return typeof data.deckArea === 'number' && data.deckArea > 0;
+    },
+    { path: ['deckArea'], message: 'Enter the deck area in sqm when Deck is selected.' }
+  )
+  .refine(
+    (data) => {
+      const needsPavingArea =
+        (data.typeOfWork ?? []).includes('Exterior Painting') &&
+        (data.exteriorAreas ?? []).includes('Paving');
+      if (!needsPavingArea) return true;
+      return typeof data.pavingArea === 'number' && data.pavingArea > 0;
+    },
+    { path: ['pavingArea'], message: 'Enter the paving area in sqm when Paving is selected.' }
+  )
+  .refine(
+    (data) => {
       const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
       if (!hasInterior || data.scopeOfPainting !== 'Entire property') return true;
       return !!(
@@ -966,6 +997,9 @@ export function EstimateForm() {
     'Oil-based') as TrimPaintType;
   const watchSkirtingPricingMode = useWatch({ control: form.control, name: 'skirtingPricingMode' }) ?? 'linear_metres';
   const isApartmentType = watchPropertyType === 'Apartment';
+  const shouldShowApproxSize =
+    watchScope === 'Entire property' ||
+    (isExterior && watchScope === 'Specific areas only' && watchExteriorAreas.includes('Wall'));
   const isExteriorRestrictedProperty =
     watchPropertyType === 'Apartment' || watchPropertyType === 'Office';
   const visibleTypeOfWorkItems = isExteriorRestrictedProperty
@@ -1405,7 +1439,7 @@ const showCeilingOptions =
               />
 
               <AnimatePresence>
-                {watchScope === 'Entire property' && (
+                {shouldShowApproxSize && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -2930,6 +2964,7 @@ const showCeilingOptions =
                                           <Input
                                             type="number"
                                             min={1}
+                                            required
                                             placeholder="e.g. 25"
                                             className="h-8 text-xs"
                                             value={field.value ?? ''}
@@ -3063,6 +3098,7 @@ const showCeilingOptions =
                                           <Input
                                             type="number"
                                             min={1}
+                                            required
                                             placeholder="e.g. 40"
                                             className="h-8 text-xs"
                                             value={field.value ?? ''}

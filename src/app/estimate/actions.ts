@@ -68,6 +68,12 @@ const estimateFormSchema = z.object({
     .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(50) }))
     .max(3)
     .optional(),
+  deckArea: z.coerce.number().positive().optional().nullable(),
+  deckServiceType: z.enum(['stain', 'clear', 'paint-conversion', 'paint-recoat']).optional(),
+  deckProductType: z.enum(['oil', 'water']).optional(),
+  deckCondition: z.enum(['good', 'weathered', 'damaged']).optional(),
+  pavingArea: z.coerce.number().positive().optional().nullable(),
+  pavingCondition: z.enum(['good', 'fair', 'poor']).optional(),
   otherInteriorArea: z.string().trim().max(120).optional(),
   apartmentStructure: z.enum(['Studio', '1Bed', '2Bed2Bath', '3Bed2Bath']).optional(),
   wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
@@ -144,6 +150,34 @@ const estimateFormSchema = z.object({
     return (data.exteriorAreas ?? []).length > 0;
   },
   { path: ['exteriorAreas'], message: 'Please select at least one exterior area.' }
+).refine(
+  (data) => {
+    const needsExteriorWallSize =
+      (data.typeOfWork ?? []).includes('Exterior Painting') &&
+      data.scopeOfPainting === 'Specific areas only' &&
+      (data.exteriorAreas ?? []).includes('Wall');
+    if (!needsExteriorWallSize) return true;
+    return typeof data.approxSize === 'number' && data.approxSize > 0;
+  },
+  { path: ['approxSize'], message: 'Enter the approximate size in sqm when Wall is selected.' }
+).refine(
+  (data) => {
+    const needsDeckArea =
+      (data.typeOfWork ?? []).includes('Exterior Painting') &&
+      (data.exteriorAreas ?? []).includes('Deck');
+    if (!needsDeckArea) return true;
+    return typeof data.deckArea === 'number' && data.deckArea > 0;
+  },
+  { path: ['deckArea'], message: 'Enter the deck area in sqm when Deck is selected.' }
+).refine(
+  (data) => {
+    const needsPavingArea =
+      (data.typeOfWork ?? []).includes('Exterior Painting') &&
+      (data.exteriorAreas ?? []).includes('Paving');
+    if (!needsPavingArea) return true;
+    return typeof data.pavingArea === 'number' && data.pavingArea > 0;
+  },
+  { path: ['pavingArea'], message: 'Enter the paving area in sqm when Paving is selected.' }
 ).refine(
   (data) => {
     const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
