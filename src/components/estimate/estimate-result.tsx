@@ -1,15 +1,18 @@
 'use client';
 
+import Image from 'next/image';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { motion } from 'framer-motion';
-import { CheckCircle, DollarSign, Download, Home, Loader2, TreePine, Info } from 'lucide-react';
+import { CheckCircle, DollarSign, Download, Home, Loader2, TreePine, Info, CalendarCheck, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { useRef, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+
+const BOOKING_URL = 'https://clienthub.getjobber.com/booking/3a242065-0473-4039-ac49-e0a471328f15/';
 
 export interface EstimatePdfMeta {
   generatedAt?: string;
@@ -184,7 +187,7 @@ function EstimateCard({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <CardTitle className={cn('flex items-center gap-2 font-bold', isPdf ? 'text-lg' : 'text-2xl')}>
-                <CheckCircle className={cn('text-primary', isPdf ? 'h-5 w-5' : 'h-8 w-8')} />
+                <CheckCircle className={cn('text-primary', isPdf ? 'h-5 w-5' : 'h-6 w-6')} />
                 Your Estimate is Ready!
               </CardTitle>
               {isPdf && pdfMeta?.referenceId && (
@@ -413,8 +416,17 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
         transition={{ duration: 0.5, ease: 'easeOut' }}
         className="mt-8 space-y-4"
       >
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isExportingPdf}>
+        <EstimateCard result={result} mode="screen" pdfMeta={pdfMeta} />
+
+        <div className="flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadPdf}
+            disabled={isExportingPdf}
+            className="w-full sm:w-auto"
+          >
             {isExportingPdf ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -424,7 +436,62 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
           </Button>
         </div>
 
-        <EstimateCard result={result} mode="screen" pdfMeta={pdfMeta} />
+        {/* Booking CTA — screen only */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.35, ease: 'easeOut' }}
+          className="overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-primary/80 shadow-lg"
+        >
+          <div className="flex flex-col items-start justify-between gap-6 p-6 sm:flex-row sm:items-center sm:p-8">
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <CalendarCheck className="h-6 w-6 text-white" />
+                <h3 className="text-xl font-extrabold text-white">
+                  Ready for an accurate final quote?
+                </h3>
+              </div>
+              <p className="max-w-md text-sm text-white/80">
+                Your AI estimate is a great starting point. Lock in the best price with a FREE
+                on-site assessment — our painter comes to you, measures up, and gives you a firm
+                written quote.
+              </p>
+              <Button
+                asChild
+                className="mt-4 w-full bg-white text-primary shadow-md hover:bg-white/90 hover:shadow-lg sm:w-auto"
+              >
+                <a
+                  href={BOOKING_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 text-sm font-bold sm:py-4"
+                >
+                  Book Free On-Site Quote
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </Button>
+              <p className="pt-1 text-xs text-white/60">
+                Takes less than 60 seconds to book &bull; No obligation
+              </p>
+            </div>
+
+            {/* QR code — desktop only */}
+            <div className="hidden shrink-0 sm:block">
+              <div className="rounded-xl bg-white p-3 shadow-inner">
+                <Image
+                  src="/PBC-Booking QR Code.png"
+                  alt="Scan to book a free on-site quote"
+                  width={120}
+                  height={120}
+                  className="rounded-lg"
+                />
+                <p className="mt-2 text-center text-xs font-medium text-gray-500">
+                  Scan to book
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </motion.div>
 
       <div className="pointer-events-none fixed left-[-99999px] top-0">

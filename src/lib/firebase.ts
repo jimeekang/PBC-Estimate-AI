@@ -23,6 +23,8 @@ import {
   doc,
   getDoc,
   Firestore,
+  orderBy,
+  query,
 } from 'firebase/firestore';
 
 function env(name: string) {
@@ -187,7 +189,7 @@ export const getEstimates = async () => {
   if (!isFirebaseConfigured) return [];
   await ensureAppCheck();
   const estimatesCol = collection(db, 'estimates');
-  const estimateSnapshot = await getDocs(estimatesCol);
+  const estimateSnapshot = await getDocs(query(estimatesCol, orderBy('createdAt', 'desc')));
   const estimateList = estimateSnapshot.docs.map(d => ({
     ...d.data(),
     id: d.id,
@@ -222,14 +224,31 @@ export const uploadEstimatePhotos = async (idToken: string, photos: File[]): Pro
   });
 
   const payload = (await response.json().catch(() => null)) as
-    | { photoUrls?: string[]; error?: string }
+    | { photoPaths?: string[]; error?: string }
     | null;
 
-  if (!response.ok || !payload?.photoUrls) {
+  if (!response.ok || !payload?.photoPaths) {
     throw new Error(payload?.error || 'Photo upload failed.');
   }
 
-  return payload.photoUrls;
+  return payload.photoPaths;
+};
+
+export const getEstimatePhotoBlobUrl = async (idToken: string, photoPath: string): Promise<string> => {
+  const response = await fetch(`/api/estimate-photos?path=${encodeURIComponent(photoPath)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error || 'Photo download failed.');
+  }
+
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
 };
 
 export { auth, db, isFirebaseConfigured };

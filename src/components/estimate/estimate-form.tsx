@@ -3,12 +3,7 @@
 import React from 'react';
 import { useForm, useFieldArray, useWatch, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import {
-  InteriorHandrailDetailsSchema,
-  InteriorRoomItemSchema,
-  SkirtingCalculatorRoomSchema,
-} from '@/schemas/estimate';
+import { estimateRequestSchema, type EstimateRequest } from '@/schemas/estimate-request';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -43,7 +38,9 @@ import {
   Droplets,
   Hammer,
   Info,
+  ArrowRight,
   Calendar,
+  CalendarCheck,
   ExternalLink,
   Grid3X3,
   Wrench,
@@ -60,9 +57,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { AnimatePresence, motion } from 'framer-motion';
-import { submitEstimate } from '@/app/estimate/actions';
+import { getEstimateQuotaStatus, submitEstimate } from '@/app/estimate/actions';
 import { uploadEstimatePhotos } from '@/lib/firebase';
-import { EXTERIOR_RESTRICTED_PROPERTY_TYPES, HANDRAIL_SYSTEM_OPTIONS } from '@/lib/estimate-constants';
+import { HANDRAIL_SYSTEM_OPTIONS } from '@/lib/estimate-constants';
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { EstimatePdfMeta } from './estimate-result';
@@ -72,8 +69,6 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/providers/auth-provider';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { db, ensureAppCheck } from '@/lib/firebase';
-import { collection, query, where, getCountFromServer } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { APIProvider, useMapsLibrary } from '@vis.gl/react-google-maps';
 
@@ -183,332 +178,9 @@ const HANDRAIL_SYSTEM_DESCRIPTIONS: Record<(typeof HANDRAIL_SYSTEM_OPTIONS)[numb
 };
 
 
-const estimateFormSchema = z
-  .object({
-    name: z.string().min(1, 'Name is required.'),
-    email: z.string().email('Invalid email address.'),
-    phone: z.string().min(1, 'Phone number is required.'),
-    typeOfWork: z
-      .array(z.enum(['Interior Painting', 'Exterior Painting']))
-      .min(1, 'Please select at least one type of work.'),
-    scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
-    propertyType: z.string().min(1, 'Property type is required.'),
-    houseStories: z.enum(['1 storey', '2 storey', '3 storey']).optional(),
-    bedroomCount: z.coerce.number().min(0).optional(),
-    bathroomCount: z.coerce.number().min(0).optional(),
-    roomsToPaint: z.array(z.string()).optional(),
-    interiorRooms: z.array(InteriorRoomItemSchema).optional(),
-    specificInteriorTrimOnly: z.boolean().optional(),
+const estimateFormSchema = estimateRequestSchema;
 
-    // --- Exterior ---
-    exteriorAreas: z.array(z.string()).optional(),
-    otherExteriorArea: z.string().optional(),
-
-    // wallFinishes: multi-select wall finish types
-    wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).optional(),
-    wallHeight: z.coerce.number().positive().optional(),
-
-    exteriorTrimItems: z
-      .array(z.enum(['Doors', 'Window Frames', 'Architraves', 'Front Door']))
-      .optional(),
-    exteriorFrontDoor: z.boolean().optional(),
-
-    // Exterior trim style+quantity detail
-    exteriorDoors: z
-      .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(20) }))
-      .optional(),
-    exteriorWindows: z
-      .array(z.object({ type: z.enum(['Normal', 'Awning', 'Double Hung', 'French']), quantity: z.number().min(0).max(30) }))
-      .optional(),
-    exteriorArchitraves: z
-      .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(50) }))
-      .optional(),
-
-    // Deck-specific fields
-    deckArea: z.coerce.number().positive().optional(),
-    deckServiceType: z.enum(['stain', 'clear', 'paint-conversion', 'paint-recoat']).optional(),
-    deckProductType: z.enum(['oil', 'water']).optional(),
-    deckCondition: z.enum(['good', 'weathered', 'damaged']).optional(),
-
-    // Paving-specific fields
-    pavingArea: z.coerce.number().positive().optional(),
-    pavingCondition: z.enum(['good', 'fair', 'poor']).optional(),
-
-    otherInteriorArea: z.string().optional(),
-    apartmentStructure: z.enum(['Studio', '1Bed', '2Bed2Bath', '3Bed2Bath']).optional(),
-    approxSize: z.coerce.number().positive().optional(),
-    interiorWallHeight: z.coerce.number().positive().optional(),
-    location: z.string().optional(),
-    timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
-    paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
-    jobDifficulty: z
-      .array(z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas']))
-      .optional(),
-
-    paintAreas: z
-      .object({
-        ceilingPaint: z.boolean().default(false),
-        wallPaint: z.boolean().default(false),
-        trimPaint: z.boolean().default(false),
-        ensuitePaint: z.boolean().optional(),
-      })
-      .default({}),
-
-    trimPaintOptions: z
-      .object({
-        paintType: z.enum(['Oil-based', 'Water-based']),
-        trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
-        interiorWindowFrameTypes: z.array(z.enum(['Normal', 'Awning', 'Double Hung', 'French'])).optional(),
-      })
-      .optional(),
-    skirtingPricingMode: z.enum(['linear_metres', 'room_calculator']).optional(),
-    skirtingLinearMetres: z.coerce.number().positive().optional(),
-    skirtingCalculatorRooms: z.array(SkirtingCalculatorRoomSchema).optional(),
-
-    /** Interior door item-level pricing (Specific areas only) */
-    interiorDoorItems: z
-      .array(
-        z.object({
-          scope: z.enum(['Door & Frame', 'Door only', 'Frame only']),
-          system: z.enum(['oil_2coat', 'water_3coat_white_finish']),
-          quantity: z.number().min(1).max(50),
-        })
-      )
-      .optional(),
-    interiorWindowItems: z
-      .array(
-        z.object({
-          type: z.enum(['Normal', 'Awning', 'Double Hung', 'French']),
-          scope: z.enum(['Window & Frame', 'Window only', 'Frame only']),
-          system: z.enum(['oil_2coat', 'water_3coat_white_finish']),
-          quantity: z.number().min(1).max(50),
-        })
-      )
-      .optional(),
-
-    ceilingOptions: z
-      .object({
-        ceilingType: z.enum(['Flat', 'Decorative']),
-      })
-      .optional(),
-  })
-  .refine(
-    (data) => {
-      const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
-      if (!hasExterior) return true;
-      return !EXTERIOR_RESTRICTED_PROPERTY_TYPES.includes(
-        data.propertyType as (typeof EXTERIOR_RESTRICTED_PROPERTY_TYPES)[number]
-      );
-    },
-    { path: ['typeOfWork'], message: 'Exterior painting is only available for house-style properties.' }
-  )
-  .refine(
-    (data) => {
-      const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
-      const needs = hasInterior && data.scopeOfPainting === 'Entire property' && (data.roomsToPaint ?? []).includes('Etc');
-      if (!needs) return true;
-      return !!data.otherInteriorArea && data.otherInteriorArea.trim().length > 0;
-    },
-    { path: ['otherInteriorArea'], message: "Please specify the 'Etc' interior area." }
-  )
-  .refine(
-    (data) => {
-      const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
-      const needs = hasExterior && (data.exteriorAreas ?? []).includes('Etc');
-      if (!needs) return true;
-      return !!data.otherExteriorArea && data.otherExteriorArea.trim().length > 0;
-    },
-    { path: ['otherExteriorArea'], message: "Please specify the 'Etc' exterior area." }
-  )
-  .refine(
-    (data) => {
-      const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
-      if (!hasExterior) return true;
-      return (data.exteriorAreas ?? []).length > 0;
-    },
-    { path: ['exteriorAreas'], message: 'Please select at least one exterior area.' }
-  )
-  .refine(
-    (data) => {
-      const needsExteriorWallSize =
-        (data.typeOfWork ?? []).includes('Exterior Painting') &&
-        data.scopeOfPainting === 'Specific areas only' &&
-        (data.exteriorAreas ?? []).includes('Wall');
-      if (!needsExteriorWallSize) return true;
-      return typeof data.approxSize === 'number' && data.approxSize > 0;
-    },
-    { path: ['approxSize'], message: 'Enter the approximate size in sqm when Wall is selected.' }
-  )
-  .refine(
-    (data) => {
-      const needsDeckArea =
-        (data.typeOfWork ?? []).includes('Exterior Painting') &&
-        (data.exteriorAreas ?? []).includes('Deck');
-      if (!needsDeckArea) return true;
-      return typeof data.deckArea === 'number' && data.deckArea > 0;
-    },
-    { path: ['deckArea'], message: 'Enter the deck area in sqm when Deck is selected.' }
-  )
-  .refine(
-    (data) => {
-      const needsPavingArea =
-        (data.typeOfWork ?? []).includes('Exterior Painting') &&
-        (data.exteriorAreas ?? []).includes('Paving');
-      if (!needsPavingArea) return true;
-      return typeof data.pavingArea === 'number' && data.pavingArea > 0;
-    },
-    { path: ['pavingArea'], message: 'Enter the paving area in sqm when Paving is selected.' }
-  )
-  .refine(
-    (data) => {
-      const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
-      if (!hasInterior || data.scopeOfPainting !== 'Entire property') return true;
-      return !!(
-        data.paintAreas?.ceilingPaint ||
-        data.paintAreas?.wallPaint ||
-        data.paintAreas?.trimPaint ||
-        data.paintAreas?.ensuitePaint
-      );
-    },
-    { path: ['paintAreas'], message: 'Please select at least one interior surface.' }
-  )
-  .refine(
-    (data) => {
-      const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
-      const needsApartmentSizing =
-        hasInterior && data.scopeOfPainting === 'Entire property' && data.propertyType === 'Apartment';
-      if (!needsApartmentSizing) return true;
-      return !!data.apartmentStructure || typeof data.approxSize === 'number';
-    },
-    { path: ['apartmentStructure'], message: 'Select an apartment structure or enter an approximate size.' }
-  )
-  .refine(
-    (data) => {
-      const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
-      const needsWholePropertySizing =
-        hasInterior && data.scopeOfPainting === 'Entire property' && data.propertyType !== 'Apartment';
-      if (!needsWholePropertySizing) return true;
-      const hasCounts =
-        typeof data.bedroomCount === 'number' && typeof data.bathroomCount === 'number';
-      return hasCounts || typeof data.approxSize === 'number';
-    },
-    {
-      path: ['bedroomCount'],
-      message: 'Enter bedroom and bathroom counts or provide an approximate size for a whole-property estimate.',
-    }
-  )
-  .refine(
-    (data) => {
-      const selectedMeasuredRooms =
-        data.scopeOfPainting === 'Specific areas only'
-          ? (data.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail')
-          : [];
-      if (!selectedMeasuredRooms.length) return true;
-      return typeof data.interiorWallHeight === 'number';
-    },
-    { path: ['interiorWallHeight'], message: 'Enter the interior wall height for specific-area pricing.' }
-  )
-  .refine(
-    (data) => {
-      const selectedMeasuredRooms =
-        data.scopeOfPainting === 'Specific areas only'
-          ? (data.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail')
-          : [];
-      if (!selectedMeasuredRooms.length) return true;
-      return selectedMeasuredRooms.every((room) => typeof room.approxRoomSize === 'number' && room.approxRoomSize > 0);
-    },
-    { path: ['interiorRooms'], message: 'Enter an approximate room size for each selected room.' }
-  )
-  .refine(
-    (data) => {
-      const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
-      const hasWall = hasExterior && (data.exteriorAreas ?? []).includes('Wall');
-      if (!hasWall) return true;
-      return (data.wallFinishes ?? []).length > 0;
-    },
-    { path: ['wallFinishes'], message: 'Please select at least one wall finish.' }
-  )
-  .refine(
-    (data) => {
-      const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
-      const hasTrim = hasExterior && (data.exteriorAreas ?? []).includes('Exterior Trim');
-      if (!hasTrim) return true;
-      return (data.exteriorTrimItems ?? []).length > 0;
-    },
-    { path: ['exteriorTrimItems'], message: 'Please select at least one exterior trim item.' }
-  )
-  // houseStories required when Exterior Painting is selected
-  .refine(
-    (data) => {
-      const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
-      if (!hasExterior) return true;
-      return !!data.houseStories;
-    },
-    { path: ['houseStories'], message: 'Please select the number of stories for exterior painting.' }
-  )
-  .refine(
-    (data) => {
-      const trimOnly = (data.typeOfWork ?? []).includes('Interior Painting') &&
-        data.scopeOfPainting === 'Specific areas only' &&
-        !!data.specificInteriorTrimOnly;
-      if (!trimOnly) return true;
-      return (data.trimPaintOptions?.trimItems ?? []).length > 0;
-    },
-    { path: ['trimPaintOptions', 'trimItems'], message: 'Please select at least one trim item.' }
-  )
-  .refine(
-    (data) => {
-      const needsSkirtingRoom =
-        (data.typeOfWork ?? []).includes('Interior Painting') &&
-        data.scopeOfPainting === 'Specific areas only' &&
-        !data.specificInteriorTrimOnly &&
-        (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
-      if (!needsSkirtingRoom) return true;
-      return (data.interiorRooms ?? []).some((room) => room.paintAreas?.trimPaint);
-    },
-    { path: ['interiorRooms'], message: 'Select at least one trim room when including skirting boards.' }
-  )
-  .refine(
-    (data) => {
-      const needsTrimOnlySkirting =
-        (data.typeOfWork ?? []).includes('Interior Painting') &&
-        data.scopeOfPainting === 'Specific areas only' &&
-        !!data.specificInteriorTrimOnly &&
-        (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
-      if (!needsTrimOnlySkirting) return true;
-
-      if ((data.skirtingPricingMode ?? 'linear_metres') === 'linear_metres') {
-        return typeof data.skirtingLinearMetres === 'number' && data.skirtingLinearMetres > 0;
-      }
-
-      return (data.skirtingCalculatorRooms ?? []).some(
-        (room) => typeof room.length === 'number' && room.length > 0 && typeof room.width === 'number' && room.width > 0
-      );
-    },
-    { path: ['skirtingLinearMetres'], message: 'Enter skirting length or add room dimensions for skirting-only pricing.' }
-  )
-  .refine(
-    (data) => {
-      const needsDoorItems = (data.typeOfWork ?? []).includes('Interior Painting') &&
-        data.scopeOfPainting === 'Specific areas only' &&
-        (data.trimPaintOptions?.trimItems ?? []).includes('Doors');
-      if (!needsDoorItems) return true;
-      return (data.interiorDoorItems ?? []).length > 0;
-    },
-    { path: ['interiorDoorItems'], message: 'Please add at least one door quantity.' }
-  )
-  .refine(
-    (data) => {
-      const needsWindowItems = (data.typeOfWork ?? []).includes('Interior Painting') &&
-        data.scopeOfPainting === 'Specific areas only' &&
-        (data.trimPaintOptions?.trimItems ?? []).includes('Window Frames');
-      if (!needsWindowItems) return true;
-      return (data.interiorWindowItems ?? []).length > 0;
-    },
-    { path: ['interiorWindowItems'], message: 'Please add at least one window quantity.' }
-  );
-
-type EstimateFormValues = z.infer<typeof estimateFormSchema>;
+type EstimateFormValues = EstimateRequest;
 
 const BOOKING_URL = 'https://clienthub.getjobber.com/booking/3a242065-0473-4039-ac49-e0a471328f15/';
 
@@ -926,18 +598,28 @@ export function EstimateForm() {
 
   const fetchEstimateCount = async (uid: string) => {
     try {
-      await ensureAppCheck();
-      const estimatesRef = collection(db, 'estimates');
-      const q = query(estimatesRef, where('userId', '==', uid));
-      const snapshot = await getCountFromServer(q);
-      const count = snapshot.data().count;
+      if (!user || user.uid !== uid) {
+        return 0;
+      }
+
+      const idToken = await user.getIdToken();
+      const result = await getEstimateQuotaStatus({ idToken });
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const count = result.estimateCount ?? 0;
       setEstimateCount(count);
       if (!isAdmin) {
-        setIsLimitReached(count >= 2);
+        setIsLimitReached(result.limitReached ?? count >= 2);
       }
       return count;
     } catch (err) {
       console.error('Error fetching count:', err);
+      setEstimateCount(0);
+      if (!isAdmin) {
+        setIsLimitReached(false);
+      }
       return 0;
     }
   };
@@ -1196,10 +878,10 @@ const showCeilingOptions =
 
     setState({});
     setIsPending(true);
-    let photoUrls: string[] = [];
+    let photoPaths: string[] = [];
     if (photos.length > 0) {
       try {
-        photoUrls = await uploadEstimatePhotos(idToken, photos);
+        photoPaths = await uploadEstimatePhotos(idToken, photos);
       } catch (err) {
         console.error('Photo upload failed:', err);
         setState({ error: 'Could not upload photos. Please try again.' });
@@ -1208,7 +890,7 @@ const showCeilingOptions =
         return;
       }
     }
-    const result = await submitEstimate({ formData: values, idToken, photoUrls });
+    const result = await submitEstimate({ formData: values, idToken, photoPaths });
 
     if (result.error) {
       if (result.limitReached) {
@@ -1312,13 +994,30 @@ const showCeilingOptions =
       <AnimatePresence>
         {isLimitReached && !isCountLoading && !isAdmin && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-            <Alert variant="default" className="mb-6 border-primary bg-primary/5">
-              <Info className="h-4 w-4 text-primary" />
-              <AlertTitle className="text-primary">Free Limit Reached</AlertTitle>
-              <AlertDescription>
-                You have used your 2 free AI estimates. Please contact us for a professional on-site quote.
-              </AlertDescription>
-            </Alert>
+            <div className="mb-6 rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-6 shadow-sm">
+              <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                <div className="flex-1">
+                  <h3 className="flex items-center gap-2 text-lg font-bold text-foreground">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    You&apos;ve used your 2 free AI estimates!
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Want an exact price? Book a FREE on-site visit — our painter comes to you,
+                    measures up, and gives you a firm written quote. No obligation.
+                  </p>
+                </div>
+                <a
+                  href={BOOKING_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-md transition-all hover:bg-primary/90"
+                >
+                  <CalendarCheck className="h-4 w-4" />
+                  Book Free Visit
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -3576,34 +3275,42 @@ const showCeilingOptions =
               </Button>
             ) : (
               <div className="space-y-4 flex-1 ml-4">
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full text-lg h-14"
-                  disabled={isPending || (isLimitReached && !isAdmin) || isCountLoading}
-                >
-                  {isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-                      Generating Estimate…
-                    </>
-                  ) : isCountLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-                      Loading…
-                    </>
-                  ) : isLimitReached && !isAdmin ? (
-                    <>
-                      <ShieldAlert className="mr-2 h-6 w-6" />
-                      Free Limit Reached
-                    </>
-                  ) : (
-                    <>
-                      <WandSparkles className="mr-2 h-6 w-6" />
-                      Generate AI Estimate
-                    </>
-                  )}
-                </Button>
+                {isLimitReached && !isAdmin ? (
+                  <a
+                    href={BOOKING_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-0 text-lg font-bold text-primary-foreground shadow-lg transition-all h-14 hover:bg-primary/90"
+                  >
+                    <CalendarCheck className="h-6 w-6" />
+                    Book Free On-Site Quote
+                    <ExternalLink className="ml-1 h-4 w-4" />
+                  </a>
+                ) : (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full text-lg h-14"
+                    disabled={isPending || isCountLoading}
+                  >
+                    {isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                        Generating Estimate…
+                      </>
+                    ) : isCountLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                        Loading…
+                      </>
+                    ) : (
+                      <>
+                        <WandSparkles className="mr-2 h-6 w-6" />
+                        Generate AI Estimate
+                      </>
+                    )}
+                  </Button>
+                )}
 
                 <div className="text-center p-6 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm space-y-2">
                   <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap">

@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getEstimate } from '@/lib/firebase';
+import { getEstimate, getEstimatePhotoBlobUrl } from '@/lib/firebase';
+import { useAuth } from '@/providers/auth-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -66,6 +67,7 @@ interface ExteriorArchitrave {
 interface EstimateDocument {
   id: string;
   userId: string;
+  photoPaths?: string[];
   photoUrls?: string[];
   createdAt: any;
   options: {
@@ -207,10 +209,12 @@ function InlineTable({
 export default function EstimateDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const id = params.id as string;
   const [estimate, setEstimate] = useState<EstimateDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [resolvedPhotoUrls, setResolvedPhotoUrls] = useState<string[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -228,6 +232,45 @@ export default function EstimateDetailsPage() {
     };
     fetchEstimate();
   }, [id]);
+
+  useEffect(() => {
+    let revokedUrls: string[] = [];
+
+    const loadPhotoUrls = async () => {
+      if (!estimate) {
+        setResolvedPhotoUrls([]);
+        return;
+      }
+
+      if (!estimate.photoPaths?.length) {
+        setResolvedPhotoUrls(estimate.photoUrls ?? []);
+        return;
+      }
+
+      if (!user) {
+        setResolvedPhotoUrls([]);
+        return;
+      }
+
+      try {
+        const idToken = await user.getIdToken();
+        const blobUrls = await Promise.all(
+          estimate.photoPaths.map((photoPath) => getEstimatePhotoBlobUrl(idToken, photoPath))
+        );
+        revokedUrls = blobUrls;
+        setResolvedPhotoUrls(blobUrls);
+      } catch (error) {
+        console.error('Error loading estimate photos:', error);
+        setResolvedPhotoUrls([]);
+      }
+    };
+
+    loadPhotoUrls();
+
+    return () => {
+      revokedUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [estimate, user]);
 
   // ── Loading / Not Found ──────────────────────────────────────────────────
 
@@ -249,7 +292,7 @@ export default function EstimateDetailsPage() {
     );
   }
 
-  const { options, estimate: est, photoUrls, createdAt } = estimate;
+  const { options, estimate: est, createdAt } = estimate;
   const hasInterior = options.typeOfWork.includes('Interior Painting');
   const hasExterior = options.typeOfWork.includes('Exterior Painting');
   const formattedDate = createdAt?.seconds
@@ -337,7 +380,7 @@ export default function EstimateDetailsPage() {
                       {options.houseStories && (
                         <div className="flex items-center gap-2">
                           <Layers className="h-4 w-4 shrink-0 text-primary" />
-                          <span>{options.houseStories} storey{options.houseStories !== '1' ? 's' : ''}</span>
+                          <span>{options.houseStories}</span>
                         </div>
                       )}
                       {options.bedroomCount !== undefined && (
@@ -771,20 +814,20 @@ export default function EstimateDetailsPage() {
             </Card>
 
             {/* Property Photos */}
-            {photoUrls && photoUrls.length > 0 && (
+            {resolvedPhotoUrls.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Camera className="h-4 w-4 text-primary" />
                     Property Photos
                     <span className="ml-auto text-xs font-normal text-muted-foreground">
-                      {photoUrls.length} photo{photoUrls.length !== 1 ? 's' : ''}
+                      {resolvedPhotoUrls.length} photo{resolvedPhotoUrls.length !== 1 ? 's' : ''}
                     </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2">
-                    {photoUrls.map((url, idx) => (
+                    {resolvedPhotoUrls.map((url, idx) => (
                       <button
                         key={idx}
                         type="button"
@@ -809,7 +852,7 @@ export default function EstimateDetailsPage() {
       </div>
 
       {/* ── Lightbox ─────────────────────────────────────────────────────── */}
-      {lightboxIndex !== null && photoUrls && (
+      {lightboxIndex !== null && resolvedPhotoUrls.length > 0 && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
           onClick={() => setLightboxIndex(null)}
@@ -843,17 +886,17 @@ export default function EstimateDetailsPage() {
           <div onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-[90vw]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={photoUrls[lightboxIndex]}
+              src={resolvedPhotoUrls[lightboxIndex]}
               alt={`Property photo ${lightboxIndex + 1}`}
               className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
             />
             <p className="mt-2 text-center text-sm text-white/60">
-              {lightboxIndex + 1} / {photoUrls.length}
+              {lightboxIndex + 1} / {resolvedPhotoUrls.length}
             </p>
           </div>
 
           {/* Next */}
-          {lightboxIndex < photoUrls.length - 1 && (
+          {lightboxIndex < resolvedPhotoUrls.length - 1 && (
             <button
               type="button"
               aria-label="Next photo"

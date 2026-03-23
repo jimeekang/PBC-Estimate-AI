@@ -29,7 +29,9 @@ export default function AdminPage() {
     if (isAdmin) {
       const fetchAdminData = async () => {
         try {
-          const nextEstimates = await getEstimates();
+          const nextEstimates = [...(await getEstimates())].sort(
+            (a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+          );
           const total = nextEstimates.length;
           const interior = nextEstimates.filter((e: any) =>
             e.options?.typeOfWork?.includes('Interior Painting')

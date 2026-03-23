@@ -2,14 +2,11 @@
 
 import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
-import { EXTERIOR_RESTRICTED_PROPERTY_TYPES } from '@/lib/estimate-constants';
 import {
-  InteriorHandrailDetailsSchema,
-  InteriorRoomItemSchema,
-  SkirtingCalculatorRoomSchema,
-} from '@/schemas/estimate';
+  estimateRequestSchema,
+  estimateSubmissionSchema,
+} from '@/schemas/estimate-request';
 import { FieldValue } from 'firebase-admin/firestore';
-import { z } from 'zod';
 
 const MIN_SUBMIT_INTERVAL_MS = 30 * 1000;
 const MAX_SUBMITS_PER_HOUR = 5;
@@ -35,267 +32,6 @@ function stripUndefined<T>(value: T): T {
 
   return value;
 }
-
-
-const estimateFormSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required.').max(100),
-  email: z.string().email('Invalid email address.'),
-  phone: z.string().trim().min(1, 'Phone number is required.').max(40),
-  typeOfWork: z
-    .array(z.enum(['Interior Painting', 'Exterior Painting']))
-    .min(1, 'Please select at least one type of work.'),
-  scopeOfPainting: z.enum(['Entire property', 'Specific areas only']),
-  propertyType: z.string().trim().min(1, 'Property type is required.').max(80),
-  houseStories: z.enum(['1 storey', '2 storey', '3 storey', 'Single story', 'Double story or more']).optional(),
-  bedroomCount: z.coerce.number().min(0).optional(),
-  bathroomCount: z.coerce.number().min(0).optional(),
-  roomsToPaint: z.array(z.string().max(80)).max(20).optional(),
-  interiorRooms: z.array(InteriorRoomItemSchema).optional(),
-  specificInteriorTrimOnly: z.boolean().optional(),
-  exteriorAreas: z.array(z.string().max(80)).max(20).optional(),
-  otherExteriorArea: z.string().trim().max(120).optional(),
-  exteriorTrimItems: z.array(z.string().max(40)).max(10).optional(),
-  exteriorFrontDoor: z.boolean().optional(),
-  exteriorDoors: z
-    .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(20) }))
-    .max(3)
-    .optional(),
-  exteriorWindows: z
-    .array(z.object({ type: z.enum(['Normal', 'Awning', 'Double Hung', 'French']), quantity: z.number().min(0).max(30) }))
-    .max(4)
-    .optional(),
-  exteriorArchitraves: z
-    .array(z.object({ style: z.enum(['Simple', 'Standard', 'Complex']), quantity: z.number().min(0).max(50) }))
-    .max(3)
-    .optional(),
-  deckArea: z.coerce.number().positive().optional().nullable(),
-  deckServiceType: z.enum(['stain', 'clear', 'paint-conversion', 'paint-recoat']).optional(),
-  deckProductType: z.enum(['oil', 'water']).optional(),
-  deckCondition: z.enum(['good', 'weathered', 'damaged']).optional(),
-  pavingArea: z.coerce.number().positive().optional().nullable(),
-  pavingCondition: z.enum(['good', 'fair', 'poor']).optional(),
-  otherInteriorArea: z.string().trim().max(120).optional(),
-  apartmentStructure: z.enum(['Studio', '1Bed', '2Bed2Bath', '3Bed2Bath']).optional(),
-  wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
-  wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).max(3).optional(),
-  wallHeight: z.coerce.number().positive().optional().nullable(),
-  approxSize: z.coerce.number().positive().optional().nullable(),
-  interiorWallHeight: z.coerce.number().positive().optional().nullable(),
-  location: z.string().trim().max(200).optional(),
-  timingPurpose: z.enum(['Maintenance or refresh', 'Preparing for sale or rental']),
-  paintCondition: z.enum(['Excellent', 'Fair', 'Poor']).optional(),
-  jobDifficulty: z
-    .array(
-      z.enum(['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'])
-    )
-    .max(4)
-    .optional(),
-  paintAreas: z
-    .object({
-      ceilingPaint: z.boolean().default(false),
-      wallPaint: z.boolean().default(false),
-      trimPaint: z.boolean().default(false),
-      ensuitePaint: z.boolean().optional().default(false),
-    })
-    .default({}),
-  trimPaintOptions: z
-    .object({
-      paintType: z.enum(['Oil-based', 'Water-based']),
-      trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])).max(3),
-      interiorWindowFrameTypes: z.array(z.enum(['Normal', 'Awning', 'Double Hung', 'French'])).max(4).optional(),
-    })
-    .optional(),
-  skirtingPricingMode: z.enum(['linear_metres', 'room_calculator']).optional(),
-  skirtingLinearMetres: z.coerce.number().positive().optional().nullable(),
-  skirtingCalculatorRooms: z.array(SkirtingCalculatorRoomSchema).max(20).optional(),
-  ceilingOptions: z
-    .object({
-      ceilingType: z.enum(['Flat', 'Decorative']),
-    })
-    .optional(),
-  interiorDoorItems: z
-    .array(
-      z.object({
-        scope: z.enum(['Door & Frame', 'Door only', 'Frame only']),
-        system: z.enum(['oil_2coat', 'water_3coat_white_finish']),
-        quantity: z.number().min(1).max(50),
-      })
-    )
-    .max(30)
-    .optional(),
-  interiorWindowItems: z
-    .array(
-      z.object({
-        type: z.enum(['Normal', 'Awning', 'Double Hung', 'French']),
-        scope: z.enum(['Window & Frame', 'Window only', 'Frame only']),
-        system: z.enum(['oil_2coat', 'water_3coat_white_finish']),
-        quantity: z.number().min(1).max(50),
-      })
-    )
-    .max(50)
-    .optional(),
-}).refine(
-  (data) => {
-    const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
-    if (!hasExterior) return true;
-    return !EXTERIOR_RESTRICTED_PROPERTY_TYPES.includes(
-      data.propertyType as (typeof EXTERIOR_RESTRICTED_PROPERTY_TYPES)[number]
-    );
-  },
-  { path: ['typeOfWork'], message: 'Exterior painting is only available for house-style properties.' }
-).refine(
-  (data) => {
-    const hasExterior = (data.typeOfWork ?? []).includes('Exterior Painting');
-    if (!hasExterior) return true;
-    return (data.exteriorAreas ?? []).length > 0;
-  },
-  { path: ['exteriorAreas'], message: 'Please select at least one exterior area.' }
-).refine(
-  (data) => {
-    const needsExteriorWallSize =
-      (data.typeOfWork ?? []).includes('Exterior Painting') &&
-      data.scopeOfPainting === 'Specific areas only' &&
-      (data.exteriorAreas ?? []).includes('Wall');
-    if (!needsExteriorWallSize) return true;
-    return typeof data.approxSize === 'number' && data.approxSize > 0;
-  },
-  { path: ['approxSize'], message: 'Enter the approximate size in sqm when Wall is selected.' }
-).refine(
-  (data) => {
-    const needsDeckArea =
-      (data.typeOfWork ?? []).includes('Exterior Painting') &&
-      (data.exteriorAreas ?? []).includes('Deck');
-    if (!needsDeckArea) return true;
-    return typeof data.deckArea === 'number' && data.deckArea > 0;
-  },
-  { path: ['deckArea'], message: 'Enter the deck area in sqm when Deck is selected.' }
-).refine(
-  (data) => {
-    const needsPavingArea =
-      (data.typeOfWork ?? []).includes('Exterior Painting') &&
-      (data.exteriorAreas ?? []).includes('Paving');
-    if (!needsPavingArea) return true;
-    return typeof data.pavingArea === 'number' && data.pavingArea > 0;
-  },
-  { path: ['pavingArea'], message: 'Enter the paving area in sqm when Paving is selected.' }
-).refine(
-  (data) => {
-    const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
-    if (!hasInterior || data.scopeOfPainting !== 'Entire property') return true;
-    return !!(
-      data.paintAreas?.ceilingPaint ||
-      data.paintAreas?.wallPaint ||
-      data.paintAreas?.trimPaint ||
-      data.paintAreas?.ensuitePaint
-    );
-  },
-  { path: ['paintAreas'], message: 'Please select at least one interior surface.' }
-).refine(
-  (data) => {
-    const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
-    const needsApartmentSizing =
-      hasInterior && data.scopeOfPainting === 'Entire property' && data.propertyType === 'Apartment';
-    if (!needsApartmentSizing) return true;
-    return !!data.apartmentStructure || typeof data.approxSize === 'number';
-  },
-  { path: ['apartmentStructure'], message: 'Select an apartment structure or enter an approximate size.' }
-).refine(
-  (data) => {
-    const hasInterior = (data.typeOfWork ?? []).includes('Interior Painting');
-    const needsWholePropertySizing =
-      hasInterior && data.scopeOfPainting === 'Entire property' && data.propertyType !== 'Apartment';
-    if (!needsWholePropertySizing) return true;
-    const hasCounts =
-      typeof data.bedroomCount === 'number' && typeof data.bathroomCount === 'number';
-    return hasCounts || typeof data.approxSize === 'number';
-  },
-  {
-    path: ['bedroomCount'],
-    message: 'Enter bedroom and bathroom counts or provide an approximate size for a whole-property estimate.',
-  }
-).refine(
-  (data) => {
-    const selectedMeasuredRooms =
-      data.scopeOfPainting === 'Specific areas only'
-        ? (data.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail')
-        : [];
-    if (!selectedMeasuredRooms.length) return true;
-    return typeof data.interiorWallHeight === 'number';
-  },
-  { path: ['interiorWallHeight'], message: 'Enter the interior wall height for specific-area pricing.' }
-).refine(
-  (data) => {
-    const selectedMeasuredRooms =
-      data.scopeOfPainting === 'Specific areas only'
-        ? (data.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail')
-        : [];
-    if (!selectedMeasuredRooms.length) return true;
-    return selectedMeasuredRooms.every((room) => typeof room.approxRoomSize === 'number' && room.approxRoomSize > 0);
-  },
-  { path: ['interiorRooms'], message: 'Enter an approximate room size for each selected room.' }
-).refine(
-  (data) => {
-    const trimOnly = (data.typeOfWork ?? []).includes('Interior Painting') &&
-      data.scopeOfPainting === 'Specific areas only' &&
-      !!data.specificInteriorTrimOnly;
-    if (!trimOnly) return true;
-    return (data.trimPaintOptions?.trimItems ?? []).length > 0;
-  },
-  { path: ['trimPaintOptions', 'trimItems'], message: 'Please select at least one trim item.' }
-).refine(
-  (data) => {
-    const needsSkirtingRoom =
-      (data.typeOfWork ?? []).includes('Interior Painting') &&
-      data.scopeOfPainting === 'Specific areas only' &&
-      !data.specificInteriorTrimOnly &&
-      (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
-    if (!needsSkirtingRoom) return true;
-    return (data.interiorRooms ?? []).some((room) => room.paintAreas?.trimPaint);
-  },
-  { path: ['interiorRooms'], message: 'Select at least one trim room when including skirting boards.' }
-).refine(
-  (data) => {
-    const needsTrimOnlySkirting =
-      (data.typeOfWork ?? []).includes('Interior Painting') &&
-      data.scopeOfPainting === 'Specific areas only' &&
-      !!data.specificInteriorTrimOnly &&
-      (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
-    if (!needsTrimOnlySkirting) return true;
-
-    if ((data.skirtingPricingMode ?? 'linear_metres') === 'linear_metres') {
-      return typeof data.skirtingLinearMetres === 'number' && data.skirtingLinearMetres > 0;
-    }
-
-    return (data.skirtingCalculatorRooms ?? []).some(
-      (room) => typeof room.length === 'number' && room.length > 0 && typeof room.width === 'number' && room.width > 0
-    );
-  },
-  { path: ['skirtingLinearMetres'], message: 'Enter skirting length or add room dimensions for skirting-only pricing.' }
-).refine(
-  (data) => {
-    const needsDoorItems = (data.typeOfWork ?? []).includes('Interior Painting') &&
-      data.scopeOfPainting === 'Specific areas only' &&
-      (data.trimPaintOptions?.trimItems ?? []).includes('Doors');
-    if (!needsDoorItems) return true;
-    return (data.interiorDoorItems ?? []).length > 0;
-  },
-  { path: ['interiorDoorItems'], message: 'Please add at least one door quantity.' }
-).refine(
-  (data) => {
-    const needsWindowItems = (data.typeOfWork ?? []).includes('Interior Painting') &&
-      data.scopeOfPainting === 'Specific areas only' &&
-      (data.trimPaintOptions?.trimItems ?? []).includes('Window Frames');
-    if (!needsWindowItems) return true;
-    return (data.interiorWindowItems ?? []).length > 0;
-  },
-  { path: ['interiorWindowItems'], message: 'Please add at least one window quantity.' }
-);
-
-const saveEstimateSchema = z.object({
-  idToken: z.string().min(1, 'Authentication is required.'),
-  formData: estimateFormSchema,
-  photoUrls: z.array(z.string().url()).max(10).optional(),
-});
 
 async function enforceEstimateRateLimit(uid: string, realEstimateCount: number) {
   const adminDb = getAdminDb();
@@ -355,11 +91,63 @@ async function enforceEstimateRateLimit(uid: string, realEstimateCount: number) 
   });
 }
 
+async function releaseEstimateReservation(uid: string) {
+  const adminDb = getAdminDb();
+  const rateLimitRef = adminDb.collection('estimateRateLimits').doc(uid);
+
+  await adminDb.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(rateLimitRef);
+    const data = snapshot.data() as { estimateCount?: number } | undefined;
+    const nextEstimateCount = Math.max(0, (data?.estimateCount ?? 0) - 1);
+
+    transaction.set(
+      rateLimitRef,
+      {
+        estimateCount: nextEstimateCount,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+}
+
+export async function getEstimateQuotaStatus(payload: unknown) {
+  const validatedPayload = estimateSubmissionSchema.pick({ idToken: true }).safeParse(payload);
+
+  if (!validatedPayload.success) {
+    return { error: 'Authentication is required.' };
+  }
+
+  const adminAuth = getAdminAuth();
+  const adminDb = getAdminDb();
+  const decodedToken = await adminAuth.verifyIdToken(validatedPayload.data.idToken);
+  const isAdmin = decodedToken.admin === true;
+
+  if (isAdmin) {
+    return { estimateCount: 0, limitReached: false };
+  }
+
+  const estimatesSnapshot = await adminDb
+    .collection('estimates')
+    .where('userId', '==', decodedToken.uid)
+    .count()
+    .get();
+
+  const estimateCount = estimatesSnapshot.data().count;
+  return {
+    estimateCount,
+    limitReached: estimateCount >= 2,
+  };
+}
+
 export async function submitEstimate(payload: unknown) {
+  let reservedUid: string | null = null;
+  let estimatePersisted = false;
+
   try {
     const adminAuth = getAdminAuth();
     const adminDb = getAdminDb();
-    const validatedPayload = saveEstimateSchema.safeParse(payload);
+    const validatedPayload = estimateSubmissionSchema.safeParse(payload);
 
     if (!validatedPayload.success) {
       console.error('Validation Error:', validatedPayload.error.flatten().fieldErrors);
@@ -372,7 +160,7 @@ export async function submitEstimate(payload: unknown) {
       return { error: 'A verified email address is required.' };
     }
 
-    const validatedFields = estimateFormSchema.safeParse(validatedPayload.data.formData);
+    const validatedFields = estimateRequestSchema.safeParse(validatedPayload.data.formData);
 
     if (!validatedFields.success) {
       console.error('Validation Error:', validatedFields.error.flatten().fieldErrors);
@@ -397,6 +185,7 @@ export async function submitEstimate(payload: unknown) {
       // enforceEstimateRateLimit atomically checks and reserves the 2-estimate cap
       // along with rate limits, preventing race conditions.
       await enforceEstimateRateLimit(decodedToken.uid, estimateCount);
+      reservedUid = decodedToken.uid;
     }
 
     const approxSize = rawData.approxSize || undefined;
@@ -432,9 +221,10 @@ export async function submitEstimate(payload: unknown) {
       userId: decodedToken.uid,
       options: sanitizedOptions,
       estimate,
-      photoUrls: validatedPayload.data.photoUrls ?? [],
+      photoPaths: validatedPayload.data.photoPaths ?? [],
       createdAt: FieldValue.serverTimestamp(),
     });
+    estimatePersisted = true;
 
     return {
       data: estimate,
@@ -443,6 +233,14 @@ export async function submitEstimate(payload: unknown) {
       limitReached: !isAdmin && estimateCount + 1 >= 2,
     };
   } catch (error: any) {
+    if (reservedUid && !estimatePersisted) {
+      try {
+        await releaseEstimateReservation(reservedUid);
+      } catch (releaseError) {
+        console.error('Failed to release estimate reservation:', releaseError);
+      }
+    }
+
     console.error('Error generating estimate:', error);
     const msg: string = error?.message ?? '';
     if (msg.includes('2 free estimates')) {
