@@ -116,6 +116,7 @@ const ROOM_WEIGHT: Record<string, number> = {
   'Bedroom 3': 1.0,
   Bathroom: 1.1,
   'Living Room': 1.35,
+  Lounge: 1.35,
   Kitchen: 1.3,
   Laundry: 0.7,
   Hallway: 0.45,
@@ -450,6 +451,36 @@ function getInteriorHandrailRange(
 
 function formatMoney(n: number) {
   return n.toLocaleString('en-AU');
+}
+
+function hasPricedInteriorSurfaceSelection(flags?: {
+  ceilingPaint?: boolean;
+  wallPaint?: boolean;
+  trimPaint?: boolean;
+  ensuitePaint?: boolean;
+}) {
+  return !!(flags?.ceilingPaint || flags?.wallPaint || flags?.trimPaint);
+}
+
+function getInteriorDoorUnitPrice(system: string, scope: string) {
+  const pricingBySystem = INTERIOR_DOOR_ITEM_ANCHOR as Record<string, Record<string, number>>;
+  const unitPrice = pricingBySystem[system]?.[scope];
+  if (typeof unitPrice !== 'number') {
+    throw new Error(`Unknown interior door pricing key: ${system} / ${scope}`);
+  }
+  return unitPrice;
+}
+
+function getInteriorWindowUnitPrice(system: string, type: string, scope: string) {
+  const pricingBySystem = INTERIOR_WINDOW_ITEM_ANCHOR as Record<
+    string,
+    Record<string, Record<string, number>>
+  >;
+  const unitPrice = pricingBySystem[system]?.[type]?.[scope];
+  if (typeof unitPrice !== 'number') {
+    throw new Error(`Unknown interior window pricing key: ${system} / ${type} / ${scope}`);
+  }
+  return unitPrice;
 }
 
 function trimPaintTypeToSystem(paintType: 'Oil-based' | 'Water-based') {
@@ -1352,7 +1383,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       const lineItems: string[] = [];
 
       for (const item of input.interiorDoorItems ?? []) {
-        const unitPrice = INTERIOR_DOOR_ITEM_ANCHOR[item.system]?.[item.scope] ?? 0;
+        const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope);
         const lineTotal = unitPrice * item.quantity;
         subtotalExGst += lineTotal;
         const systemLabel =
@@ -1365,7 +1396,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       }
 
       for (const item of input.interiorWindowItems ?? []) {
-        const unitPrice = INTERIOR_WINDOW_ITEM_ANCHOR[item.system]?.[item.type]?.[item.scope] ?? 0;
+        const unitPrice = getInteriorWindowUnitPrice(item.system, item.type, item.scope);
         const lineTotal = unitPrice * item.quantity;
         subtotalExGst += lineTotal;
         const systemLabel =
@@ -1420,6 +1451,9 @@ export const generatePaintingEstimate = ai.defineFlow(
           trimPaint: false,
           ensuitePaint: false,
         };
+        if (!hasPricedInteriorSurfaceSelection(globalAreas)) {
+          throw new Error('At least one priced interior surface must be selected.');
+        }
         areaFactor = aptLike
           ? sumAreaFactorWholeApartment(globalAreas)
           : sumAreaFactor(globalAreas);
@@ -1707,7 +1741,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
           if (interiorDoorItems.length > 0) {
             for (const item of interiorDoorItems) {
-              const unitPrice = INTERIOR_DOOR_ITEM_ANCHOR[item.system]?.[item.scope] ?? 0;
+              const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope);
               const lineTotal = unitPrice * item.quantity;
               intMin += lineTotal;
               intMax += lineTotal;
@@ -1716,7 +1750,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
           if (interiorWindowItems.length > 0) {
             for (const item of interiorWindowItems) {
-              const unitPrice = INTERIOR_WINDOW_ITEM_ANCHOR[item.system]?.[item.type]?.[item.scope] ?? 0;
+              const unitPrice = getInteriorWindowUnitPrice(item.system, item.type, item.scope);
               const lineTotal = unitPrice * item.quantity;
               intMin += lineTotal;
               intMax += lineTotal;

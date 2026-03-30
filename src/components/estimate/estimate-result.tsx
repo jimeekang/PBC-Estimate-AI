@@ -119,6 +119,7 @@ function EstimateCard({
       !detail.startsWith('Total:')
   );
   const isPdf = mode === 'pdf';
+  const isItemizedTrimQuote = result.pricingMeta?.mode === 'interior_itemized';
   const generatedAt = formatGeneratedAt(pdfMeta?.generatedAt);
 
   return (
@@ -238,8 +239,13 @@ function EstimateCard({
                   : 'Estimated Price Range'}
             </p>
             <p className={cn('mt-1 font-bold text-primary', isPdf ? 'text-2xl' : 'text-3xl')}>
-              {result.priceRange}{' '}
-              <span className={cn('font-normal text-muted-foreground', isPdf ? 'text-base' : 'text-lg')}>(+GST)</span>
+              {result.priceRange}
+              {!isItemizedTrimQuote && (
+                <>
+                  {' '}
+                  <span className={cn('font-normal text-muted-foreground', isPdf ? 'text-base' : 'text-lg')}>(+GST)</span>
+                </>
+              )}
             </p>
             {isPdf && pdfMeta?.typeOfWork?.length ? (
               <p className="mt-2 text-sm font-medium text-muted-foreground">

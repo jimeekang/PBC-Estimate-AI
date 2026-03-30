@@ -294,6 +294,12 @@ describe('C: Interior Specific Areas', () => {
     expect(windows.max).toBe(600);
   });
 
+  test('C10: calcTrimItemCost throws on unknown anchor key instead of silently using a fallback', () => {
+    expect(() =>
+      calcTrimItemCost([{ style: 'Unknown Style', quantity: 2 }], EXTERIOR_DOOR_ANCHOR)
+    ).toThrow('Unknown trim anchor key');
+  });
+
   test('C11: Handrail oil 2coat anchor — $155/m min, $180/m max', () => {
     const anchor = INTERIOR_HANDRAIL_ITEM_PRICING.paint_to_paint_oil_2coat;
     expect(anchor.rate.min).toBe(155);

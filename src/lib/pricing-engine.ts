@@ -338,10 +338,15 @@ export function calcTrimItemCost(
 ): { min: number; max: number } {
   let totalMin = 0;
   let totalMax = 0;
+  const anchorKeys = Object.keys(anchor);
   for (const item of items) {
     const key = item.style ?? item.type ?? 'Standard';
-    const anchorKeys = Object.keys(anchor);
-    const a = anchor[key] ?? anchor[anchorKeys[Math.floor(anchorKeys.length / 2)]] ?? { min: 0, max: 0 };
+    const a = anchor[key];
+    if (!a) {
+      throw new Error(
+        `Unknown trim anchor key "${key}". Expected one of: ${anchorKeys.join(', ')}`
+      );
+    }
     const qty = Math.max(0, item.quantity ?? 0);
     if (qty === 0) continue;
     const scale = getQtyScaleFactor(qty);

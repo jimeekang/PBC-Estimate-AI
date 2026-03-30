@@ -718,7 +718,6 @@ const showCeilingOptions =
       form.setValue('approxSize', option.avgSqm);
     }
     form.setValue('roomsToPaint', option.hasMaster ? ['Master Bedroom'] : []);
-    form.setValue('paintAreas.ensuitePaint', option.hasEnsuite);
   }, [watchApartmentStructure, isInterior, isApartmentType, watchScope, form]);
 
   useEffect(() => {
@@ -1146,10 +1145,12 @@ const showCeilingOptions =
                   >
                     <FormField
                       control={form.control}
-                      name="approxSize"
+                        name="approxSize"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Approx. size (sqm)</FormLabel>
+                          <FormLabel>
+                            Approx. size (sqm) <span className="text-destructive">*</span>
+                          </FormLabel>
                           <FormControl>
                             <Input
                               type="number"
@@ -1987,7 +1988,9 @@ const showCeilingOptions =
                               name={`interiorRooms.${roomIndex}.approxRoomSize`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-xs">Approx. size (sqm)</FormLabel>
+                                  <FormLabel className="text-xs">
+                                    Approx. size (sqm) <span className="text-destructive">*</span>
+                                  </FormLabel>
                                   <FormControl>
                                     <Input
                                       type="number"
@@ -2007,6 +2010,7 @@ const showCeilingOptions =
                                       className="h-8 text-xs"
                                     />
                                   </FormControl>
+                                  <FormMessage />
                                 </FormItem>
                               )}
                             />
@@ -3019,8 +3023,8 @@ const showCeilingOptions =
                         type="tel"
                         inputMode="tel"
                         placeholder="e.g. 0412 345 678"
-                        pattern="[0-9\s\-\+\(\)]*"
-                        maxLength={15}
+                        pattern="^(\+61|0|1300|1800)[0-9\s\-\(\)]*$"
+                        maxLength={18}
                         onKeyDown={(e) => {
                           if (
                             !/[\d\s\-\+\(\)Backspace Tab ArrowLeft ArrowRight Delete Home End]/.test(e.key) &&

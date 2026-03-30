@@ -20,42 +20,36 @@ const serviceCards = [
     emoji: '🏠',
     description: 'Full house repaint, feature walls, ceiling repaint, and more.',
     tags: ['Full repaint', 'Feature walls', 'Ceiling repaint'],
-    from: 'From $2,800',
   },
   {
     title: 'Exterior Painting',
     emoji: '🏡',
     description: 'Weatherboard, rendered walls, and complete exterior makeovers.',
     tags: ['Weatherboard', 'Rendered walls', 'Full exterior'],
-    from: 'From $4,500',
   },
   {
     title: 'Trim & Doors',
     emoji: '🚪',
     description: 'Skirting boards, doors, window frames, handrails, and detail work.',
     tags: ['Skirting boards', 'Doors', 'Window frames'],
-    from: 'From $850',
   },
   {
     title: 'Roof Painting',
     emoji: '🏗️',
     description: 'Tile, metal, and Colorbond roof repaints to protect and refresh your home.',
     tags: ['Tile roofs', 'Metal roofs', 'Colorbond'],
-    from: 'From $3,200',
   },
   {
     title: 'Deck & Timber',
     emoji: '🪵',
     description: 'Deck staining, oiling, and repaints for timber and composite surfaces.',
     tags: ['Deck stain', 'Timber oil', 'Repaint'],
-    from: 'From $950',
   },
   {
     title: 'Paving & Concrete',
     emoji: '🧱',
     description: 'Driveway, pathway, and pool surrounds — sealed and painted for lasting results.',
     tags: ['Driveways', 'Pool surrounds', 'Pathways'],
-    from: 'From $1,200',
   },
 ];
 
@@ -121,7 +115,7 @@ export default function HomePage() {
     <div className="flex min-h-screen flex-col bg-gray-50">
       <PublicAuthRedirect />
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <section className="flex flex-col items-center justify-center px-4 py-16 text-center sm:py-24">
         <Image
           src="/logo-bg-remove.png"
@@ -132,8 +126,7 @@ export default function HomePage() {
           priority
         />
         <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 sm:text-5xl md:text-6xl">
-          Instant Painting Quotes —{' '}
-          <span className="text-primary">Powered by AI</span>
+          Instant Painting Quotes — <span className="text-primary">Powered by AI</span>
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-lg text-gray-500 sm:text-xl">
           Get a professional estimate for your Sydney Northern Beaches property in minutes.
@@ -158,7 +151,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Sample Estimate Preview ── */}
+      {/* Sample Estimate Preview */}
       <section className="px-4 pb-20">
         <div className="mx-auto max-w-3xl">
           <div className="mb-6 text-center">
@@ -171,7 +164,6 @@ export default function HomePage() {
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-            {/* Badge */}
             <div className="absolute right-3 top-3 z-10">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200">
                 <Sparkles className="h-3 w-3" />
@@ -179,7 +171,6 @@ export default function HomePage() {
               </span>
             </div>
 
-            {/* Card header */}
             <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-5 pr-32 sm:px-8 sm:pr-36">
               <p className="text-xs font-semibold uppercase tracking-widest text-primary">
                 AI Estimate — Interior
@@ -190,15 +181,12 @@ export default function HomePage() {
               <p className="mt-0.5 text-sm text-gray-500">Sydney Northern Beaches</p>
             </div>
 
-            {/* Price range */}
             <div className="border-b border-gray-100 px-6 py-6 sm:px-8">
               <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                 Estimated Price Range
               </p>
               <p className="mt-2 text-4xl font-extrabold text-gray-900 sm:text-5xl">
-                $7,800{' '}
-                <span className="text-2xl font-semibold text-gray-400">–</span>{' '}
-                $11,500
+                $7,800 <span className="text-2xl font-semibold text-gray-400">–</span> $11,500
                 <span className="ml-2 text-xl font-semibold text-gray-500">+GST</span>
               </p>
               <p className="mt-2 text-sm text-gray-500">
@@ -206,7 +194,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Factors */}
             <div className="px-6 py-5 sm:px-8">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Based on
@@ -221,7 +208,6 @@ export default function HomePage() {
               </ul>
             </div>
 
-            {/* Blurred CTA overlay */}
             <div className="border-t border-gray-100 bg-gray-50 px-6 py-4 sm:px-8">
               <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                 <p className="text-sm text-gray-500">
@@ -238,7 +224,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Services / What customers ask ── */}
+      {/* Services / What customers ask */}
       <section className="bg-white px-4 py-16 sm:py-20">
         <div className="mx-auto max-w-5xl">
           <div className="mb-10 text-center">
@@ -269,17 +255,13 @@ export default function HomePage() {
                     </span>
                   ))}
                 </div>
-                <div className="mt-4">
-                  <p className="text-xs text-gray-400">Typical price guide</p>
-                  <p className="text-lg font-extrabold text-primary">{card.from}</p>
-                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Trust Stats ── */}
+      {/* Trust Stats */}
       <section className="px-4 py-16 sm:py-20">
         <div className="mx-auto max-w-4xl">
           <div className="mb-10 text-center">
@@ -305,10 +287,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Google Reviews ── */}
+      {/* Google Reviews */}
       <section className="bg-white px-4 py-16 sm:py-20">
         <div className="mx-auto max-w-6xl">
-          {/* Header */}
           <div className="mb-10 flex flex-col items-center gap-3 text-center">
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold">
@@ -337,14 +318,12 @@ export default function HomePage() {
             </a>
           </div>
 
-          {/* Review cards */}
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {googleReviews.map((review) => (
               <div
                 key={review.name}
                 className="flex flex-col rounded-2xl border border-gray-100 bg-gray-50 p-5 shadow-sm"
               >
-                {/* Card top: avatar + name + date */}
                 <div className="mb-3 flex items-center gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
                     {review.name.charAt(0)}
@@ -355,10 +334,8 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Stars */}
                 <p className="mb-2 text-base text-amber-400">★★★★★</p>
 
-                {/* Review text */}
                 <p
                   className={`flex-1 text-sm leading-relaxed text-gray-600 ${
                     review.text.length > 150 ? 'line-clamp-4' : ''
@@ -367,7 +344,6 @@ export default function HomePage() {
                   {review.text}
                 </p>
 
-                {/* Google badge */}
                 <div className="mt-4 flex justify-end">
                   <span className="text-xs font-semibold">
                     <span className="text-[#4285F4]">G</span>
@@ -384,12 +360,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Final CTA ── */}
+      {/* Final CTA */}
       <section className="bg-primary px-4 py-16 text-center text-white sm:py-20">
         <div className="mx-auto max-w-2xl space-y-6">
-          <h2 className="text-3xl font-extrabold sm:text-4xl">
-            Ready to get your estimate?
-          </h2>
+          <h2 className="text-3xl font-extrabold sm:text-4xl">Ready to get your estimate?</h2>
           <p className="text-lg text-primary-foreground/80">
             2 free AI estimates included — no credit card required.
           </p>

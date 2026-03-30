@@ -34,6 +34,34 @@ const EstimateTrimScopeSchema = z.enum(['Door & Frame', 'Door only', 'Frame only
 const EstimateWindowTypeSchema = z.enum(['Normal', 'Awning', 'Double Hung', 'French']);
 const EstimateWindowScopeSchema = z.enum(['Window & Frame', 'Window only', 'Frame only']);
 const EstimateItemSystemSchema = z.enum(['oil_2coat', 'water_3coat_white_finish']);
+const AU_PHONE_ERROR = 'Enter a valid Australian phone number.';
+
+function isValidAustralianPhoneNumber(phone: string) {
+  const normalized = phone.replace(/[^\d+]/g, '');
+  const digitsOnly = normalized.replace(/^\+/, '');
+
+  return (
+    /^04\d{8}$/.test(digitsOnly) ||
+    /^614\d{8}$/.test(digitsOnly) ||
+    /^0[2378]\d{8}$/.test(digitsOnly) ||
+    /^61[2378]\d{8}$/.test(digitsOnly) ||
+    /^1300\d{6}$/.test(digitsOnly) ||
+    /^1800\d{6}$/.test(digitsOnly)
+  );
+}
+
+function shouldRequireApproxSize(data: {
+  typeOfWork: readonly z.infer<typeof EstimateWorkTypeSchema>[];
+  scopeOfPainting: z.infer<typeof EstimateScopeSchema>;
+  exteriorAreas?: string[];
+}) {
+  return (
+    data.scopeOfPainting === 'Entire property' ||
+    (hasExteriorWork(data.typeOfWork) &&
+      data.scopeOfPainting === 'Specific areas only' &&
+      (data.exteriorAreas ?? []).includes('Wall'))
+  );
+}
 
 function hasInteriorWork(typeOfWork: readonly z.infer<typeof EstimateWorkTypeSchema>[]) {
   return typeOfWork.includes('Interior Painting');
@@ -47,7 +75,12 @@ export const estimateRequestSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required.').max(100),
     email: z.string().email('Invalid email address.'),
-    phone: z.string().trim().min(1, 'Phone number is required.').max(40),
+    phone: z
+      .string()
+      .trim()
+      .min(1, 'Phone number is required.')
+      .max(40)
+      .refine(isValidAustralianPhoneNumber, AU_PHONE_ERROR),
     typeOfWork: z
       .array(EstimateWorkTypeSchema)
       .min(1, 'Please select at least one type of work.'),
@@ -191,14 +224,10 @@ export const estimateRequestSchema = z
   )
   .refine(
     (data) => {
-      const needsExteriorWallSize =
-        hasExteriorWork(data.typeOfWork) &&
-        data.scopeOfPainting === 'Specific areas only' &&
-        (data.exteriorAreas ?? []).includes('Wall');
-      if (!needsExteriorWallSize) return true;
+      if (!shouldRequireApproxSize(data)) return true;
       return typeof data.approxSize === 'number' && data.approxSize > 0;
     },
-    { path: ['approxSize'], message: 'Enter the approximate size in sqm when Wall is selected.' }
+    { path: ['approxSize'], message: 'Enter the approximate size in sqm.' }
   )
   .refine(
     (data) => {
@@ -224,38 +253,10 @@ export const estimateRequestSchema = z
       return !!(
         data.paintAreas?.ceilingPaint ||
         data.paintAreas?.wallPaint ||
-        data.paintAreas?.trimPaint ||
-        data.paintAreas?.ensuitePaint
+        data.paintAreas?.trimPaint
       );
     },
     { path: ['paintAreas'], message: 'Please select at least one interior surface.' }
-  )
-  .refine(
-    (data) => {
-      const needsApartmentSizing =
-        hasInteriorWork(data.typeOfWork) &&
-        data.scopeOfPainting === 'Entire property' &&
-        data.propertyType === 'Apartment';
-      if (!needsApartmentSizing) return true;
-      return !!data.apartmentStructure || typeof data.approxSize === 'number';
-    },
-    { path: ['apartmentStructure'], message: 'Select an apartment structure or enter an approximate size.' }
-  )
-  .refine(
-    (data) => {
-      const needsWholePropertySizing =
-        hasInteriorWork(data.typeOfWork) &&
-        data.scopeOfPainting === 'Entire property' &&
-        data.propertyType !== 'Apartment';
-      if (!needsWholePropertySizing) return true;
-      const hasCounts =
-        typeof data.bedroomCount === 'number' && typeof data.bathroomCount === 'number';
-      return hasCounts || typeof data.approxSize === 'number';
-    },
-    {
-      path: ['bedroomCount'],
-      message: 'Enter bedroom and bathroom counts or provide an approximate size for a whole-property estimate.',
-    }
   )
   .refine(
     (data) => {
@@ -267,19 +268,6 @@ export const estimateRequestSchema = z
       return typeof data.interiorWallHeight === 'number';
     },
     { path: ['interiorWallHeight'], message: 'Enter the interior wall height for specific-area pricing.' }
-  )
-  .refine(
-    (data) => {
-      const selectedMeasuredRooms =
-        data.scopeOfPainting === 'Specific areas only'
-          ? (data.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail')
-          : [];
-      if (!selectedMeasuredRooms.length) return true;
-      return selectedMeasuredRooms.every(
-        (room) => typeof room.approxRoomSize === 'number' && room.approxRoomSize > 0
-      );
-    },
-    { path: ['interiorRooms'], message: 'Enter an approximate room size for each selected room.' }
   )
   .refine(
     (data) => {
@@ -373,7 +361,22 @@ export const estimateRequestSchema = z
       return (data.interiorWindowItems ?? []).length > 0;
     },
     { path: ['interiorWindowItems'], message: 'Please add at least one window quantity.' }
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (data.scopeOfPainting !== 'Specific areas only') return;
+
+    const selectedRooms = data.interiorRooms ?? [];
+    selectedRooms.forEach((room, index) => {
+      if (room.roomName === 'Handrail') return;
+      if (typeof room.approxRoomSize === 'number' && room.approxRoomSize > 0) return;
+
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['interiorRooms', index, 'approxRoomSize'],
+        message: 'Enter the approximate room size in sqm.',
+      });
+    });
+  });
 
 export const estimateSubmissionSchema = z.object({
   idToken: z.string().min(1, 'Authentication is required.'),
