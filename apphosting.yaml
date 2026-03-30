@@ -45,6 +45,11 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: NEXT_PUBLIC_SITE_URL
+    value: 'https://estimate--studio-5245261553-378c8.us-east4.hosted.app'
+    availability:
+      - BUILD
+      - RUNTIME
   - variable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
     secret: google-maps-api-key
     availability:
