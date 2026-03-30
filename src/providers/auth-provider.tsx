@@ -15,16 +15,13 @@ const AuthContext = createContext<AuthContextType>({ user: null, loading: true, 
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isFirebaseConfigured);
   const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
-      setUser(null);
-      setIsAdmin(false);
-      setLoading(false);
       return;
     }
 
@@ -48,7 +45,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   }, []);
 
   useEffect(() => {

@@ -1,28 +1,52 @@
 # AGENTS.md
 
-## Core workflow
+## Core Workflow
 
-- Always start with `agents/pbc-project-planner.md` to clarify scope, define the smallest valid implementation path, and sequence the work efficiently.
-- Use `agents/frontend-senior-dev.md` for UI structure, component design, styling consistency, UX quality, and front-end implementation decisions.
-- Use `agents/firebase-backend-dev.md` for Firestore schema changes, Auth flows, Hosting configuration, security rules, API integration, and backend logic.
-- Use `agents/estimate-rule-designer.md` for quote logic, pricing anchors, estimate calculation rules, scope mapping, and painting-specific business logic.
-- Use `agents/git-firebase-deployer.md` for branch hygiene, commit safety, deployment steps, Firebase environment setup, and release verification.
+1. **Start with `pbc-project-planner`** — clarify scope, define smallest valid path, sequence the work.
+2. Delegate to specialized agents based on task domain.
 
-## Execution policy
+## Agent Roster
+
+| Agent | Domain | When to Use |
+|-------|--------|-------------|
+| `pbc-project-planner` | Scope, sequencing, roadmap | New features, multi-step tasks, sprint planning |
+| `frontend-senior-dev` | UI, components, styling, UX | Page/component creation, layout fixes, form UX, design system |
+| `firebase-backend-dev` | Firestore, Auth, API routes, server logic | CRUD operations, auth flows, security rules, Cloud Functions |
+| `estimate-rule-designer` | Pricing anchors, estimate rules, modifiers | Price calibration, new service categories, modifier logic |
+| `git-firebase-deployer` | Commits, deployment, release | Feature complete → commit + push + deploy |
+| `project-tester` | Unit/integration tests, QA | Test writing, coverage improvement, logic verification |
+| `app-security` | Security audit, Firebase rules, credentials | Pre-deploy security check, API auth review, OWASP audit |
+
+## Responsibility Boundaries
+
+### Pricing logic (`src/lib/pricing-engine.ts`)
+- **Owner**: `estimate-rule-designer`
+- **Rule**: Pure functions only. No 'use server', no genkit, no Next.js dependencies.
+- **Review**: Any anchor change requires user confirmation before applying.
+
+### AI flows (`src/ai/flows/`)
+- **Owner**: `estimate-rule-designer` (business logic) + `firebase-backend-dev` (Genkit integration)
+- **Boundary**: If the change is about *what price to output* → `estimate-rule-designer`. If the change is about *how the flow runs* → `firebase-backend-dev`.
+
+### Estimate form (`src/components/estimate/`)
+- **Owner**: `frontend-senior-dev`
+- **Coordination**: Schema changes (`src/schemas/`) need `firebase-backend-dev` review.
+
+### Server actions (`src/app/estimate/actions.ts`)
+- **Owner**: `firebase-backend-dev`
+- **Includes**: Rate limiting, Firestore writes, auth verification.
+
+## Execution Policy
 
 - Prefer minimal diffs.
 - Run tests before finalizing.
 - Do not rewrite working modules unnecessarily.
 
-## Token efficiency policy
+## Token Efficiency Policy
 
-- Be token-efficient in planning, reading, and responding.
-- Inspect only the files, functions, and components relevant to the task.
+- Inspect only relevant files, functions, and components.
 - Prefer surgical edits over full-file rewrites.
-- Avoid repeating context already established in the repository or prior steps.
-- Do not output long code blocks unless the user requests them or the change requires them.
-- Reuse existing utilities, components, types, and patterns before introducing new ones.
+- Avoid repeating context already established.
+- Reuse existing utilities, components, types, and patterns.
 - Keep explanations short, concrete, and implementation-oriented.
-- For multi-step work, propose a compact plan and execute incrementally.
-- Avoid redundant searches, repeated file reads, and unnecessary re-analysis.
-- Stop once the requested outcome is completed; do not expand scope without a clear reason.
+- Stop once the requested outcome is completed; do not expand scope.
