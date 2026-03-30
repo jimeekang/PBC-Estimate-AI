@@ -52,31 +52,20 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { calculateExteriorEstimate } from '@/ai/flows/generate-painting-estimate.exterior';
+import { isInteriorTrimItemOnly } from '@/lib/estimate-flow-logic';
 import { EXTERIOR_RESTRICTED_PROPERTY_TYPES } from '@/lib/estimate-constants';
 import {
-  InteriorHandrailDetailsSchema,
   InteriorRoomItemSchema,
   SkirtingCalculatorRoomSchema,
 } from '@/schemas/estimate';
 import {
   APARTMENT_ANCHORS_OIL,
-  APARTMENT_SQM_CURVE,
   HOUSE_INTERIOR_ANCHORS,
-  EXTERIOR_WALL_TYPE_ANCHOR,
-  EXTERIOR_WALL_TYPE_FLOORS,
   MAX_PRICE_CAP,
   AREA_SHARE,
   CONDITION_MULTIPLIER,
   HOUSE_CONDITION_MULTIPLIER,
-  EXTERIOR_CONDITION_MULTIPLIER,
   STORY_MODIFIER,
-  DEFAULT_WALL_HEIGHT,
-  EXTERIOR_WALL_AREA_BANDS,
-  EXTERIOR_AREA_UPLIFT_PCT,
-  EXTERIOR_DOOR_ANCHOR,
-  EXTERIOR_WINDOW_ANCHOR,
-  EXTERIOR_ARCHITRAVE_ANCHOR,
-  EXTERIOR_FRONT_DOOR_ANCHOR,
   INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL,
   INTERIOR_DOOR_ITEM_ANCHOR,
   INTERIOR_WINDOW_ITEM_ANCHOR,
@@ -85,13 +74,8 @@ import {
   CAL_3B2B_FAIR_SINGLE_POINTS,
   DOUBLE_STOREY_3B2B_UPLIFT,
   clamp,
-  lerp,
   getRawMedianFromSqm,
-  pickExteriorBand,
-  estimateWallArea,
   getInteriorHandrailWidthMultiplier,
-  getQtyScaleFactor,
-  calcTrimItemCost,
   inferHouseKey,
   capRangeWidthSmart,
   interpolateBySqm,
@@ -147,9 +131,6 @@ const ENTIRE_APT_BAND = {
   Fair:      { min: 0.92, max: 1.08 },
   Poor:      { min: 0.90, max: 1.25 },
 } as const;
-
-/** Standard coat system: 1 undercoat + 2 finish coats */
-const BASE_COAT_COUNT = 3;
 
 const WATER_BASED_UPLIFT = { minPct: 0.04, maxPct: 0.06 } as const;
 const TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM = { min: 50, max: 110 } as const;
@@ -239,142 +220,6 @@ const TRIM_ONLY_SKIRTING_MARKET_UPLIFT = 20;
 // EXTERIOR_CONDITION_MULTIPLIER, EXTERIOR_WALL_AREA_BANDS, DEFAULT_WALL_HEIGHT,
 // and EXTERIOR_AREA_UPLIFT_PCT are imported from '@/lib/pricing-engine'.
 
-/** Standalone pricing for exterior detail areas selected WITHOUT Wall painting.
- *  Calibrated for Sydney Northern Beaches 2026.
- */
-const EXTERIOR_DETAIL_STANDALONE: Record<string, { min: number; max: number; perStoryMult?: number }> = {
-  'Exterior Trim': { min: 400, max: 1500, perStoryMult: 1.4 },
-  'Pipes':         { min: 200, max: 600,  perStoryMult: 1.3 },
-  // Deck removed: priced independently via calcDeckCost()
-  // Paving removed: priced independently via calcPavingCost()
-  'Eaves':         { min: 600, max: 2500, perStoryMult: 1.3 },
-  'Gutter':        { min: 400, max: 1500, perStoryMult: 1.3 },
-  'Fascia':        { min: 400, max: 1500, perStoryMult: 1.3 },
-  'Roof':          { min: 2500, max: 9000 },
-  'Etc':           { min: 300, max: 1500 },
-};
-
-// -----------------------------
-// Deck Pricing Anchors (Sydney Northern Beaches 2026, prep included, PBC ×0.7 of market)
-// Applies to House > Exterior > Deck regardless of whether Wall is selected.
-// Prices cover: sanding + cleaning (prep) + application coats.
-// -----------------------------
-
-/** Per-m² rate bands (min, max) by service type. */
-const DECK_RATE_PER_M2: Record<string, { min: number; max: number }> = {
-  'stain-oil':         { min: 32, max: 60 },  // 2-coat oil-based stain
-  'stain-water':       { min: 34, max: 62 },  // 2-coat water-based stain
-  'clear-oil':         { min: 28, max: 53 },  // 2-coat oil-based clear/sealer
-  'clear-water':       { min: 30, max: 55 },  // 2-coat water-based clear/sealer
-  'paint-conversion':  { min: 60, max: 91 },  // 3-coat varnish/stain→paint (strip+prime+2coat)
-  'paint-recoat':      { min: 35, max: 60 },  // 2-coat paint→paint recoat
-};
-
-/** Area band multiplier (small job premium / large job discount). */
-function getDeckAreaBandMult(areaSqm: number): number {
-  if (areaSqm <= 20)  return 1.15;
-  if (areaSqm <= 50)  return 1.00;
-  if (areaSqm <= 100) return 0.90;
-  return 0.82;
-}
-
-/** Timber condition modifier applied on top of base rate. */
-const DECK_CONDITION_MULT: Record<string, number> = {
-  good:      1.00,  // light sand, standard prep
-  weathered: 1.25,  // extra sanding, possible chemical strip
-  damaged:   1.55,  // heavy prep, board repair, deep sand
-};
-
-const DECK_MINIMUM_CHARGE = 600;
-const DECK_PROJECT_CEILING = 22000;
-
-// -----------------------------
-// Paving Pricing Anchors (Sydney Northern Beaches 2026, market-aligned ~88-92%)
-// Applies to Exterior > Paving regardless of whether Wall is selected.
-// Prices cover: pressure wash / etch / prime + 2 coats paving paint.
-// Minimum 2-day job due to inter-coat dry time — reflected in PAVING_MINIMUM_CHARGE.
-// -----------------------------
-
-/** Per-m² rate bands by area bracket (min, max AUD). */
-const PAVING_RATE_PER_M2: { maxArea: number; min: number; max: number }[] = [
-  { maxArea: 25,   min: 44, max: 56 },  // ≤25 m² — small job premium
-  { maxArea: 70,   min: 34, max: 44 },  // 26–70 m² — standard
-  { maxArea: 140,  min: 27, max: 35 },  // 71–140 m² — large
-  { maxArea: Infinity, min: 22, max: 29 }, // >140 m² — commercial scale
-];
-
-/** Surface condition multiplier (prep intensity). */
-const PAVING_CONDITION_MULT: Record<string, number> = {
-  good: 1.00,  // clean, light etch only
-  fair: 1.20,  // stained/oily — acid wash + extra prep
-  poor: 1.45,  // cracked/spalled — crack fill + 2× primer
-};
-
-const PAVING_MINIMUM_CHARGE = 950;
-const PAVING_PROJECT_CEILING = 18000;
-
-/** Returns the per-m² rate for the given area. */
-function getPavingRate(area: number): { min: number; max: number } {
-  return PAVING_RATE_PER_M2.find(b => area <= b.maxArea)!;
-}
-
-/** Computes paving cost range. Returns null if pavingArea is missing or zero. */
-function calcPavingCost(input: {
-  pavingArea?: number;
-  pavingCondition?: string;
-}): { min: number; max: number } | null {
-  const area = input.pavingArea;
-  if (!area || area <= 0) return null;
-
-  const rate     = getPavingRate(area);
-  const condMult = PAVING_CONDITION_MULT[input.pavingCondition ?? 'good'] ?? 1.0;
-
-  return {
-    min: Math.max(PAVING_MINIMUM_CHARGE, Math.round(area * rate.min * condMult)),
-    max: Math.min(PAVING_PROJECT_CEILING, Math.round(area * rate.max * condMult)),
-  };
-}
-
-/** Resolves deck service key from service + product type inputs. */
-function getDeckServiceKey(
-  serviceType: string,
-  productType?: string
-): string {
-  if (serviceType === 'paint-conversion' || serviceType === 'paint-recoat') {
-    return serviceType;
-  }
-  return `${serviceType}-${productType ?? 'oil'}`;
-}
-
-/** Computes deck cost range. Returns null if deckArea is missing or zero. */
-function calcDeckCost(input: {
-  deckArea?: number;
-  deckServiceType?: string;
-  deckProductType?: string;
-  deckCondition?: string;
-}): { min: number; max: number } | null {
-  const area = input.deckArea;
-  if (!area || area <= 0) return null;
-
-  const key = getDeckServiceKey(
-    input.deckServiceType ?? 'stain',
-    input.deckProductType
-  );
-  const rate = DECK_RATE_PER_M2[key];
-  if (!rate) return null;
-
-  const bandMult  = getDeckAreaBandMult(area);
-  const condMult  = DECK_CONDITION_MULT[input.deckCondition ?? 'good'] ?? 1.0;
-
-  const rawMin = area * rate.min * bandMult * condMult;
-  const rawMax = area * rate.max * bandMult * condMult;
-
-  return {
-    min: Math.max(DECK_MINIMUM_CHARGE, Math.round(rawMin)),
-    max: Math.min(DECK_PROJECT_CEILING, Math.round(rawMax)),
-  };
-}
-
 // INTERIOR_DOOR_ITEM_ANCHOR, INTERIOR_WINDOW_ITEM_ANCHOR imported from '@/lib/pricing-engine'.
 // EXTERIOR_FLOORS kept for backward-compat; actual floors resolved via EXTERIOR_WALL_TYPE_FLOORS
 
@@ -386,25 +231,6 @@ function calcDeckCost(input: {
 
 // EXTERIOR_DOOR_ANCHOR, EXTERIOR_FRONT_DOOR_ANCHOR, EXTERIOR_WINDOW_ANCHOR,
 // EXTERIOR_ARCHITRAVE_ANCHOR, getQtyScaleFactor, calcTrimItemCost — imported from '@/lib/pricing-engine'.
-
-function getFrontDoorCost(input: GeneratePaintingEstimateInput): { min: number; max: number } {
-  if (!input.exteriorFrontDoor) return { min: 0, max: 0 };
-  return EXTERIOR_FRONT_DOOR_ANCHOR;
-}
-
-function isFrontDoorOnlyExteriorTrim(input: GeneratePaintingEstimateInput): boolean {
-  if (!input.exteriorFrontDoor) return false;
-  const trimItems = input.exteriorTrimItems ?? [];
-  return (
-    trimItems.includes('Front Door') &&
-    !trimItems.includes('Doors') &&
-    !trimItems.includes('Window Frames') &&
-    !trimItems.includes('Architraves') &&
-    !(input.exteriorDoors ?? []).some((item) => (item.quantity ?? 0) > 0) &&
-    !(input.exteriorWindows ?? []).some((item) => (item.quantity ?? 0) > 0) &&
-    !(input.exteriorArchitraves ?? []).some((item) => (item.quantity ?? 0) > 0)
-  );
-}
 
 // -----------------------------
 // Helpers
@@ -638,20 +464,6 @@ function pseudoSqmFromRooms(selectedRooms: string[]) {
 
 // sumAreaFactor imported from '@/lib/pricing-engine'.
 
-/** True when the job is interior-only, Specific areas only, with itemised
- *  trim items and NO rooms that have wall or ceiling painting selected.
- *  In this case we bypass room-based pricing entirely. */
-function isInteriorTrimItemOnly(
-  input: z.infer<typeof GeneratePaintingEstimateInputSchema>
-): boolean {
-  if (!input.typeOfWork.includes('Interior Painting')) return false;
-  if (input.typeOfWork.includes('Exterior Painting')) return false;
-  if (input.scopeOfPainting !== 'Specific areas only') return false;
-  if (!input.interiorDoorItems?.length && !input.interiorWindowItems?.length) return false;
-  const rooms = input.interiorRooms ?? [];
-  return !rooms.some((r) => r.paintAreas.wallPaint || r.paintAreas.ceilingPaint);
-}
-
 function isTrimOnlySpecificInterior(
   input: z.infer<typeof GeneratePaintingEstimateInputSchema>,
   selectedRooms: string[]
@@ -767,7 +579,7 @@ function calibrate3B2BFairSingleHouse(
   }
   const sqm = input.approxSize ?? 135;
   const target = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, sqm);
-  let min = clamp(target.min, 7000, 30000);
+  const min = clamp(target.min, 7000, 30000);
   let max = clamp(target.max, 9000, 35000);
   if (max < min) max = min + 800;
   return { min: Math.round(min), max: Math.round(max) };
@@ -867,69 +679,6 @@ function applyInteriorComplexityUpliftPct(
 
   minPct = clamp(minPct, 0, 0.18);
   maxPct = clamp(maxPct, 0, 0.25);
-
-  return {
-    min: Math.round(minVal * (1 + minPct)),
-    max: Math.round(maxVal * (1 + maxPct)),
-  };
-}
-
-// -----------------------------
-// Exterior Complexity uplift (%)
-// All rates >= 1.5x interior equivalents.
-// Difficult access is weighted heavily (ladders/scaffolding for exterior).
-// -----------------------------
-function applyExteriorComplexityUpliftPct(
-  input: GeneratePaintingEstimateInput,
-  minVal: number,
-  maxVal: number
-) {
-  const factors = input.jobDifficulty ?? [];
-  const story = input.houseStories ?? '1 storey';
-  const isDouble = story === '2 storey' || story === 'Double story or more';
-  const isTriple = story === '3 storey';
-
-  let minPct = 0;
-  let maxPct = 0;
-
-  for (const f of factors) {
-    if (f === 'Difficult access areas') {
-      // Exterior: ladders/scaffolding cost rises sharply with storey height.
-      // Single: ~3x interior (1/3% → 3/9%). Double: scaffold mandatory (8/16%). Triple: 12/22%.
-      if (isTriple) {
-        minPct += 0.12;
-        maxPct += 0.22;
-      } else if (isDouble) {
-        minPct += 0.08;
-        maxPct += 0.16;
-      } else {
-        minPct += 0.03;
-        maxPct += 0.09;
-      }
-      continue;
-    }
-    if (f === 'Stairs') {
-      // 1.5x interior (1/2% → 1.5/3%)
-      minPct += 0.015;
-      maxPct += 0.03;
-      continue;
-    }
-    if (f === 'High ceilings') {
-      // 1.5x interior (1/2% → 1.5/3%)
-      minPct += 0.015;
-      maxPct += 0.03;
-      continue;
-    }
-    if (f === 'Extensive mouldings or trims') {
-      // 1.5x interior (2/4% → 3/6%)
-      minPct += 0.03;
-      maxPct += 0.06;
-      continue;
-    }
-  }
-
-  minPct = clamp(minPct, 0, 0.30);
-  maxPct = clamp(maxPct, 0, 0.40);
 
   return {
     min: Math.round(minVal * (1 + minPct)),
@@ -1521,7 +1270,7 @@ export const generatePaintingEstimate = ai.defineFlow(
         }
 
         // ── SPECIFIC AREAS: use class-based anchor + room scoring ────────────
-        else if (!isWhole) {
+        else if (!isWhole && !measuredSpecificBase) {
           const specificRooms = (input.interiorRooms ?? [])
             .filter((r) => r.roomName !== 'Handrail')
             .map((r) => r.roomName);
@@ -1777,24 +1526,9 @@ export const generatePaintingEstimate = ai.defineFlow(
       }
 
       // 3B2B + Fair curve calibration (House / Townhouse)
-      let finalHouseKey: keyof typeof HOUSE_INTERIOR_ANCHORS | undefined;
+      const finalHouseKey = computedHouseKey;
 
-      if (!isApartmentLike(input.propertyType) && isWhole) {
-        const bedroomsTotal =
-          (typeof input.bedroomCount === 'number' && Number.isFinite(input.bedroomCount)
-            ? input.bedroomCount
-            : 0) + ((selectedRooms ?? []).includes('Master Bedroom') ? 1 : 0);
-
-        const bathroomsTotal =
-          ((selectedRooms ?? []).includes('Bathroom') ? 1 : 0) +
-          (input.paintAreas?.ensuitePaint ? 1 : 0);
-
-        finalHouseKey = inferHouseKey({
-          bedroomsTotal,
-          bathroomsTotal,
-          approxSizeSqm: toNumberOrUndefined(input.approxSize),
-        });
-
+      if (!isApartmentLike(input.propertyType) && isWhole && finalHouseKey) {
         const calibrated = calibrate3B2BFairSingleHouse(input, finalHouseKey, intMin, intMax);
         intMin = calibrated.min;
         intMax = calibrated.max;

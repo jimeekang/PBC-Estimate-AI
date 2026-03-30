@@ -9,16 +9,13 @@
 
 import {
   // Constants
-  APARTMENT_ANCHORS_OIL,
   APARTMENT_SQM_CURVE,
   HOUSE_INTERIOR_ANCHORS,
   EXTERIOR_WALL_TYPE_ANCHOR,
   EXTERIOR_WALL_TYPE_FLOORS,
-  EXTERIOR_WALL_AREA_BANDS,
   EXTERIOR_AREA_UPLIFT_PCT,
   EXTERIOR_DOOR_ANCHOR,
   EXTERIOR_WINDOW_ANCHOR,
-  EXTERIOR_ARCHITRAVE_ANCHOR,
   EXTERIOR_FRONT_DOOR_ANCHOR,
   INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL,
   INTERIOR_DOOR_ITEM_ANCHOR,
@@ -27,9 +24,7 @@ import {
   INTERIOR_HANDRAIL_ITEM_PRICING,
   CONDITION_MULTIPLIER,
   HOUSE_CONDITION_MULTIPLIER,
-  EXTERIOR_CONDITION_MULTIPLIER,
   STORY_MODIFIER,
-  AREA_SHARE,
   DEFAULT_WALL_HEIGHT,
   CAL_3B2B_FAIR_SINGLE_POINTS,
   DOUBLE_STOREY_3B2B_UPLIFT,
@@ -239,12 +234,6 @@ describe('C: Interior Specific Areas', () => {
   });
 
   test('C6: Door quantity discount — 1-3 items: factor 1.00', () => {
-    const cost = calcTrimItemCost(
-      [{ style: 'Door & Frame', quantity: 3 }],
-      INTERIOR_DOOR_ITEM_ANCHOR.oil_2coat as unknown as Record<string, { min: number; max: number }>
-    );
-    // 3 × $220 × 1.00 = $660 — but INTERIOR_DOOR_ITEM_ANCHOR uses number not {min,max}
-    // Test the scale factor directly
     expect(getQtyScaleFactor(3)).toBe(1.00);
   });
 
@@ -414,56 +403,56 @@ describe('D: Exterior Painting', () => {
 // ─────────────────────────────────────────────────────────────
 describe('E: Range Cap Policy', () => {
   test('E1: interior, min=$4000 — cap is 1200', () => {
-    const result = capRangeWidthSmart(4000, 6500, {} as any, 'interior');
+    const result = capRangeWidthSmart(4000, 6500, {}, 'interior');
     expect(result.min).toBe(4000);
     expect(result.max).toBe(5200); // 4000 + 1200
   });
 
   test('E2: interior, min=$7000 — cap is 1800', () => {
-    const result = capRangeWidthSmart(7000, 10000, {} as any, 'interior');
+    const result = capRangeWidthSmart(7000, 10000, {}, 'interior');
     expect(result.min).toBe(7000);
     expect(result.max).toBe(8800); // 7000 + 1800
   });
 
   test('E3: interior, min=$12000 — cap is 2500', () => {
-    const result = capRangeWidthSmart(12000, 16000, {} as any, 'interior');
+    const result = capRangeWidthSmart(12000, 16000, {}, 'interior');
     expect(result.min).toBe(12000);
     expect(result.max).toBe(14500); // 12000 + 2500
   });
 
   test('E4: interior, min=$20000 — cap is 3500', () => {
-    const result = capRangeWidthSmart(20000, 26000, {} as any, 'interior');
+    const result = capRangeWidthSmart(20000, 26000, {}, 'interior');
     expect(result.min).toBe(20000);
     expect(result.max).toBe(23500); // 20000 + 3500
   });
 
   test('E5: exterior, min=$8000 — cap is 800', () => {
-    const result = capRangeWidthSmart(8000, 12000, {} as any, 'exterior');
+    const result = capRangeWidthSmart(8000, 12000, {}, 'exterior');
     expect(result.min).toBe(8000);
     expect(result.max).toBe(8800); // 8000 + 800
   });
 
   test('E6: exterior, min=$15000 — cap is 1500', () => {
-    const result = capRangeWidthSmart(15000, 20000, {} as any, 'exterior');
+    const result = capRangeWidthSmart(15000, 20000, {}, 'exterior');
     expect(result.min).toBe(15000);
     expect(result.max).toBe(16500); // 15000 + 1500
   });
 
   test('E7: exterior, min=$22000 — cap is 2500', () => {
-    const result = capRangeWidthSmart(22000, 28000, {} as any, 'exterior');
+    const result = capRangeWidthSmart(22000, 28000, {}, 'exterior');
     expect(result.min).toBe(22000);
     expect(result.max).toBe(24500); // 22000 + 2500
   });
 
   test('E8: gap smaller than cap — range preserved unchanged', () => {
-    const result = capRangeWidthSmart(4000, 4800, {} as any, 'interior');
+    const result = capRangeWidthSmart(4000, 4800, {}, 'interior');
     // gap = 800 < cap 1200 → preserved
     expect(result.min).toBe(4000);
     expect(result.max).toBe(4800);
   });
 
   test('E8: gap exactly equal to cap — range preserved unchanged', () => {
-    const result = capRangeWidthSmart(4000, 5200, {} as any, 'interior');
+    const result = capRangeWidthSmart(4000, 5200, {}, 'interior');
     // gap = 1200 = cap → preserved
     expect(result.min).toBe(4000);
     expect(result.max).toBe(5200);

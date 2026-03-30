@@ -23,19 +23,33 @@ import {
 } from '@/components/ui/select';
 import { Search, Loader2, Calendar, FilterX, ChevronLeft, ChevronRight } from 'lucide-react';
 
-interface EstimateDocument {
+type FirestoreTimestampLike =
+    | Date
+    | string
+    | {
+          seconds?: number;
+          toDate?: () => Date;
+      }
+    | null
+    | undefined;
+
+function isTimestampObject(value: FirestoreTimestampLike): value is { seconds?: number; toDate?: () => Date } {
+    return !!value && typeof value === 'object' && !(value instanceof Date);
+}
+
+export interface EstimateDocument {
   id: string;
   options: {
     name: string;
     email: string;
     phone: string;
     typeOfWork: string[];
-    createdAt?: any;
+    createdAt?: FirestoreTimestampLike;
   };
   estimate?: {
     priceRange?: string;
   };
-  createdAt: any;
+  createdAt?: FirestoreTimestampLike;
 }
 
 interface EstimatesTableProps {
@@ -52,12 +66,20 @@ function getEstimateDate(estimate: EstimateDocument) {
         return null;
     }
 
-    if (typeof rawCreatedAt.toDate === 'function') {
+    if (rawCreatedAt instanceof Date) {
+        return rawCreatedAt;
+    }
+
+    if (isTimestampObject(rawCreatedAt) && typeof rawCreatedAt.toDate === 'function') {
         return rawCreatedAt.toDate();
     }
 
-    if (typeof rawCreatedAt.seconds === 'number') {
+    if (isTimestampObject(rawCreatedAt) && typeof rawCreatedAt.seconds === 'number') {
         return new Date(rawCreatedAt.seconds * 1000);
+    }
+
+    if (typeof rawCreatedAt !== 'string') {
+        return null;
     }
 
     const parsedDate = new Date(rawCreatedAt);

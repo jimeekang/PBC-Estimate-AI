@@ -46,3 +46,4 @@ yarn-debug.log*
 yarn-error.log*
 firebase-debug.log
 .next-dev*.log
+.firebase-config/

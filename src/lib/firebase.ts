@@ -1,8 +1,9 @@
 'use client';
 
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { FirebaseError, initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
   signInWithRedirect,
   signInWithPopup,
@@ -154,6 +155,25 @@ export const refreshAppCheckToken = async () => {
   }
 };
 
+export const completeGoogleRedirectSignIn = async () => {
+  if (typeof window === 'undefined' || !isFirebaseConfigured) {
+    return null;
+  }
+
+  try {
+    return await getRedirectResult(auth);
+  } catch (error: unknown) {
+    const firebaseError = error instanceof FirebaseError ? error : null;
+
+    if (firebaseError?.code === 'auth/firebase-app-check-token-is-invalid') {
+      await refreshAppCheckToken();
+      return getRedirectResult(auth);
+    }
+
+    throw error;
+  }
+};
+
 export const signInWithGoogle = async () => {
   if (typeof window === 'undefined') {
     throw new Error('This function can only be called on the client side.');
@@ -164,18 +184,23 @@ export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result;
-  } catch (error: any) {
-    console.error('Google Sign-In Error Details:', error.code, error.message);
+  } catch (error: unknown) {
+    const firebaseError = error instanceof FirebaseError ? error : null;
+    console.error(
+      'Google Sign-In Error Details:',
+      firebaseError?.code ?? 'unknown',
+      firebaseError?.message ?? (error instanceof Error ? error.message : String(error))
+    );
 
-    if (error?.code === 'auth/firebase-app-check-token-is-invalid') {
+    if (firebaseError?.code === 'auth/firebase-app-check-token-is-invalid') {
       await refreshAppCheckToken();
       return signInWithPopup(auth, googleProvider);
     }
 
     if (
-      error?.code === 'auth/internal-error' ||
-      error?.code === 'auth/popup-blocked' ||
-      error?.code === 'auth/popup-closed-by-user'
+      firebaseError?.code === 'auth/internal-error' ||
+      firebaseError?.code === 'auth/popup-blocked' ||
+      firebaseError?.code === 'auth/popup-closed-by-user'
     ) {
       await signInWithRedirect(auth, googleProvider);
       return null;

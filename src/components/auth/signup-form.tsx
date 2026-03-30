@@ -1,23 +1,23 @@
 'use client';
 
 import { useState } from 'react';
+import { FirebaseError } from 'firebase/app';
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { AlertCircle, Loader2, Info } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Icons } from '@/components/icons';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { AlertCircle, Loader2, Info } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { PrivacyPolicy } from './privacy-policy';
 import {
   auth,
-  ensureAppCheck,
   isFirebaseConfigured,
   refreshAppCheckToken,
   signInWithGoogle,
 } from '@/lib/firebase';
-import { PrivacyPolicy } from './privacy-policy';
-import { Icons } from '@/components/icons';
-import { useRouter } from 'next/navigation';
 
 function SubmitButton({ isPending }: { isPending: boolean }) {
   return (
@@ -28,19 +28,23 @@ function SubmitButton({ isPending }: { isPending: boolean }) {
   );
 }
 
+function getFirebaseError(error: unknown) {
+  return error instanceof FirebaseError ? error : null;
+}
+
 export function SignupForm() {
-  const [errors, setErrors] = useState<{ [key: string]: string[] | undefined } | null>(null);
+  const [errors, setErrors] = useState<Record<string, string[] | undefined> | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [isGooglePending, setIsGooglePending] = useState(false);
   const router = useRouter();
 
   const createAccount = async (email: string, password: string) => {
-    await ensureAppCheck();
-
     try {
       return await createUserWithEmailAndPassword(auth, email, password);
-    } catch (error: any) {
-      if (error?.code === 'auth/firebase-app-check-token-is-invalid') {
+    } catch (error: unknown) {
+      const firebaseError = getFirebaseError(error);
+
+      if (firebaseError?.code === 'auth/firebase-app-check-token-is-invalid') {
         await refreshAppCheckToken();
         return createUserWithEmailAndPassword(auth, email, password);
       }
@@ -54,33 +58,41 @@ export function SignupForm() {
       setErrors({ _form: ['Firebase configuration is missing. Please check App Hosting environment variables.'] });
       return;
     }
+
     try {
       setIsGooglePending(true);
       setErrors(null);
-      await ensureAppCheck();
       const result = await signInWithGoogle();
+
       if (result) {
         router.replace('/estimate');
       }
-    } catch (e: any) {
-      console.error("Google Sign-In Error (Signup):", e);
+    } catch (error: unknown) {
+      const firebaseError = getFirebaseError(error);
+      console.error('Google Sign-In Error (Signup):', error);
 
-      if (e?.message?.includes('Local App Check debug token is not registered')) {
-        setErrors({ _form: [e.message] });
+      if (error instanceof Error && error.message.includes('Local App Check debug token is not registered')) {
+        setErrors({ _form: [error.message] });
         return;
       }
-      
-      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
-      let errorMessage = [`Error: ${e.message}`];
-      
-      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/unauthorized-domain') {
+
+      const currentDomain =
+        typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+      let errorMessage = [
+        `Error: ${error instanceof Error ? error.message : 'Unknown sign-up error.'}`,
+      ];
+
+      if (
+        firebaseError?.code === 'auth/popup-closed-by-user' ||
+        firebaseError?.code === 'auth/unauthorized-domain'
+      ) {
         errorMessage = [
           'The login popup was closed or this domain is unauthorized.',
           'Please ensure popups are allowed and this address is authorized in Firebase Console:',
-          `👉 ${currentDomain}`
+          `-> ${currentDomain}`,
         ];
       }
-      
+
       setErrors({ _form: errorMessage });
     } finally {
       setIsGooglePending(false);
@@ -94,7 +106,10 @@ export function SignupForm() {
 
     if (!isFirebaseConfigured) {
       setIsPending(false);
-      return setErrors({ _form: ['Firebase configuration is missing. Please check App Hosting environment variables.'] });
+      setErrors({
+        _form: ['Firebase configuration is missing. Please check App Hosting environment variables.'],
+      });
+      return;
     }
 
     const formData = new FormData(event.currentTarget);
@@ -105,42 +120,52 @@ export function SignupForm() {
 
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
       setIsPending(false);
-      return setErrors({ email: ['Please enter a valid email address.'] });
+      setErrors({ email: ['Please enter a valid email address.'] });
+      return;
     }
 
-    const passwordErrors = [];
+    const passwordErrors: string[] = [];
     if (password.length < 8) passwordErrors.push('Must be at least 8 characters long.');
     if (!/[A-Z]/.test(password)) passwordErrors.push('Must contain at least one uppercase letter.');
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) passwordErrors.push('Must contain at least one special character.');
 
     if (passwordErrors.length > 0) {
       setIsPending(false);
-      return setErrors({ password: passwordErrors });
+      setErrors({ password: passwordErrors });
+      return;
     }
 
     if (password !== confirmPassword) {
       setIsPending(false);
-      return setErrors({ confirmPassword: ["Passwords don't match"] });
+      setErrors({ confirmPassword: ["Passwords don't match"] });
+      return;
     }
 
     if (privacyPolicy !== 'on') {
       setIsPending(false);
-      return setErrors({ privacyPolicy: ['You must agree to the Privacy Policy.'] });
+      setErrors({ privacyPolicy: ['You must agree to the Privacy Policy.'] });
+      return;
     }
 
     try {
       const userCredential = await createAccount(email, password);
       await sendEmailVerification(userCredential.user);
       window.location.href = '/verify-email';
-    } catch (e: any) {
+    } catch (error: unknown) {
+      const firebaseError = getFirebaseError(error);
       setIsPending(false);
-      if (e?.message?.includes('Local App Check debug token is not registered')) {
-        return setErrors({ _form: [e.message] });
+
+      if (error instanceof Error && error.message.includes('Local App Check debug token is not registered')) {
+        setErrors({ _form: [error.message] });
+        return;
       }
-      if (e.code === 'auth/email-already-in-use') {
-        return setErrors({ email: ['Email already in use.'] });
+
+      if (firebaseError?.code === 'auth/email-already-in-use') {
+        setErrors({ email: ['Email already in use.'] });
+        return;
       }
-      return setErrors({ _form: ['Failed to create account. Please try again later.'] });
+
+      setErrors({ _form: ['Failed to create account. Please try again later.'] });
     }
   };
 
@@ -180,7 +205,7 @@ export function SignupForm() {
             </div>
           )}
         </div>
-        
+
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm Password</Label>
           <Input id="confirmPassword" name="confirmPassword" type="password" required />
@@ -211,7 +236,9 @@ export function SignupForm() {
             <AlertTitle>Signup Error</AlertTitle>
             <AlertDescription>
               <ul className="list-disc list-inside space-y-1 text-xs">
-                {errors._form.map((msg, i) => <li key={i}>{msg}</li>)}
+                {errors._form.map((msg, i) => (
+                  <li key={i}>{msg}</li>
+                ))}
               </ul>
             </AlertDescription>
           </Alert>
@@ -231,8 +258,17 @@ export function SignupForm() {
         </div>
       </div>
 
-      <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isGooglePending}>
-        {isGooglePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.google className="mr-2 h-4 w-4" />}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={handleGoogleSignIn}
+        disabled={isGooglePending}
+      >
+        {isGooglePending ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Icons.google className="mr-2 h-4 w-4" />
+        )}
         Google
       </Button>
 

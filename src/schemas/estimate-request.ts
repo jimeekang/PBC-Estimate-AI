@@ -132,7 +132,7 @@ export const estimateRequestSchema = z
     otherInteriorArea: z.string().trim().max(120).optional(),
     apartmentStructure: z.enum(['Studio', '1Bed', '2Bed2Bath', '3Bed2Bath']).optional(),
     wallType: EstimateWallFinishSchema.optional(),
-    wallFinishes: z.array(EstimateWallFinishSchema).max(3).optional(),
+    wallFinishes: z.array(EstimateWallFinishSchema).max(1, 'Select one main wall finish.').optional(),
     wallHeight: z.coerce.number().positive().optional().nullable(),
     approxSize: z.coerce.number().positive().optional().nullable(),
     interiorWallHeight: z.coerce.number().positive().optional().nullable(),

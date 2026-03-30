@@ -3,15 +3,23 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
-import EstimatesTable from '@/components/admin/estimates-table';
+import EstimatesTable, { type EstimateDocument } from '@/components/admin/estimates-table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getEstimates } from '@/lib/firebase';
 import { LayoutDashboard, ClipboardList, Home, Paintbrush, Loader2 } from 'lucide-react';
 
+function getCreatedAtSeconds(createdAt: EstimateDocument['createdAt']) {
+  if (!createdAt || typeof createdAt !== 'object' || !('seconds' in createdAt)) {
+    return 0;
+  }
+
+  return typeof createdAt.seconds === 'number' ? createdAt.seconds : 0;
+}
+
 export default function AdminPage() {
   const { user, loading, isAdmin } = useAuth();
   const router = useRouter();
-  const [estimates, setEstimates] = useState<any[]>([]);
+  const [estimates, setEstimates] = useState<EstimateDocument[]>([]);
   const [stats, setStats] = useState({
     total: 0,
     interior: 0,
@@ -29,14 +37,14 @@ export default function AdminPage() {
     if (isAdmin) {
       const fetchAdminData = async () => {
         try {
-          const nextEstimates = [...(await getEstimates())].sort(
-            (a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+          const nextEstimates = [...((await getEstimates()) as EstimateDocument[])].sort(
+            (a, b) => getCreatedAtSeconds(b.createdAt) - getCreatedAtSeconds(a.createdAt)
           );
           const total = nextEstimates.length;
-          const interior = nextEstimates.filter((e: any) =>
+          const interior = nextEstimates.filter((e) =>
             e.options?.typeOfWork?.includes('Interior Painting')
           ).length;
-          const exterior = nextEstimates.filter((e: any) =>
+          const exterior = nextEstimates.filter((e) =>
             e.options?.typeOfWork?.includes('Exterior Painting')
           ).length;
           setEstimates(nextEstimates);

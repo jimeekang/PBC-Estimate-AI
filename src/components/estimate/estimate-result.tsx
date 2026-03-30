@@ -133,10 +133,13 @@ function EstimateCard({
       {/* Watermark: logo image, opacity 5%, -15deg rotation */}
       {isPdf && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-          <img
+          <Image
             src="/logo-bg-remove.png"
             alt=""
             aria-hidden="true"
+            width={420}
+            height={420}
+            unoptimized
             className="w-[420px] object-contain"
             style={{ opacity: 0.05, transform: 'rotate(-15deg)' }}
             crossOrigin="anonymous"
@@ -152,9 +155,12 @@ function EstimateCard({
         >
           <div className="flex items-center justify-between gap-4 px-5 py-3">
             <div className="space-y-1">
-              <img
+              <Image
                 src="/PBCLOGO-Letter-removebg-preview.png"
                 alt="PBC Painting"
+                width={220}
+                height={64}
+                unoptimized
                 className="h-9 w-auto object-contain"
                 style={{ filter: 'brightness(0) invert(1)' }}
                 crossOrigin="anonymous"
@@ -169,9 +175,12 @@ function EstimateCard({
               </div>
             </div>
             <div className="flex flex-col items-center gap-1 rounded-lg bg-white p-2">
-              <img
+              <Image
                 src="/PBC-Booking QR Code.png"
                 alt="PBC booking QR code"
+                width={80}
+                height={80}
+                unoptimized
                 className="h-20 w-20 object-contain"
                 crossOrigin="anonymous"
               />
@@ -345,9 +354,12 @@ function EstimateCard({
       {isPdf && (
         <div className="relative z-10 flex items-center justify-between border-t border-slate-200 pt-3 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-2">
-            <img
+            <Image
               src="/logo-bg-remove.png"
               alt=""
+              width={64}
+              height={20}
+              unoptimized
               className="h-5 w-auto object-contain opacity-40"
               crossOrigin="anonymous"
             />

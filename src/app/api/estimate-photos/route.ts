@@ -5,6 +5,10 @@ import { getAdminAuth, getAdminBucket } from '@/lib/firebase-admin';
 const MAX_PHOTO_COUNT = 10;
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function sanitizeFilename(filename: string, index: number) {
   const trimmed = filename.trim().toLowerCase();
   const safe = trimmed.replace(/[^a-z0-9._-]/g, '-').replace(/-+/g, '-');
@@ -63,12 +67,13 @@ export async function GET(request: NextRequest) {
         'Content-Type': metadata.contentType || 'application/octet-stream',
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Estimate photo download failed:', error);
+    const message = getErrorMessage(error, 'Failed to download photo.');
 
     return NextResponse.json(
-      { error: error?.message || 'Failed to download photo.' },
-      { status: error?.message === 'Authentication is required.' ? 401 : 500 }
+      { error: message },
+      { status: message === 'Authentication is required.' ? 401 : 500 }
     );
   }
 }
@@ -122,12 +127,13 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({ photoPaths });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Estimate photo upload failed:', error);
+    const message = getErrorMessage(error, 'Failed to upload photos.');
 
     return NextResponse.json(
-      { error: error?.message || 'Failed to upload photos.' },
-      { status: error?.message === 'Authentication is required.' ? 401 : 500 }
+      { error: message },
+      { status: message === 'Authentication is required.' ? 401 : 500 }
     );
   }
 }

@@ -20,14 +20,14 @@ function stripUndefined<T>(value: T): T {
   }
 
   if (value && typeof value === 'object') {
-    const out: any = {};
-    for (const [k, v] of Object.entries(value as any)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (v === undefined) continue;
       const cleaned = stripUndefined(v);
       if (cleaned === undefined) continue;
       out[k] = cleaned;
     }
-    return out;
+    return out as T;
   }
 
   return value;
@@ -188,23 +188,19 @@ export async function submitEstimate(payload: unknown) {
       reservedUid = decodedToken.uid;
     }
 
-    const approxSize = rawData.approxSize || undefined;
-    const wallHeight = rawData.wallHeight || undefined;
+    const approxSize = rawData.approxSize ?? undefined;
+    const wallHeight = rawData.wallHeight ?? undefined;
 
-    // wallFinishes (multi) → wallType (single): pick most expensive for anchor
-    const WALL_TYPE_PRIORITY: Record<string, number> = { brick: 3, rendered: 2, cladding: 1 };
     const wallFinishes = rawData.wallFinishes ?? [];
-    const wallType = wallFinishes.length
-      ? wallFinishes.sort((a, b) => (WALL_TYPE_PRIORITY[b] ?? 0) - (WALL_TYPE_PRIORITY[a] ?? 0))[0]
-      : undefined;
+    const wallType = wallFinishes[0];
 
-    const aiPayload: any = stripUndefined({
+    const aiPayload = stripUndefined({
       ...rawData,
       approxSize,
       wallHeight,
       wallType,
       ceilingType: rawData.ceilingOptions?.ceilingType,
-    });
+    }) as Exclude<Parameters<typeof generatePaintingEstimate>[0], undefined>;
 
     if (aiPayload.scopeOfPainting === 'Entire property' && !aiPayload.paintAreas?.trimPaint) {
       delete aiPayload.trimPaintOptions;
@@ -232,7 +228,7 @@ export async function submitEstimate(payload: unknown) {
       estimateCount: isAdmin ? estimateCount : estimateCount + 1,
       limitReached: !isAdmin && estimateCount + 1 >= 2,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (reservedUid && !estimatePersisted) {
       try {
         await releaseEstimateReservation(reservedUid);
@@ -242,7 +238,7 @@ export async function submitEstimate(payload: unknown) {
     }
 
     console.error('Error generating estimate:', error);
-    const msg: string = error?.message ?? '';
+    const msg = error instanceof Error ? error.message : '';
     if (msg.includes('2 free estimates')) {
       return { error: msg, limitReached: true };
     }

@@ -366,25 +366,27 @@ export function calculateExteriorEstimate(input: ExteriorEstimateInput) {
     rangeMax += pavingCost.max;
   }
 
-  if (input.exteriorDoors?.length) {
-    const doorCost = calcTrimItemCost(input.exteriorDoors, EXTERIOR_DOOR_ANCHOR);
-    rangeMin += doorCost.min;
-    rangeMax += doorCost.max;
-  }
-  if (input.exteriorWindows?.length) {
-    const windowCost = calcTrimItemCost(input.exteriorWindows, EXTERIOR_WINDOW_ANCHOR);
-    rangeMin += windowCost.min;
-    rangeMax += windowCost.max;
-  }
-  if (input.exteriorArchitraves?.length) {
-    const architraveCost = calcTrimItemCost(input.exteriorArchitraves, EXTERIOR_ARCHITRAVE_ANCHOR);
-    rangeMin += architraveCost.min;
-    rangeMax += architraveCost.max;
-  }
+  if (areas.includes('Exterior Trim')) {
+    if (input.exteriorDoors?.length) {
+      const doorCost = calcTrimItemCost(input.exteriorDoors, EXTERIOR_DOOR_ANCHOR);
+      rangeMin += doorCost.min;
+      rangeMax += doorCost.max;
+    }
+    if (input.exteriorWindows?.length) {
+      const windowCost = calcTrimItemCost(input.exteriorWindows, EXTERIOR_WINDOW_ANCHOR);
+      rangeMin += windowCost.min;
+      rangeMax += windowCost.max;
+    }
+    if (input.exteriorArchitraves?.length) {
+      const architraveCost = calcTrimItemCost(input.exteriorArchitraves, EXTERIOR_ARCHITRAVE_ANCHOR);
+      rangeMin += architraveCost.min;
+      rangeMax += architraveCost.max;
+    }
 
-  const frontDoorCost = getFrontDoorCost(input);
-  rangeMin += frontDoorCost.min;
-  rangeMax += frontDoorCost.max;
+    const frontDoorCost = getFrontDoorCost(input);
+    rangeMin += frontDoorCost.min;
+    rangeMax += frontDoorCost.max;
+  }
 
   const hasEaves = areas.includes('Eaves');
   const isFullExterior =

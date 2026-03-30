@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Logo } from '@/components/logo';
 import { auth } from '@/lib/firebase';
+import { FirebaseError } from 'firebase/app';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { AlertCircle, CheckCircle2, Loader2, ArrowLeft } from 'lucide-react';
 
@@ -30,10 +31,10 @@ export default function ForgotPasswordPage() {
         type: 'success',
         message: 'Password reset email has been sent. Please check your inbox.',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Password reset error:', error);
       let message = 'An error occurred. Please try again.';
-      if (error.code === 'auth/user-not-found') {
+      if (error instanceof FirebaseError && error.code === 'auth/user-not-found') {
         message = 'No account found with this email address.';
       }
       setStatus({ type: 'error', message });

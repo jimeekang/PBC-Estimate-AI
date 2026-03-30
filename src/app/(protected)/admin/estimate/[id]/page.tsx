@@ -64,12 +64,30 @@ interface ExteriorArchitrave {
   quantity: number;
 }
 
+type FirestoreTimestampLike =
+  | Date
+  | string
+  | {
+      seconds?: number;
+      toDate?: () => Date;
+    }
+  | null
+  | undefined;
+
+function getTimestampSeconds(value: FirestoreTimestampLike) {
+  if (!value || typeof value !== 'object' || value instanceof Date || !('seconds' in value)) {
+    return null;
+  }
+
+  return typeof value.seconds === 'number' ? value.seconds : null;
+}
+
 interface EstimateDocument {
   id: string;
   userId: string;
   photoPaths?: string[];
   photoUrls?: string[];
-  createdAt: any;
+  createdAt?: FirestoreTimestampLike;
   options: {
     name: string;
     email: string;
@@ -295,8 +313,9 @@ export default function EstimateDetailsPage() {
   const { options, estimate: est, createdAt } = estimate;
   const hasInterior = options.typeOfWork.includes('Interior Painting');
   const hasExterior = options.typeOfWork.includes('Exterior Painting');
-  const formattedDate = createdAt?.seconds
-    ? new Date(createdAt.seconds * 1000).toLocaleDateString('en-AU', {
+  const createdAtSeconds = getTimestampSeconds(createdAt);
+  const formattedDate = createdAtSeconds
+    ? new Date(createdAtSeconds * 1000).toLocaleDateString('en-AU', {
         day: 'numeric',
         month: 'short',
         year: 'numeric',

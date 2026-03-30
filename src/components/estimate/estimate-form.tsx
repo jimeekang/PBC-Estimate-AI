@@ -1,7 +1,13 @@
 'use client';
 
 import React from 'react';
-import { useForm, useFieldArray, useWatch, type FieldErrors } from 'react-hook-form';
+import {
+  useForm,
+  useFieldArray,
+  useWatch,
+  type ControllerRenderProps,
+  type FieldErrors,
+} from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { estimateRequestSchema, type EstimateRequest } from '@/schemas/estimate-request';
 import { Button } from '@/components/ui/button';
@@ -60,7 +66,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { getEstimateQuotaStatus, submitEstimate } from '@/app/estimate/actions';
 import { uploadEstimatePhotos } from '@/lib/firebase';
 import { HANDRAIL_SYSTEM_OPTIONS } from '@/lib/estimate-constants';
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { EstimatePdfMeta } from './estimate-result';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
@@ -198,7 +204,11 @@ const STEP_FIELDS: Record<number, string[]> = {
   3: ['name', 'email', 'phone', 'location', 'timingPurpose', 'paintCondition', 'jobDifficulty'],
 };
 
-function AutocompleteInput({ field }: { field: any }) {
+function AutocompleteInput({
+  field,
+}: {
+  field: ControllerRenderProps<EstimateFormValues, 'location'>;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const places = useMapsLibrary('places');
 
@@ -242,8 +252,14 @@ interface ExteriorTrimDetailProps {
   form: ReturnType<typeof useForm<EstimateFormValues>>;
 }
 
+type ExteriorTrimEntry = {
+  style?: DoorStyle | ArchStyle;
+  type?: WindowType;
+  quantity: number;
+};
+
 function ExteriorTrimDetail({ title, icon, styles, max, fieldName, styleKey, form }: ExteriorTrimDetailProps) {
-  const entries = (form.watch(fieldName) as Array<Record<string, any>>) ?? [];
+  const entries = (form.watch(fieldName) as ExteriorTrimEntry[] | undefined) ?? [];
 
   const getQty = (s: string): number => {
     const found = entries.find((e) => e[styleKey] === s);
@@ -251,10 +267,10 @@ function ExteriorTrimDetail({ title, icon, styles, max, fieldName, styleKey, for
   };
 
   const setQty = (s: string, qty: number) => {
-    const current: Array<Record<string, any>> = (form.getValues(fieldName) as Array<Record<string, any>>) ?? [];
+    const current = (form.getValues(fieldName) as ExteriorTrimEntry[] | undefined) ?? [];
     const filtered = current.filter((e) => e[styleKey] !== s);
     const next = qty > 0 ? [...filtered, { [styleKey]: s, quantity: qty }] : filtered;
-    (form.setValue as any)(fieldName, next);
+    form.setValue(fieldName, next as EstimateFormValues[typeof fieldName]);
   };
 
   return (
@@ -596,7 +612,7 @@ export function EstimateForm() {
     name: 'skirtingCalculatorRooms',
   });
 
-  const fetchEstimateCount = async (uid: string) => {
+  const fetchEstimateCount = useCallback(async (uid: string) => {
     try {
       if (!user || user.uid !== uid) {
         return 0;
@@ -622,7 +638,7 @@ export function EstimateForm() {
       }
       return 0;
     }
-  };
+  }, [isAdmin, user]);
 
   useEffect(() => {
     if (!user) {
@@ -639,7 +655,7 @@ export function EstimateForm() {
 
     setIsCountLoading(true);
     fetchEstimateCount(user.uid).finally(() => setIsCountLoading(false));
-  }, [user, isAdmin]);
+  }, [fetchEstimateCount, isAdmin, user]);
 
   const watchTypeOfWork = useWatch({ control: form.control, name: 'typeOfWork' }) || [];
   const isInterior = watchTypeOfWork.includes('Interior Painting');
@@ -654,7 +670,9 @@ export function EstimateForm() {
   }, [isInterior, isExterior]);
 
   const goNext = async () => {
-    const valid = await form.trigger(STEP_FIELDS[currentStep] as any);
+    const valid = await form.trigger(
+      STEP_FIELDS[currentStep] as Parameters<typeof form.trigger>[0]
+    );
     if (!valid) return;
     const idx = activeSteps.indexOf(currentStep);
     if (idx < activeSteps.length - 1) setCurrentStep(activeSteps[idx + 1]);
@@ -852,11 +870,6 @@ const showCeilingOptions =
     const error = form.formState.errors.interiorRooms?.[roomIndex]?.paintAreas as
       | { message?: string }
       | undefined;
-    return error?.message;
-  };
-
-  const getArrayFieldError = (fieldName: 'interiorDoorItems' | 'interiorWindowItems') => {
-    const error = form.formState.errors[fieldName] as { message?: string } | undefined;
     return error?.message;
   };
 
@@ -2599,7 +2612,7 @@ const showCeilingOptions =
                               {isWall && isSelected && (
                                 <CardContent className="pt-0 px-4 pb-4 space-y-3">
                                   <div className="text-xs font-semibold text-primary">
-                                    Wall finish (select all that apply)
+                                    Main wall finish
                                   </div>
 
                                   <FormField
@@ -2609,7 +2622,7 @@ const showCeilingOptions =
                                       <FormItem className="space-y-2">
                                         <div className="grid grid-cols-1 gap-2">
                                           {WALL_FINISH_OPTIONS.map((opt) => {
-                                            const checked = (field.value ?? []).includes(opt.id);
+                                            const checked = (field.value ?? [])[0] === opt.id;
                                             return (
                                               <div
                                                 key={opt.id}
@@ -2623,7 +2636,7 @@ const showCeilingOptions =
                                                   onCheckedChange={(c) => {
                                                     const current = field.value ?? [];
                                                     const next = c
-                                                      ? [...current, opt.id]
+                                                      ? [opt.id]
                                                       : current.filter((v) => v !== opt.id);
                                                     field.onChange(next);
                                                   }}
@@ -2644,6 +2657,9 @@ const showCeilingOptions =
                                             );
                                           })}
                                         </div>
+                                        <FormDescription className="text-[11px] text-muted-foreground">
+                                          Select the dominant exterior wall finish used for pricing.
+                                        </FormDescription>
                                         <FormMessage />
                                       </FormItem>
                                     )}

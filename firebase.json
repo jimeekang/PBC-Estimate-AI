@@ -1,11 +1,15 @@
 {
-  "apphosting": [
-    {
-      "backendId": "estimate",
-      "rootDir": ".",
-      "alwaysDeployFromSource": true
-    }
-  ],
+  "apphosting": {
+    "backendId": "estimate",
+    "rootDir": ".",
+    "ignore": [
+      "node_modules",
+      ".git",
+      ".next",
+      "firebase-debug.log"
+    ],
+    "alwaysDeployFromSource": true
+  },
   "storage": {
     "rules": "storage.rules"
   }

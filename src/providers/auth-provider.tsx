@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { onIdTokenChanged, User } from 'firebase/auth';
-import { auth, isFirebaseConfigured } from '@/lib/firebase';
+import { auth, completeGoogleRedirectSignIn, isFirebaseConfigured } from '@/lib/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -24,6 +24,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!isFirebaseConfigured) {
       return;
     }
+
+    completeGoogleRedirectSignIn().catch((error) => {
+      console.error('Error completing Google redirect sign-in:', error);
+    });
 
     const unsubscribe = onIdTokenChanged(auth, (nextUser) => {
       setUser(nextUser);

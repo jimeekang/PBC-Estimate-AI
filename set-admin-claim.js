@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const admin = require('firebase-admin');
 require('dotenv').config();
 const { readFileSync } = require('node:fs');

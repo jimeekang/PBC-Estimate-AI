@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { loadEnvConfig } = require('@next/env');
 const { startServer } = require('next/dist/server/lib/start-server');
 

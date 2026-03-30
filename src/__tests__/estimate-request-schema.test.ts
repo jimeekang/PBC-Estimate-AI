@@ -31,6 +31,28 @@ describe('estimateRequestSchema', () => {
     );
   });
 
+  test('rejects multiple exterior wall finishes because pricing expects one dominant finish', () => {
+    const result = estimateRequestSchema.safeParse({
+      ...basePayload,
+      typeOfWork: ['Exterior Painting'],
+      propertyType: 'House / Townhouse',
+      exteriorAreas: ['Wall'],
+      wallFinishes: ['brick', 'rendered'],
+      houseStories: '1 storey',
+      paintAreas: {
+        ceilingPaint: false,
+        wallPaint: false,
+        trimPaint: false,
+        ensuitePaint: false,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.success ? '' : result.error.flatten().fieldErrors.wallFinishes?.[0]).toBe(
+      'Select one main wall finish.'
+    );
+  });
+
   test('requires approxSize for exterior specific-area wall jobs', () => {
     const result = estimateRequestSchema.safeParse({
       ...basePayload,

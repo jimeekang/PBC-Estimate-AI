@@ -1,5 +1,6 @@
 'use server';
 
+import { FirebaseError } from 'firebase/app';
 import { auth } from '@/lib/firebase';
 import {
   createUserWithEmailAndPassword,
@@ -19,7 +20,7 @@ const signupSchema = z
     path: ['confirmPassword'],
   });
 
-export async function signup(prevState: any, formData: FormData) {
+export async function signup(_prevState: unknown, formData: FormData) {
   const result = signupSchema.safeParse(Object.fromEntries(formData));
 
   if (!result.success) {
@@ -33,8 +34,8 @@ export async function signup(prevState: any, formData: FormData) {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     await sendEmailVerification(userCredential.user);
-  } catch (e: any) {
-    if (e.code === 'auth/email-already-in-use') {
+  } catch (error: unknown) {
+    if (error instanceof FirebaseError && error.code === 'auth/email-already-in-use') {
       return { errors: { email: ['This email is already in use.'] } };
     }
     return { errors: { _form: ['An unexpected error occurred during signup. Please try again.'] } };
@@ -48,7 +49,7 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required.'),
 });
 
-export async function login(prevState: any, formData: FormData) {
+export async function login(_prevState: unknown, formData: FormData) {
   const result = loginSchema.safeParse(Object.fromEntries(formData));
 
   if (!result.success) {
@@ -69,8 +70,8 @@ export async function login(prevState: any, formData: FormData) {
         },
       };
     }
-  } catch (e: any) {
-    if (e.code === 'auth/invalid-credential') {
+  } catch (error: unknown) {
+    if (error instanceof FirebaseError && error.code === 'auth/invalid-credential') {
       return { errors: { _form: ['Invalid email or password.'] } };
     }
     return { errors: { _form: ['An unexpected error occurred during login. Please try again.'] } };
