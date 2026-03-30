@@ -24,6 +24,8 @@ env:
     value: "YOUR_SENDER_ID"
   - variable: NEXT_PUBLIC_APP_ID
     value: "YOUR_APP_ID"
+  - variable: NEXT_PUBLIC_SITE_URL
+    value: "https://YOUR_FIREBASE_APP_HOSTING_URL"
   - variable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
     secret: google-maps-api-key
     availability:

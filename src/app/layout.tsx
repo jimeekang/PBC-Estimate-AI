@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:9002';
+
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
@@ -10,7 +12,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://pbc-estimate-ai.vercel.app'),
+  metadataBase: new URL(siteUrl),
   title: 'PBC Estimate AI | Professional Painting Quotes',
   description:
     'Generate accurate, AI-powered painting estimates for your home or office in seconds with PBC Estimate AI.',
@@ -18,7 +20,7 @@ export const metadata: Metadata = {
     title: 'PBC Estimate AI | Professional Painting Quotes',
     description:
       'Get an instant, data-driven painting cost estimate from the experts at Paint Buddy & Co.',
-    url: 'https://pbc-estimate-ai.vercel.app',
+    url: siteUrl,
     siteName: 'PBC Estimate AI',
     locale: 'en_AU',
     images: [

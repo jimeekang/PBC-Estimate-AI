@@ -86,7 +86,7 @@ export function LoginForm() {
         errorMessage = [
           'This domain is not authorized. Please add the following address to Firebase Console > Authentication > Settings > Authorized domains:',
           `👉 ${currentDomain}`,
-          'Or use the production URL: https://pbc-estimate-ai.vercel.app'
+          'Or use your Firebase App Hosting production URL.'
         ];
       }
       
