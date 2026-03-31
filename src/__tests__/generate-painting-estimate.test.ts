@@ -56,4 +56,33 @@ describe('generatePaintingEstimate', () => {
     expect(result.breakdown?.total?.min).toBe(10000);
     expect(result.breakdown?.total?.max).toBe(11800);
   });
+
+  test('whole-house door type premiums apply on top of the trim share for entire-property pricing', async () => {
+    const baseline = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      roomsToPaint: [],
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors'],
+        interiorDoorTypes: ['flush'],
+      },
+    });
+
+    const premium = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      roomsToPaint: [],
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors'],
+        interiorDoorTypes: ['flush', 'bi_folding'],
+      },
+    });
+
+    expect((premium.breakdown?.interior?.min ?? 0)).toBeGreaterThan(
+      baseline.breakdown?.interior?.min ?? 0
+    );
+    expect((premium.breakdown?.interior?.max ?? 0)).toBeGreaterThan(
+      baseline.breakdown?.interior?.max ?? 0
+    );
+  });
 });

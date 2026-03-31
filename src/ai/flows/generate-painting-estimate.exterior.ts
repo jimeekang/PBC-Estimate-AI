@@ -4,7 +4,6 @@ import {
   EXTERIOR_CONDITION_MULTIPLIER,
   EXTERIOR_DOOR_ANCHOR,
   EXTERIOR_FRONT_DOOR_ANCHOR,
-  EXTERIOR_WALL_TYPE_ANCHOR,
   EXTERIOR_WALL_TYPE_FLOORS,
   EXTERIOR_WINDOW_ANCHOR,
   DEFAULT_WALL_HEIGHT,
@@ -13,7 +12,7 @@ import {
   capRangeWidthSmart,
   clamp,
   estimateWallArea,
-  pickExteriorBand,
+  getExteriorWallRate,
 } from '@/lib/pricing-engine';
 
 type ExteriorTrimDoor = { style?: string; quantity: number };
@@ -316,19 +315,15 @@ export function calculateExteriorEstimate(input: ExteriorEstimateInput) {
     };
   }
 
-  const wallTypeKey = (input.wallType ?? 'default') as keyof typeof EXTERIOR_WALL_TYPE_ANCHOR;
-  const wallAnchor = EXTERIOR_WALL_TYPE_ANCHOR[wallTypeKey] ?? EXTERIOR_WALL_TYPE_ANCHOR.default;
+  const wallTypeKey = (input.wallType ?? 'default') as keyof typeof EXTERIOR_WALL_TYPE_FLOORS;
   const wallFloors = EXTERIOR_WALL_TYPE_FLOORS[wallTypeKey] ?? EXTERIOR_WALL_TYPE_FLOORS.default;
   const floorSqm = toNumberOrUndefined(input.approxSize) ?? 150;
   const wallHeight = toNumberOrUndefined(input.wallHeight) ?? DEFAULT_WALL_HEIGHT[story] ?? 2.7;
   const wallArea = estimateWallArea(floorSqm, wallHeight);
-  const band = pickExteriorBand(wallArea);
+  const wallRate = getExteriorWallRate(wallTypeKey, wallArea);
 
-  let baseMin = wallAnchor.median * band.minMult;
-  let baseMax = wallAnchor.median * band.maxMult;
-
-  baseMin = Math.max(baseMin, wallAnchor.min * band.minMult);
-  baseMax = Math.min(Math.max(baseMax, wallAnchor.min * 1.25), wallAnchor.max * band.maxMult);
+  let baseMin = wallArea * wallRate.min;
+  let baseMax = wallArea * wallRate.max;
 
   const frontDoorOnlyTrim = isFrontDoorOnlyExteriorTrim(input);
   let upliftMinPct = 0;

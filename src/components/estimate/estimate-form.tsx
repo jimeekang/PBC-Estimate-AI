@@ -325,10 +325,18 @@ function ExteriorTrimDetail({ title, icon, styles, max, fieldName, styleKey, for
 
 type InteriorDoorScope = 'Door & Frame' | 'Door only' | 'Frame only';
 type InteriorDoorSystem = 'oil_2coat' | 'water_3coat_white_finish';
+type InteriorDoorType = 'flush' | 'sliding' | 'panelled' | 'french' | 'bi_folding';
 type InteriorWindowScope = 'Window & Frame' | 'Window only' | 'Frame only';
 type TrimPaintType = 'Oil-based' | 'Water-based';
 
 const DOOR_SCOPES: InteriorDoorScope[] = ['Door & Frame', 'Door only', 'Frame only'];
+const INTERIOR_DOOR_TYPE_OPTIONS: { id: InteriorDoorType; label: string }[] = [
+  { id: 'flush', label: 'Flush (Standard)' },
+  { id: 'sliding', label: 'Sliding' },
+  { id: 'panelled', label: 'Panelled' },
+  { id: 'french', label: 'French' },
+  { id: 'bi_folding', label: 'Bi-folding' },
+];
 const WINDOW_SCOPES: InteriorWindowScope[] = ['Window & Frame', 'Window only', 'Frame only'];
 
 function getSystemFromTrimPaintType(paintType: TrimPaintType | undefined): InteriorDoorSystem {
@@ -395,60 +403,116 @@ function InteriorDoorDetail({ form }: { form: ReturnType<typeof useForm<Estimate
   const paintType = (form.watch('trimPaintOptions.paintType') ?? 'Oil-based') as TrimPaintType;
   const activeSystem = getSystemFromTrimPaintType(paintType);
 
-  const getQty = (scope: InteriorDoorScope) =>
-    items.find((i) => i.scope === scope && i.system === activeSystem)?.quantity ?? 0;
+  const getQty = (doorType: InteriorDoorType, scope: InteriorDoorScope) =>
+    items.find((i) => i.doorType === doorType && i.scope === scope && i.system === activeSystem)?.quantity ?? 0;
 
-  const setQty = (scope: InteriorDoorScope, qty: number) => {
+  const setQty = (doorType: InteriorDoorType, scope: InteriorDoorScope, qty: number) => {
     const current = form.getValues('interiorDoorItems') ?? [];
-    const filtered = current.filter((i) => !(i.scope === scope && i.system === activeSystem));
+    const filtered = current.filter(
+      (i) => !(i.doorType === doorType && i.scope === scope && i.system === activeSystem)
+    );
     form.setValue(
       'interiorDoorItems',
-      qty > 0 ? [...filtered, { scope, system: activeSystem, quantity: qty }] : filtered
+      qty > 0 ? [...filtered, { doorType, scope, system: activeSystem, quantity: qty }] : filtered
     );
   };
 
   return (
-    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-2">
+    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
       <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
         <DoorOpen className="h-3.5 w-3.5" />
         Interior Doors
       </div>
-      <div className="grid grid-cols-1 gap-1.5">
-        {DOOR_SCOPES.map((scope) => {
-          const qty = getQty(scope);
-          return (
-            <div
-              key={scope}
-              className={cn(
-                'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
-                qty > 0 ? 'border-primary bg-primary/10' : 'bg-background'
-              )}
-            >
-              <span className="font-medium">{scope}</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  aria-label={`Decrease ${scope}`}
-                  onClick={() => setQty(scope, Math.max(0, qty - 1))}
-                  disabled={qty === 0}
-                  className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
-                >
-                  -
-                </button>
-                <span className="w-5 text-center tabular-nums">{qty}</span>
-                <button
-                  type="button"
-                  aria-label={`Increase ${scope}`}
-                  onClick={() => setQty(scope, Math.min(50, qty + 1))}
-                  disabled={qty >= 50}
-                  className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
-                >
-                  +
-                </button>
+      <div className="space-y-3">
+        {INTERIOR_DOOR_TYPE_OPTIONS.map((doorType) => (
+          <div key={doorType.id} className="space-y-1.5 rounded-md border bg-background p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-foreground">{doorType.label}</div>
               </div>
             </div>
-          );
-        })}
+            <div className="grid grid-cols-1 gap-1.5">
+              {DOOR_SCOPES.map((scope) => {
+                const qty = getQty(doorType.id, scope);
+                return (
+                  <div
+                    key={`${doorType.id}-${scope}`}
+                    className={cn(
+                      'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
+                      qty > 0 ? 'border-primary bg-primary/10' : 'bg-background'
+                    )}
+                  >
+                    <span className="font-medium">{scope}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        aria-label={`Decrease ${doorType.label} ${scope}`}
+                        onClick={() => setQty(doorType.id, scope, Math.max(0, qty - 1))}
+                        disabled={qty === 0}
+                        className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
+                      >
+                        -
+                      </button>
+                      <span className="w-5 text-center tabular-nums">{qty}</span>
+                      <button
+                        type="button"
+                        aria-label={`Increase ${doorType.label} ${scope}`}
+                        onClick={() => setQty(doorType.id, scope, Math.min(50, qty + 1))}
+                        disabled={qty >= 50}
+                        className="flex h-6 w-6 items-center justify-center rounded border bg-background text-sm font-bold hover:bg-accent/60 disabled:opacity-40 transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InteriorDoorTypeSelector({ form }: { form: ReturnType<typeof useForm<EstimateFormValues>> }) {
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+        <DoorOpen className="h-3.5 w-3.5" />
+        Interior Door Types
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Whole-property door pricing uses trim-share percentages. Leave only `Flush (Standard)` selected, or leave all
+        options unchecked, to keep the base door allowance.
+      </p>
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {INTERIOR_DOOR_TYPE_OPTIONS.map((option) => (
+          <FormField
+            key={option.id}
+            control={form.control}
+            name="trimPaintOptions.interiorDoorTypes"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value?.includes(option.id)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        field.onChange([...(field.value || []), option.id]);
+                        return;
+                      }
+                      field.onChange(field.value?.filter((value) => value !== option.id));
+                    }}
+                  />
+                </FormControl>
+                <div className="space-y-0.5">
+                  <FormLabel className="cursor-pointer text-xs font-medium">{option.label}</FormLabel>
+                </div>
+              </FormItem>
+            )}
+          />
+        ))}
       </div>
     </div>
   );
@@ -556,6 +620,7 @@ export function EstimateForm() {
       trimPaintOptions: {
         paintType: 'Oil-based',
         trimItems: [],
+        interiorDoorTypes: [],
         interiorWindowFrameTypes: [],
       },
       skirtingPricingMode: 'linear_metres',
@@ -2196,6 +2261,7 @@ const showCeilingOptions =
                               field.onChange(field.value?.filter((value) => value !== item.id));
                               if (item.id === 'Window Frames') form.setValue('trimPaintOptions.interiorWindowFrameTypes', []);
                               if (item.id === 'Window Frames') form.setValue('interiorWindowItems', []);
+                              if (item.id === 'Doors') form.setValue('trimPaintOptions.interiorDoorTypes', []);
                               if (item.id === 'Doors') form.setValue('interiorDoorItems', []);
                               if (item.id === 'Skirting Boards') {
                                 form.setValue('skirtingLinearMetres', undefined, { shouldDirty: true });
@@ -2411,9 +2477,11 @@ const showCeilingOptions =
 
               {/* Interior door item pricing (Specific areas only) */}
               {form.watch('trimPaintOptions.trimItems')?.includes('Doors') &&
-                watchScope === 'Specific areas only' && (
+                (watchScope === 'Specific areas only' ? (
                   <InteriorDoorDetail form={form} />
-                )}
+                ) : (
+                  <InteriorDoorTypeSelector form={form} />
+                ))}
               <FormField
                 control={form.control}
                 name="interiorDoorItems"

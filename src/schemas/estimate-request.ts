@@ -31,6 +31,7 @@ const EstimateExteriorTrimItemSchema = z.enum([
 ]);
 const EstimateTrimPaintTypeSchema = z.enum(['Oil-based', 'Water-based']);
 const EstimateTrimScopeSchema = z.enum(['Door & Frame', 'Door only', 'Frame only']);
+const EstimateInteriorDoorTypeSchema = z.enum(['flush', 'sliding', 'panelled', 'french', 'bi_folding']);
 const EstimateWindowTypeSchema = z.enum(['Normal', 'Awning', 'Double Hung', 'French']);
 const EstimateWindowScopeSchema = z.enum(['Window & Frame', 'Window only', 'Frame only']);
 const EstimateItemSystemSchema = z.enum(['oil_2coat', 'water_3coat_white_finish']);
@@ -152,6 +153,7 @@ export const estimateRequestSchema = z
       .object({
         paintType: EstimateTrimPaintTypeSchema,
         trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])).max(3),
+        interiorDoorTypes: z.array(EstimateInteriorDoorTypeSchema).max(5).optional(),
         interiorWindowFrameTypes: z.array(EstimateWindowTypeSchema).max(4).optional(),
       })
       .optional(),
@@ -167,6 +169,7 @@ export const estimateRequestSchema = z
     interiorDoorItems: z
       .array(
         z.object({
+          doorType: EstimateInteriorDoorTypeSchema,
           scope: EstimateTrimScopeSchema,
           system: EstimateItemSystemSchema,
           quantity: z.number().min(1).max(50),

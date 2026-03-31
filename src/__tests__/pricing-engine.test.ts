@@ -19,6 +19,8 @@ import {
   EXTERIOR_FRONT_DOOR_ANCHOR,
   INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL,
   INTERIOR_DOOR_ITEM_ANCHOR,
+  INTERIOR_DOOR_TYPE_PREMIUM,
+  INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT,
   INTERIOR_WINDOW_ITEM_ANCHOR,
   INTERIOR_SKIRTING_LINEAR_RATE,
   INTERIOR_HANDRAIL_ITEM_PRICING,
@@ -32,6 +34,7 @@ import {
   // Functions
   clamp,
   getRawMedianFromSqm,
+  getExteriorWallRate,
   pickExteriorBand,
   estimateWallArea,
   getInteriorHandrailWidthMultiplier,
@@ -217,20 +220,37 @@ describe('C: Interior Specific Areas', () => {
     expect(anchor.max).toBe(3200);
   });
 
-  test('C3: Bathroom has higher anchor than standard bedroom (multiplier effect)', () => {
+  test('C3: Bathroom anchor is trimmed closer to a small wet area range', () => {
     const bathroom = INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL.Bathroom;
-    const bedroom = INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL['Bedroom 1'];
-    expect(bathroom.min).toBeGreaterThan(bedroom.min);
+    expect(bathroom.min).toBe(1150);
+    expect(bathroom.max).toBe(1550);
   });
 
-  test('C4: Stairwell anchor — min $1800, max $2800', () => {
+  test('C4: Stairwell anchor is reduced so access premium can come from difficulty instead', () => {
     const anchor = INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL.Stairwell;
-    expect(anchor.min).toBe(1800);
-    expect(anchor.max).toBe(2800);
+    expect(anchor.min).toBe(1250);
+    expect(anchor.max).toBe(1850);
+  });
+
+  test('C4b: Study and laundry anchors stay below standard bedroom-heavy rooms', () => {
+    expect(INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL['Study / Office'].min).toBe(1050);
+    expect(INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL.Laundry.min).toBe(850);
+    expect(INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL.Laundry.min).toBeLessThan(
+      INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL['Study / Office'].min
+    );
   });
 
   test('C5: Oil 2coat Door & Frame anchor = $220', () => {
     expect(INTERIOR_DOOR_ITEM_ANCHOR.oil_2coat['Door & Frame']).toBe(220);
+  });
+
+  test('C5b: Door type premiums keep flush as the base and bi-folding as the highest uplift', () => {
+    expect(INTERIOR_DOOR_TYPE_PREMIUM.flush).toBe(0);
+    expect(INTERIOR_DOOR_TYPE_PREMIUM.sliding).toBe(5);
+    expect(INTERIOR_DOOR_TYPE_PREMIUM.panelled).toBe(10);
+    expect(INTERIOR_DOOR_TYPE_PREMIUM.french).toBe(15);
+    expect(INTERIOR_DOOR_TYPE_PREMIUM.bi_folding).toBe(25);
+    expect(INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT.bi_folding).toBe(0.1);
   });
 
   test('C6: Door quantity discount — 1-3 items: factor 1.00', () => {
@@ -316,20 +336,20 @@ describe('C: Interior Specific Areas', () => {
 // GROUP D: Exterior
 // ─────────────────────────────────────────────────────────────
 describe('D: Exterior Painting', () => {
-  test('D1: Cladding wallOnly floor — $3000', () => {
-    expect(EXTERIOR_WALL_TYPE_FLOORS.cladding.wallOnly).toBe(3000);
+  test('D1: Cladding wallOnly floor — $2600', () => {
+    expect(EXTERIOR_WALL_TYPE_FLOORS.cladding.wallOnly).toBe(2600);
   });
 
-  test('D2: Rendered wallOnly floor — $4000', () => {
-    expect(EXTERIOR_WALL_TYPE_FLOORS.rendered.wallOnly).toBe(4000);
+  test('D2: Rendered wallOnly floor — $3200', () => {
+    expect(EXTERIOR_WALL_TYPE_FLOORS.rendered.wallOnly).toBe(3200);
   });
 
-  test('D3: Brick wallOnly floor — $5000', () => {
-    expect(EXTERIOR_WALL_TYPE_FLOORS.brick.wallOnly).toBe(5000);
+  test('D3: Brick wallOnly floor — $3800', () => {
+    expect(EXTERIOR_WALL_TYPE_FLOORS.brick.wallOnly).toBe(3800);
   });
 
-  test('D4: Brick tripleStoreyFullExterior floor — $18500', () => {
-    expect(EXTERIOR_WALL_TYPE_FLOORS.brick.tripleStoreyFullExterior).toBe(18500);
+  test('D4: Brick tripleStoreyFullExterior floor — $14500', () => {
+    expect(EXTERIOR_WALL_TYPE_FLOORS.brick.tripleStoreyFullExterior).toBe(14500);
   });
 
   test('D5: estimateWallArea(100, 2.7) — approximately 113m²', () => {
@@ -341,6 +361,13 @@ describe('D: Exterior Painting', () => {
     const area = estimateWallArea(150, 5.4);
     // 4.2 × √150 × 5.4 = 4.2 × 12.247 × 5.4 ≈ 277.7
     expect(area).toBeCloseTo(277.7, 0);
+  });
+
+  test('D6b: getExteriorWallRate scales down per-m² as wall area grows', () => {
+    const small = getExteriorWallRate('cladding', 80);
+    const large = getExteriorWallRate('cladding', 220);
+    expect(large.min).toBeLessThan(small.min);
+    expect(large.max).toBeLessThan(small.max);
   });
 
   test('D7: pickExteriorBand — 113m² falls in band 3 (minMult 0.73–0.86 range)', () => {

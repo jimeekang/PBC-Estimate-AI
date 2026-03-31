@@ -14,13 +14,11 @@
  * - House interior uses HOUSE anchors (bed/bath-based) + calibrated whole-house band + modifiers.
  *
  * Exterior model (updated):
- * - wallType (cladding / rendered / brick) drives the base anchor selection.
- *   cladding = cheapest base; rendered = mid-range (prep + high paint absorption);
- *   brick = most expensive (labour intensive, mortar joints, highest material consumption).
- * - All types use 3-coat system (BASE_COAT_COUNT=3): 1 undercoat + 2 finish coats.
+ * - wallType (cladding / rendered / brick) drives a wall-area rate curve.
+ *   cladding = 2-coat recoat baseline; rendered = 3-coat porous-surface system;
+ *   brick = 3-coat masonry system with the highest prep intensity.
  * - houseStories: '1 storey' / '2 storey' / '3 storey' (3 tiers).
- * - 5-band size multiplier for finer granularity (≤100 / 101~150 / 151~220 / 221~350 / 350+)
- * - Applies storey modifier properly
+ * - Scope floors still protect wall-only / wall+eaves / full-exterior jobs from underpricing.
  * - Avoids double-counting "Difficult access areas" on double-storey jobs
  * - Uses area uplifts as % of base (more stable than fixed sums)
  * - Enforces wall-type-aware floor prices for scope categories
@@ -31,7 +29,7 @@
  *
  * RANGE POLICY (dynamic):
  * - Interior/Total: $0~5k→cap 1,200 / $5k~10k→1,800 / $10k~18k→2,500 / $18k+→3,500
- * - Exterior:       $0~10k→cap 1,500 / $10k~20k→2,500 / $20k+→4,000
+ * - Exterior:       $0~10k→cap 800 / $10k~20k→1,500 / $20k+→2,500
  *
  * SPECIAL CALIBRATION:
  * - House 3B2B + Fair + Single story uses a sqm-based curve (with 135sqm smoothing point)
@@ -45,8 +43,8 @@
  *
  * SQM CURVE (Apartment, Entire property):
  * - Continuous interpolation across sqm range — no class boundary cliffs
- * - rawMedian values: 90sqm → $4,500 (key point). Water-based / complexity uplift on top.
- * - ENTIRE_APT_BAND: Excellent {0.94, 1.06}, Fair {0.93, 1.10}, Poor {0.90, 1.25}
+ * - rawMedian values: 90sqm → $4,300 (key point). Water-based / complexity uplift on top.
+ * - ENTIRE_APT_BAND: Excellent {0.95, 1.05}, Fair {0.92, 1.08}, Poor {0.90, 1.25}
  */
 
 import { ai } from '@/ai/genkit';
@@ -68,6 +66,8 @@ import {
   STORY_MODIFIER,
   INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL,
   INTERIOR_DOOR_ITEM_ANCHOR,
+  INTERIOR_DOOR_TYPE_PREMIUM,
+  INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT,
   INTERIOR_WINDOW_ITEM_ANCHOR,
   INTERIOR_SKIRTING_LINEAR_RATE,
   INTERIOR_HANDRAIL_ITEM_PRICING,
@@ -98,17 +98,17 @@ const ROOM_WEIGHT: Record<string, number> = {
   'Bedroom 1': 1.0,
   'Bedroom 2': 1.0,
   'Bedroom 3': 1.0,
-  Bathroom: 1.1,
+  Bathroom: 0.88,
   'Living Room': 1.35,
   Lounge: 1.35,
   Kitchen: 1.3,
-  Laundry: 0.7,
+  Laundry: 0.52,
   Hallway: 0.45,
   Foyer: 0.4,
   Handrail: 0.6,
   Dining: 1.0,
-  'Study / Office': 1.0,
-  Stairwell: 1.2,
+  'Study / Office': 0.72,
+  Stairwell: 0.78,
   'Walk-in robe': 0.5,
   Etc: 0.6,
 };
@@ -134,6 +134,7 @@ const ENTIRE_APT_BAND = {
 
 const WATER_BASED_UPLIFT = { minPct: 0.04, maxPct: 0.06 } as const;
 const TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM = { min: 50, max: 110 } as const;
+const INTERIOR_DOOR_TYPE_OPTIONS = ['flush', 'sliding', 'panelled', 'french', 'bi_folding'] as const;
 const TRIM_PREMIUM_SPECIFIC_PER_ROOM = {
   'Oil-based': { min: 130, max: 220 },
   'Water-based': { min: 155, max: 260 },
@@ -180,29 +181,29 @@ const INTERIOR_SKIRTING_ROOM_ANCHOR = {
   'Bedroom 1': { oil_2coat: 145, water_3coat_white_finish: 190 },
   'Bedroom 2': { oil_2coat: 145, water_3coat_white_finish: 190 },
   'Bedroom 3': { oil_2coat: 145, water_3coat_white_finish: 190 },
-  Bathroom: { oil_2coat: 160, water_3coat_white_finish: 210 },
+  Bathroom: { oil_2coat: 135, water_3coat_white_finish: 180 },
   'Living Room': { oil_2coat: 220, water_3coat_white_finish: 280 },
   Lounge: { oil_2coat: 220, water_3coat_white_finish: 280 },
   Dining: { oil_2coat: 220, water_3coat_white_finish: 280 },
   Kitchen: { oil_2coat: 220, water_3coat_white_finish: 280 },
-  'Study / Office': { oil_2coat: 180, water_3coat_white_finish: 230 },
-  Laundry: { oil_2coat: 160, water_3coat_white_finish: 210 },
+  'Study / Office': { oil_2coat: 150, water_3coat_white_finish: 190 },
+  Laundry: { oil_2coat: 130, water_3coat_white_finish: 170 },
   Hallway: { oil_2coat: 160, water_3coat_white_finish: 210 },
   Foyer: { oil_2coat: 160, water_3coat_white_finish: 210 },
-  Stairwell: { oil_2coat: 260, water_3coat_white_finish: 330 },
+  Stairwell: { oil_2coat: 190, water_3coat_white_finish: 250 },
   'Walk-in robe': { oil_2coat: 140, water_3coat_white_finish: 180 },
   Etc: { oil_2coat: 180, water_3coat_white_finish: 230 },
 } as const;
 
 const INTERIOR_SPECIFIC_ROOM_TYPE_MULTIPLIER: Record<string, number> = {
-  Bathroom: 1.12,
+  Bathroom: 0.92,
   Kitchen: 1.08,
-  Laundry: 1.02,
-  Stairwell: 1.18,
+  Laundry: 0.82,
+  Stairwell: 1.0,
   Hallway: 0.94,
   Foyer: 0.94,
   'Walk-in robe': 0.9,
-  'Study / Office': 1.0,
+  'Study / Office': 0.88,
   Etc: 1.0,
 };
 
@@ -288,11 +289,17 @@ function hasPricedInteriorSurfaceSelection(flags?: {
   return !!(flags?.ceilingPaint || flags?.wallPaint || flags?.trimPaint);
 }
 
-function getInteriorDoorUnitPrice(system: string, scope: string) {
+function getInteriorDoorUnitPrice(system: string, scope: string, doorType = 'flush') {
   const pricingBySystem = INTERIOR_DOOR_ITEM_ANCHOR as Record<string, Record<string, number>>;
-  const unitPrice = pricingBySystem[system]?.[scope];
+  const basePrice = pricingBySystem[system]?.[scope];
+  const typePremium =
+    INTERIOR_DOOR_TYPE_PREMIUM[doorType as keyof typeof INTERIOR_DOOR_TYPE_PREMIUM];
+  const unitPrice =
+    typeof basePrice === 'number' && typeof typePremium === 'number'
+      ? basePrice + typePremium
+      : undefined;
   if (typeof unitPrice !== 'number') {
-    throw new Error(`Unknown interior door pricing key: ${system} / ${scope}`);
+    throw new Error(`Unknown interior door pricing key: ${system} / ${scope} / ${doorType}`);
   }
   return unitPrice;
 }
@@ -456,10 +463,42 @@ function roomScore(roomName: string) {
 function pseudoSqmFromRooms(selectedRooms: string[]) {
   const base = selectedRooms.length * 8;
   const bonus =
-    (selectedRooms.includes('Bathroom') ? 4 : 0) +
+    (selectedRooms.includes('Bathroom') ? 2 : 0) +
     (selectedRooms.includes('Kitchen') ? 3 : 0) +
     (selectedRooms.includes('Living Room') ? 3 : 0);
   return base + bonus;
+}
+
+function getSingleRoomSpecificHardFloor(roomName: string, aptLike: boolean) {
+  const floors = aptLike
+    ? {
+        Bathroom: 1050,
+        'Study / Office': 900,
+        Laundry: 780,
+        Stairwell: 1100,
+        default: 950,
+      }
+    : {
+        Bathroom: 1200,
+        'Study / Office': 1000,
+        Laundry: 850,
+        Stairwell: 1200,
+        default: 1150,
+      };
+
+  return floors[roomName as keyof typeof floors] ?? floors.default;
+}
+
+function getSpecificInteriorHardFloor(selectedRooms: string[], aptLike: boolean) {
+  const roomCount = selectedRooms.length;
+  if (roomCount <= 0) return 0;
+  if (roomCount === 1) return getSingleRoomSpecificHardFloor(selectedRooms[0], aptLike);
+
+  if (aptLike) {
+    return roomCount === 2 ? 1600 : roomCount === 3 ? 2200 : 2800;
+  }
+
+  return roomCount === 2 ? 1950 : roomCount === 3 ? 2700 : roomCount === 4 ? 3400 : 4000;
 }
 
 // sumAreaFactor imported from '@/lib/pricing-engine'.
@@ -762,6 +801,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
     .object({
       paintType: z.enum(['Oil-based', 'Water-based']),
       trimItems: z.array(z.enum(['Doors', 'Window Frames', 'Skirting Boards'])),
+      interiorDoorTypes: z.array(z.enum(INTERIOR_DOOR_TYPE_OPTIONS)).optional(),
       interiorWindowFrameTypes: z.array(z.enum(['Normal', 'Awning', 'Double Hung', 'French'])).optional(),
     })
     .optional(),
@@ -775,6 +815,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
   interiorDoorItems: z
     .array(
       z.object({
+        doorType: z.enum(INTERIOR_DOOR_TYPE_OPTIONS),
         scope: z.enum(['Door & Frame', 'Door only', 'Frame only']),
         system: z.enum(['oil_2coat', 'water_3coat_white_finish']),
         quantity: z.number().min(1).max(50),
@@ -990,6 +1031,12 @@ function getSelectedOptionLines(input: GeneratePaintingEstimateInput): string[] 
   const exteriorTrimText = formatSelectedOptionList(input.exteriorTrimItems);
   if (exteriorTrimText) lines.push(`Selected exterior trim items: ${exteriorTrimText}`);
 
+  const interiorDoorTypeText =
+    input.scopeOfPainting === 'Entire property'
+      ? formatSelectedOptionList(input.trimPaintOptions?.interiorDoorTypes)
+      : undefined;
+  if (interiorDoorTypeText) lines.push(`Selected interior door styles: ${interiorDoorTypeText}`);
+
   const interiorAreaText = formatSelectedOptionList(interiorAreas);
   if (interiorAreaText) lines.push(`Selected interior areas: ${interiorAreaText}`);
 
@@ -1017,6 +1064,7 @@ const explanationPrompt = ai.definePrompt({
       extMax: z.number(),
       priceMin: z.number(),
       priceMax: z.number(),
+      wallTypeCoatSystem: z.string().optional(),
       wallTypeSurfaceNote: z.string().optional(),
       deckMin: z.number().optional(),
       deckMax: z.number().optional(),
@@ -1068,7 +1116,7 @@ Exterior: {{extMin}} - {{extMax}}
 Total: {{priceMin}} - {{priceMax}}
 
 WALL TYPE COAT SYSTEM (use when exterior wall type is selected):
-All exterior wall types use a standard 3-coat system: 1 undercoat + 2 finish coats.
+{{#if wallTypeCoatSystem}}{{wallTypeCoatSystem}}{{else}}Use the wall finish system implied by the selected wall type.{{/if}}
 
 {{#if wallTypeSurfaceNote}}
 SURFACE NOTE (incorporate this naturally into the explanation):
@@ -1132,7 +1180,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       const lineItems: string[] = [];
 
       for (const item of input.interiorDoorItems ?? []) {
-        const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope);
+        const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope, item.doorType);
         const lineTotal = unitPrice * item.quantity;
         subtotalExGst += lineTotal;
         const systemLabel =
@@ -1140,7 +1188,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             ? '2 coats (oil-based)'
             : '3 coats (water-based, white finish)';
         lineItems.push(
-          `${item.scope} × ${item.quantity} — ${systemLabel} @ AUD ${unitPrice} each = AUD ${lineTotal.toLocaleString('en-AU')}`
+          `Door: ${item.doorType} / ${item.scope} x ${item.quantity} - ${systemLabel} @ AUD ${unitPrice} each = AUD ${lineTotal.toLocaleString('en-AU')}`
         );
       }
 
@@ -1188,6 +1236,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       const isWhole = input.scopeOfPainting === 'Entire property';
       const aptLike = isApartmentLike(input.propertyType);
       const isSkirtingOnlySpecific = isSkirtingOnlyTrimSpecific(input);
+      let wholePropertyDoorPremiumPct = 0;
 
       let selectedRooms: string[] = [];
       let areaFactor = 1.0;
@@ -1289,7 +1338,8 @@ export const generatePaintingEstimate = ai.defineFlow(
           const anchor = APARTMENT_ANCHORS_OIL[aptClass];
 
           const totalRoomScore = specificRooms.reduce((sum, r) => sum + roomScore(r), 0);
-          const partialRatio = clamp(totalRoomScore / BASE_FULL_APT_SCORE, 0.22, 0.9);
+          const minPartialRatio = specificRooms.length <= 1 ? 0.08 : 0.22;
+          const partialRatio = clamp(totalRoomScore / BASE_FULL_APT_SCORE, minPartialRatio, 0.9);
 
           const baseMid = anchor.median * partialRatio;
 
@@ -1308,9 +1358,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             baseMax *= 1.1;
           }
 
-          const roomCount = specificRooms.length;
-          const hardFloor =
-            roomCount <= 1 ? 1100 : roomCount === 2 ? 1700 : roomCount === 3 ? 2300 : 2900;
+          const hardFloor = getSpecificInteriorHardFloor(specificRooms, true);
 
           intMin = Math.max(Math.round(baseMin), hardFloor);
           intMax = Math.max(Math.round(baseMax), Math.round(hardFloor * 1.55));
@@ -1365,7 +1413,8 @@ export const generatePaintingEstimate = ai.defineFlow(
           intMax = Math.min(intMax, ceilMax);
         } else {
           const totalRoomScore = selectedRooms.reduce((sum, r) => sum + roomScore(r), 0);
-          const partialRatio = clamp(totalRoomScore / BASE_FULL_HOUSE_SCORE, 0.18, 0.85);
+          const minPartialRatio = selectedRooms.length <= 1 ? 0.06 : 0.18;
+          const partialRatio = clamp(totalRoomScore / BASE_FULL_HOUSE_SCORE, minPartialRatio, 0.85);
 
           const baseMid = houseAnchor.median * partialRatio;
 
@@ -1384,17 +1433,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             baseMax *= 1.1;
           }
 
-          const roomCount = selectedRooms.length;
-          const hardFloor =
-            roomCount <= 1
-              ? 1400
-              : roomCount === 2
-                ? 2200
-                : roomCount === 3
-                  ? 3000
-                  : roomCount === 4
-                    ? 3600
-                    : 4200;
+          const hardFloor = getSpecificInteriorHardFloor(selectedRooms, false);
 
           intMin = Math.max(Math.round(baseMin), hardFloor);
           intMax = Math.max(Math.round(baseMax), Math.round(hardFloor * 1.6));
@@ -1425,6 +1464,9 @@ export const generatePaintingEstimate = ai.defineFlow(
 
         if (input.scopeOfPainting === 'Entire property') {
           const globalTrimOn = !!input.paintAreas?.trimPaint;
+          const interiorDoorTypes = trimItems.includes('Doors')
+            ? input.trimPaintOptions.interiorDoorTypes ?? []
+            : [];
 
           if (interiorWindowFrameTypes.length > 0) {
             for (const type of interiorWindowFrameTypes) {
@@ -1443,6 +1485,12 @@ export const generatePaintingEstimate = ai.defineFlow(
             const uplifted = applyWaterBasedUpliftTrimShareWholeJob(intMin, intMax);
             intMin = uplifted.min;
             intMax = uplifted.max;
+          }
+
+          if (globalTrimOn && interiorDoorTypes.length > 0) {
+            wholePropertyDoorPremiumPct = [...new Set(interiorDoorTypes)].reduce((sum, type) => {
+              return sum + INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT[type];
+            }, 0);
           }
         } else {
           const rooms = input.interiorRooms ?? [];
@@ -1490,7 +1538,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
           if (interiorDoorItems.length > 0) {
             for (const item of interiorDoorItems) {
-              const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope);
+              const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope, item.doorType);
               const lineTotal = unitPrice * item.quantity;
               intMin += lineTotal;
               intMax += lineTotal;
@@ -1536,6 +1584,11 @@ export const generatePaintingEstimate = ai.defineFlow(
         const upliftedDouble = applyDoubleStorey3B2BUplift(input, finalHouseKey, intMin, intMax);
         intMin = upliftedDouble.min;
         intMax = upliftedDouble.max;
+      }
+
+      if (isWhole && wholePropertyDoorPremiumPct > 0) {
+        intMin += Math.round(intMin * AREA_SHARE.trimPaint * wholePropertyDoorPremiumPct);
+        intMax += Math.round(intMax * AREA_SHARE.trimPaint * wholePropertyDoorPremiumPct);
       }
 
       if (isSkirtingOnlySpecific) {
@@ -1617,12 +1670,24 @@ export const generatePaintingEstimate = ai.defineFlow(
     // -----------------------------
     // 5) AI Explanation
     // -----------------------------
+    const WALL_TYPE_COAT_SYSTEM: Record<string, string> = {
+      cladding:
+        'Cladding board estimates assume a 2-coat exterior recoat system unless otherwise specified on site.',
+      rendered:
+        'Rendered wall estimates assume a 3-coat system: 1 sealer or undercoat plus 2 finish coats.',
+      brick:
+        'Brick wall estimates assume a 3-coat masonry system: 1 binding undercoat plus 2 finish coats.',
+    };
     const WALL_TYPE_SURFACE_NOTES: Record<string, string> = {
       rendered:
         'Rendered surfaces have a textured, porous finish that requires a full 3-coat system (1 undercoat + 2 finish coats) for proper adhesion and uniform coverage. The undercoat seals the render and prevents uneven absorption, while the two finish coats ensure colour consistency and long-term weather protection — particularly important for exterior surfaces exposed to Sydney\'s coastal conditions.',
       brick:
         'Brick surfaces require significantly more labour and preparation than other wall types. The deep mortar joints absorb more paint and demand careful brushwork to achieve full coverage, along with more complex surface preparation. While the same 3-coat system applies (1 undercoat + 2 finish coats), the increased application complexity and higher material consumption are reflected in the estimate.',
     };
+    const wallTypeCoatSystem =
+      (input.exteriorAreas ?? []).includes('Wall') && input.wallType
+        ? WALL_TYPE_COAT_SYSTEM[input.wallType]
+        : undefined;
     const wallTypeSurfaceNote =
       (input.exteriorAreas ?? []).includes('Wall') && input.wallType
         ? WALL_TYPE_SURFACE_NOTES[input.wallType]
@@ -1637,6 +1702,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       extMax,
       priceMin: totalMin,
       priceMax: totalMax,
+      wallTypeCoatSystem,
       wallTypeSurfaceNote,
       deckMin:   deckCostForPrompt?.min,
       deckMax:   deckCostForPrompt?.max,

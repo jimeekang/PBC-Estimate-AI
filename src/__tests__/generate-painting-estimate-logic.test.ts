@@ -19,7 +19,7 @@ describe('isInteriorTrimItemOnly', () => {
           paintType: 'Oil-based',
           trimItems: ['Doors'],
         },
-        interiorDoorItems: [{ scope: 'Door & Frame', system: 'oil_2coat', quantity: 2 }],
+        interiorDoorItems: [{ doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 2 }],
         interiorRooms: [],
       } satisfies InteriorTrimItemOnlyInput)
     ).toBe(true);
@@ -35,7 +35,7 @@ describe('isInteriorTrimItemOnly', () => {
           paintType: 'Oil-based',
           trimItems: ['Doors', 'Skirting Boards'],
         },
-        interiorDoorItems: [{ scope: 'Door & Frame', system: 'oil_2coat', quantity: 2 }],
+        interiorDoorItems: [{ doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 2 }],
         interiorRooms: [],
       } satisfies InteriorTrimItemOnlyInput)
     ).toBe(false);
@@ -51,7 +51,7 @@ describe('isInteriorTrimItemOnly', () => {
           paintType: 'Oil-based',
           trimItems: ['Doors'],
         },
-        interiorDoorItems: [{ scope: 'Door & Frame', system: 'oil_2coat', quantity: 2 }],
+        interiorDoorItems: [{ doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 2 }],
         interiorRooms: [
           {
             roomName: 'Bedroom 1',

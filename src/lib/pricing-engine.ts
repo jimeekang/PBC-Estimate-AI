@@ -54,10 +54,45 @@ export const EXTERIOR_WALL_TYPE_ANCHOR = {
 } as const;
 
 export const EXTERIOR_WALL_TYPE_FLOORS = {
-  cladding: { wallOnly: 3000, wallPlusEaves: 4500, fullExterior: 6000, doubleStoreyFullExterior: 9000,  tripleStoreyFullExterior: 13000 },
-  rendered:  { wallOnly: 4000, wallPlusEaves: 6000, fullExterior: 8000, doubleStoreyFullExterior: 12000, tripleStoreyFullExterior: 16000 },
-  brick:     { wallOnly: 5000, wallPlusEaves: 7000, fullExterior: 9500, doubleStoreyFullExterior: 14000, tripleStoreyFullExterior: 18500 },
-  default:   { wallOnly: 3500, wallPlusEaves: 5000, fullExterior: 7000, doubleStoreyFullExterior: 10000, tripleStoreyFullExterior: 13500 },
+  cladding: { wallOnly: 2600, wallPlusEaves: 3600, fullExterior: 5200, doubleStoreyFullExterior: 7600,  tripleStoreyFullExterior: 10600 },
+  rendered:  { wallOnly: 3200, wallPlusEaves: 4500, fullExterior: 6200, doubleStoreyFullExterior: 8900, tripleStoreyFullExterior: 12300 },
+  brick:     { wallOnly: 3800, wallPlusEaves: 5400, fullExterior: 7400, doubleStoreyFullExterior: 10500, tripleStoreyFullExterior: 14500 },
+  default:   { wallOnly: 2900, wallPlusEaves: 4100, fullExterior: 5700, doubleStoreyFullExterior: 8100, tripleStoreyFullExterior: 11300 },
+} as const;
+
+export const EXTERIOR_WALL_RATE_CURVES = {
+  cladding: [
+    { wallArea: 60, min: 28.0, max: 36.0 },
+    { wallArea: 95, min: 25.5, max: 33.0 },
+    { wallArea: 130, min: 23.5, max: 30.0 },
+    { wallArea: 175, min: 22.0, max: 28.0 },
+    { wallArea: 230, min: 20.5, max: 26.0 },
+    { wallArea: 320, min: 19.0, max: 24.0 },
+  ],
+  rendered: [
+    { wallArea: 60, min: 34.0, max: 44.0 },
+    { wallArea: 95, min: 31.0, max: 40.0 },
+    { wallArea: 130, min: 29.0, max: 37.0 },
+    { wallArea: 175, min: 27.5, max: 35.0 },
+    { wallArea: 230, min: 26.0, max: 33.0 },
+    { wallArea: 320, min: 24.5, max: 31.0 },
+  ],
+  brick: [
+    { wallArea: 60, min: 39.0, max: 50.0 },
+    { wallArea: 95, min: 36.0, max: 46.0 },
+    { wallArea: 130, min: 34.0, max: 43.0 },
+    { wallArea: 175, min: 32.0, max: 40.0 },
+    { wallArea: 230, min: 30.5, max: 38.0 },
+    { wallArea: 320, min: 29.0, max: 36.0 },
+  ],
+  default: [
+    { wallArea: 60, min: 31.0, max: 40.0 },
+    { wallArea: 95, min: 28.0, max: 36.0 },
+    { wallArea: 130, min: 26.0, max: 34.0 },
+    { wallArea: 175, min: 24.5, max: 32.0 },
+    { wallArea: 230, min: 23.0, max: 30.0 },
+    { wallArea: 320, min: 21.5, max: 28.0 },
+  ],
 } as const;
 
 export const MAX_PRICE_CAP = 35000;
@@ -154,16 +189,16 @@ export const INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL = {
   'Bedroom 1': { min: 980, max: 1280, median: 1130 },
   'Bedroom 2': { min: 980, max: 1280, median: 1130 },
   'Bedroom 3': { min: 980, max: 1280, median: 1130 },
-  Bathroom: { min: 1400, max: 2000, median: 1700 },
+  Bathroom: { min: 1150, max: 1550, median: 1350 },
   'Living Room': { min: 2200, max: 3200, median: 2650 },
   Lounge: { min: 2200, max: 3200, median: 2650 },
   Dining: { min: 1700, max: 2400, median: 2000 },
   Kitchen: { min: 1900, max: 2700, median: 2250 },
-  'Study / Office': { min: 1500, max: 2100, median: 1800 },
-  Laundry: { min: 1100, max: 1600, median: 1350 },
+  'Study / Office': { min: 1050, max: 1450, median: 1250 },
+  Laundry: { min: 850, max: 1150, median: 1000 },
   Hallway: { min: 900, max: 1400, median: 1150 },
   Foyer: { min: 850, max: 1300, median: 1050 },
-  Stairwell: { min: 1800, max: 2800, median: 2250 },
+  Stairwell: { min: 1250, max: 1850, median: 1500 },
   'Walk-in robe': { min: 800, max: 1200, median: 1000 },
   Etc: { min: 1200, max: 1800, median: 1500 },
 } as const;
@@ -180,6 +215,22 @@ export const INTERIOR_DOOR_ITEM_ANCHOR: Record<string, Record<string, number>> =
     'Frame only': 85,
   },
 };
+
+export const INTERIOR_DOOR_TYPE_PREMIUM = {
+  flush: 0,
+  sliding: 5,
+  panelled: 10,
+  french: 15,
+  bi_folding: 25,
+} as const;
+
+export const INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT = {
+  flush: 0,
+  sliding: 0.02,
+  panelled: 0.04,
+  french: 0.06,
+  bi_folding: 0.1,
+} as const;
 
 export const INTERIOR_WINDOW_ITEM_ANCHOR = {
   oil_2coat: {
@@ -298,6 +349,36 @@ export function pickExteriorBand(wallArea?: number): { minMult: number; maxMult:
     }
   }
   return { minMult: bands[bands.length - 1].minMult, maxMult: bands[bands.length - 1].maxMult };
+}
+
+export function getExteriorWallRate(
+  wallType: keyof typeof EXTERIOR_WALL_RATE_CURVES,
+  wallArea?: number
+): { min: number; max: number } {
+  const curve = EXTERIOR_WALL_RATE_CURVES[wallType] ?? EXTERIOR_WALL_RATE_CURVES.default;
+  const area =
+    wallArea == null || !Number.isFinite(wallArea) || isNaN(wallArea) || wallArea <= 0
+      ? curve[0].wallArea
+      : wallArea;
+
+  if (area <= curve[0].wallArea) {
+    return { min: curve[0].min, max: curve[0].max };
+  }
+
+  for (let i = 0; i < curve.length - 1; i++) {
+    const a = curve[i];
+    const b = curve[i + 1];
+    if (area >= a.wallArea && area <= b.wallArea) {
+      const t = (area - a.wallArea) / (b.wallArea - a.wallArea);
+      return {
+        min: +(a.min + (b.min - a.min) * t).toFixed(2),
+        max: +(a.max + (b.max - a.max) * t).toFixed(2),
+      };
+    }
+  }
+
+  const last = curve[curve.length - 1];
+  return { min: last.min, max: last.max };
 }
 
 export function estimateWallArea(sqm: number, wallHeight: number): number {
