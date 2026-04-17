@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
+import { LiteEstimateForm } from '@/components/estimate/lite-estimate-form';
 import { PublicAuthRedirect } from '@/components/public-auth-redirect';
 import {
   ArrowRight,
@@ -134,20 +135,26 @@ export default function HomePage() {
         </p>
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="w-full max-w-xs shadow-lg sm:w-auto">
+            <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer">
+              Book Online for a Firm Quote
+              <ExternalLink className="ml-2 h-5 w-5" />
+            </a>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="w-full max-w-xs sm:w-auto">
             <Link href="/login">
-              Get My Free Estimate
+              Start With Free AI Estimate
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
           </Button>
-          <a
-            href={BOOKING_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-xs font-medium text-primary opacity-70 underline-offset-4 hover:opacity-100 hover:underline"
-          >
-            Or book a FREE on-site quote
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+        </div>
+        <p className="mt-3 text-sm font-medium text-primary/80">
+          Booking online is the fastest way to move from price guide to final written quote.
+        </p>
+      </section>
+
+      <section className="px-4 pb-20">
+        <div className="mx-auto max-w-4xl">
+          <LiteEstimateForm />
         </div>
       </section>
 
@@ -211,13 +218,21 @@ export default function HomePage() {
             <div className="border-t border-gray-100 bg-gray-50 px-6 py-4 sm:px-8">
               <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                 <p className="text-sm text-gray-500">
-                  Login to generate a personalised estimate for your property.
+                  Want a faster path? Book online for a firm written quote, or generate your own
+                  AI price guide first.
                 </p>
-                <Button asChild size="sm">
-                  <Link href="/login">
-                    Generate Mine <ArrowRight className="ml-1.5 h-4 w-4" />
-                  </Link>
-                </Button>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <Button asChild size="sm">
+                    <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer">
+                      Book Online <ExternalLink className="ml-1.5 h-4 w-4" />
+                    </a>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/login">
+                      Generate Mine <ArrowRight className="ml-1.5 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -363,7 +378,10 @@ export default function HomePage() {
       {/* Final CTA */}
       <section className="bg-primary px-4 py-16 text-center text-white sm:py-20">
         <div className="mx-auto max-w-2xl space-y-6">
-          <h2 className="text-3xl font-extrabold sm:text-4xl">Ready to get your estimate?</h2>
+          <h2 className="text-3xl font-extrabold sm:text-4xl">Need a firm written quote?</h2>
+          <p className="text-sm font-semibold text-white/85">
+            Booking online is the fastest path if you already want a firm written quote.
+          </p>
           <p className="text-lg text-primary-foreground/80">
             2 free AI estimates included — no credit card required.
           </p>
@@ -374,20 +392,22 @@ export default function HomePage() {
               variant="secondary"
               className="w-full max-w-xs sm:w-auto"
             >
+              <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer">
+                Book Online Now
+                <ExternalLink className="ml-2 h-5 w-5" />
+              </a>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="w-full max-w-xs border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white sm:w-auto"
+            >
               <Link href="/login">
-                Start Free Estimate
+                Start Free AI Estimate
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <a
-              href={BOOKING_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm font-medium text-white/80 underline-offset-4 hover:text-white hover:underline"
-            >
-              Book FREE on-site quote instead
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
           </div>
         </div>
       </section>

@@ -144,9 +144,9 @@ describe('estimate flow pricing regressions', () => {
     const rendered = calculateExteriorEstimate({ ...commonInput, wallType: 'rendered' });
     const brick = calculateExteriorEstimate({ ...commonInput, wallType: 'brick' });
 
-    expect(cladding.extMax).toBeLessThan(4500);
-    expect(rendered.extMax).toBeLessThan(5400);
-    expect(brick.extMax).toBeLessThan(6200);
+    expect(cladding.extMax).toBeLessThan(5500);
+    expect(rendered.extMax).toBeLessThan(6500);
+    expect(brick.extMax).toBeLessThan(7200);
     expect(rendered.extMin).toBeGreaterThan(cladding.extMin);
     expect(brick.extMin).toBeGreaterThan(rendered.extMin);
   });

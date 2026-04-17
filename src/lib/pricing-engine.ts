@@ -17,21 +17,24 @@
 // NOTE: APARTMENT_ANCHORS_OIL is used for "Specific areas only" mode.
 // For "Entire property" mode, the APARTMENT_SQM_CURVE is used instead.
 export const APARTMENT_ANCHORS_OIL = {
-  Studio:    { min: 2200, max: 3500, median: 2700 },
-  OneBed:    { min: 2800, max: 4200, median: 3300 },
+  Studio: { min: 2200, max: 3500, median: 2700 },
+  OneBed: { min: 2800, max: 4200, median: 3300 },
   TwoBedStd: { min: 4300, max: 6200, median: 5000 },
-  TwoBedLg:  { min: 5000, max: 7500, median: 6000 },
-  ThreeBed:  { min: 6500, max: 9500, median: 7500 },
+  TwoBedLg: { min: 5000, max: 7500, median: 6000 },
+  ThreeBed: { min: 6500, max: 9500, median: 7500 },
 } as const;
 
-export const APARTMENT_SQM_CURVE: readonly { sqm: number; rawMedian: number }[] = [
-  { sqm: 35,  rawMedian: 2200 },
-  { sqm: 45,  rawMedian: 2800 },
-  { sqm: 55,  rawMedian: 3100 },
-  { sqm: 65,  rawMedian: 3450 },
-  { sqm: 80,  rawMedian: 3800 },
-  { sqm: 85,  rawMedian: 4350 },  // avg 2bed apartment — key calibration point
-  { sqm: 90,  rawMedian: 4300 },
+export const APARTMENT_SQM_CURVE: readonly {
+  sqm: number;
+  rawMedian: number;
+}[] = [
+  { sqm: 35, rawMedian: 2200 },
+  { sqm: 45, rawMedian: 2800 },
+  { sqm: 55, rawMedian: 3100 },
+  { sqm: 65, rawMedian: 3450 },
+  { sqm: 80, rawMedian: 3800 },
+  { sqm: 85, rawMedian: 4350 }, // avg 2bed apartment — key calibration point
+  { sqm: 90, rawMedian: 4400 },
   { sqm: 105, rawMedian: 4850 },
   { sqm: 120, rawMedian: 5800 },
   { sqm: 140, rawMedian: 6900 },
@@ -40,24 +43,41 @@ export const APARTMENT_SQM_CURVE: readonly { sqm: number; rawMedian: number }[] 
 ] as const;
 
 export const HOUSE_INTERIOR_ANCHORS = {
-  '2B1B': { min: 7500,  max: 11000, median: 9000  },
-  '3B2B': { min: 9500,  max: 14000, median: 11500 },
+  '2B1B': { min: 7500, max: 11000, median: 9000 },
+  '3B2B': { min: 9500, max: 14000, median: 11500 },
   '4B2B': { min: 13000, max: 18500, median: 15500 },
   '5B3B': { min: 17000, max: 25000, median: 20000 },
 } as const;
 
-export const EXTERIOR_WALL_TYPE_ANCHOR = {
-  cladding: { min: 3000, max: 12000, median: 5500 },
-  rendered:  { min: 4500, max: 17000, median: 9000 },
-  brick:     { min: 5500, max: 20000, median: 11500 },
-  default:   { min: 3500, max: 14000, median: 7000 },
-} as const;
-
 export const EXTERIOR_WALL_TYPE_FLOORS = {
-  cladding: { wallOnly: 2600, wallPlusEaves: 3600, fullExterior: 5200, doubleStoreyFullExterior: 7600,  tripleStoreyFullExterior: 10600 },
-  rendered:  { wallOnly: 3200, wallPlusEaves: 4500, fullExterior: 6200, doubleStoreyFullExterior: 8900, tripleStoreyFullExterior: 12300 },
-  brick:     { wallOnly: 3800, wallPlusEaves: 5400, fullExterior: 7400, doubleStoreyFullExterior: 10500, tripleStoreyFullExterior: 14500 },
-  default:   { wallOnly: 2900, wallPlusEaves: 4100, fullExterior: 5700, doubleStoreyFullExterior: 8100, tripleStoreyFullExterior: 11300 },
+  cladding: {
+    wallOnly: 2600,
+    wallPlusEaves: 3600,
+    fullExterior: 5200,
+    doubleStoreyFullExterior: 7600,
+    tripleStoreyFullExterior: 10600,
+  },
+  rendered: {
+    wallOnly: 3200,
+    wallPlusEaves: 4500,
+    fullExterior: 6200,
+    doubleStoreyFullExterior: 8900,
+    tripleStoreyFullExterior: 12300,
+  },
+  brick: {
+    wallOnly: 3800,
+    wallPlusEaves: 5400,
+    fullExterior: 7400,
+    doubleStoreyFullExterior: 10500,
+    tripleStoreyFullExterior: 14500,
+  },
+  default: {
+    wallOnly: 2900,
+    wallPlusEaves: 4100,
+    fullExterior: 5700,
+    doubleStoreyFullExterior: 8100,
+    tripleStoreyFullExterior: 11300,
+  },
 } as const;
 
 export const EXTERIOR_WALL_RATE_CURVES = {
@@ -139,20 +159,29 @@ export const DEFAULT_WALL_HEIGHT: Record<string, number> = {
 };
 
 export const EXTERIOR_WALL_AREA_BANDS = [
-  { minArea: 0,   maxArea: 75,   minMult: 0.45, maxMult: 0.58 },
-  { minArea: 76,  maxArea: 108,  minMult: 0.58, maxMult: 0.73 },
-  { minArea: 109, maxArea: 128,  minMult: 0.73, maxMult: 0.86 },
-  { minArea: 129, maxArea: 144,  minMult: 0.86, maxMult: 0.97 },
-  { minArea: 145, maxArea: 158,  minMult: 0.97, maxMult: 1.08 },
-  { minArea: 159, maxArea: 175,  minMult: 1.08, maxMult: 1.20 },
-  { minArea: 176, maxArea: 220,  minMult: 1.20, maxMult: 1.38 },
-  { minArea: 221, maxArea: 290,  minMult: 1.38, maxMult: 1.58 },
-  { minArea: 291, maxArea: 345,  minMult: 1.58, maxMult: 1.76 },
+  { minArea: 0, maxArea: 75, minMult: 0.45, maxMult: 0.58 },
+  { minArea: 76, maxArea: 108, minMult: 0.58, maxMult: 0.73 },
+  { minArea: 109, maxArea: 128, minMult: 0.73, maxMult: 0.86 },
+  { minArea: 129, maxArea: 144, minMult: 0.86, maxMult: 0.97 },
+  { minArea: 145, maxArea: 158, minMult: 0.97, maxMult: 1.08 },
+  { minArea: 159, maxArea: 175, minMult: 1.08, maxMult: 1.2 },
+  { minArea: 176, maxArea: 220, minMult: 1.2, maxMult: 1.38 },
+  { minArea: 221, maxArea: 290, minMult: 1.38, maxMult: 1.58 },
+  { minArea: 291, maxArea: 345, minMult: 1.58, maxMult: 1.76 },
   { minArea: 346, maxArea: 9999, minMult: 1.76, maxMult: 1.98 },
 ] as const;
 
-export const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: number; notes?: string }> = {
-  Wall: { minPct: 0.0, maxPct: 0.0, notes: 'Base includes walls for typical full exterior scope.' },
+// NOTE: EXTERIOR_AREA_UPLIFT_PCT is kept for reference only.
+// The active exterior estimate engine uses EXTERIOR_ITEM_ANCHORS instead.
+export const EXTERIOR_AREA_UPLIFT_PCT: Record<
+  string,
+  { minPct: number; maxPct: number; notes?: string }
+> = {
+  Wall: {
+    minPct: 0.0,
+    maxPct: 0.0,
+    notes: 'Base includes walls for typical full exterior scope.',
+  },
   Eaves: { minPct: 0.09, maxPct: 0.14 },
   Gutter: { minPct: 0.05, maxPct: 0.08 },
   Fascia: { minPct: 0.05, maxPct: 0.08 },
@@ -163,23 +192,87 @@ export const EXTERIOR_AREA_UPLIFT_PCT: Record<string, { minPct: number; maxPct: 
   Etc: { minPct: 0.04, maxPct: 0.1 },
 };
 
-export const EXTERIOR_DOOR_ANCHOR: Record<string, { min: number; max: number }> = {
-  Simple:   { min: 150, max: 280 },
+// Per-item standalone anchors — each exterior area has its own price, independent of wall size.
+// Used by the Specific areas only exterior estimate engine.
+// Sydney Northern Beaches 2026. storey tiers: single / double / triple.
+export const EXTERIOR_ITEM_ANCHORS: Record<
+  string,
+  {
+    single: { min: number; max: number };
+    double: { min: number; max: number };
+    triple: { min: number; max: number };
+  }
+> = {
+  Eaves: {
+    single: { min: 1200, max: 3500 },
+    double: { min: 1800, max: 5000 },
+    triple: { min: 2500, max: 7000 },
+  },
+  Gutter: {
+    single: { min: 500, max: 1500 },
+    double: { min: 800, max: 2200 },
+    triple: { min: 1200, max: 3200 },
+  },
+  Fascia: {
+    single: { min: 500, max: 1500 },
+    double: { min: 800, max: 2200 },
+    triple: { min: 1200, max: 3200 },
+  },
+  Pipes: {
+    single: { min: 300, max: 800 },
+    double: { min: 450, max: 1200 },
+    triple: { min: 650, max: 1700 },
+  },
+  // Generic trim anchor — used only when no specific items (doors/windows/architraves) are provided
+  'Exterior Trim': {
+    single: { min: 600, max: 2000 },
+    double: { min: 900, max: 3000 },
+    triple: { min: 1200, max: 4000 },
+  },
+  Etc: {
+    single: { min: 300, max: 1500 },
+    double: { min: 450, max: 2200 },
+    triple: { min: 650, max: 3000 },
+  },
+} as const;
+
+// Roof pricing — sqm-based with slope factor.
+// Actual roof area = floor sqm × pitchFactor (standard residential pitch ~25°).
+// Rate per sqm (of actual sloped area) rises with storey — higher = harder access.
+// Sydney Northern Beaches 2026.
+export const EXTERIOR_ROOF_RATE = {
+  pitchFactor: 1.3, // sloped area ≈ 30% larger than floor footprint
+  single: { min: 18, max: 42, floor: 3500 },
+  double: { min: 28, max: 58, floor: 5000 },
+  triple: { min: 38, max: 75, floor: 7000 },
+} as const;
+
+export const EXTERIOR_DOOR_ANCHOR: Record<
+  string,
+  { min: number; max: number }
+> = {
+  Simple: { min: 150, max: 280 },
   Standard: { min: 250, max: 420 },
-  Complex:  { min: 400, max: 680 },
+  Complex: { min: 400, max: 680 },
 };
 
-export const EXTERIOR_WINDOW_ANCHOR: Record<string, { min: number; max: number }> = {
-  Normal:        { min: 80,  max: 160 },
-  Awning:        { min: 130, max: 220 },
+export const EXTERIOR_WINDOW_ANCHOR: Record<
+  string,
+  { min: number; max: number }
+> = {
+  Normal: { min: 80, max: 160 },
+  Awning: { min: 130, max: 220 },
   'Double Hung': { min: 180, max: 320 },
-  French:        { min: 280, max: 500 },
+  French: { min: 280, max: 500 },
 };
 
-export const EXTERIOR_ARCHITRAVE_ANCHOR: Record<string, { min: number; max: number }> = {
-  Simple:   { min: 50,  max: 110 },
-  Standard: { min: 80,  max: 170 },
-  Complex:  { min: 140, max: 300 },
+export const EXTERIOR_ARCHITRAVE_ANCHOR: Record<
+  string,
+  { min: number; max: number }
+> = {
+  Simple: { min: 50, max: 110 },
+  Standard: { min: 80, max: 170 },
+  Complex: { min: 140, max: 300 },
 };
 
 export const EXTERIOR_FRONT_DOOR_ANCHOR = { min: 520, max: 880 } as const;
@@ -203,7 +296,10 @@ export const INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL = {
   Etc: { min: 1200, max: 1800, median: 1500 },
 } as const;
 
-export const INTERIOR_DOOR_ITEM_ANCHOR: Record<string, Record<string, number>> = {
+export const INTERIOR_DOOR_ITEM_ANCHOR: Record<
+  string,
+  Record<string, number>
+> = {
   oil_2coat: {
     'Door & Frame': 220,
     'Door only': 160,
@@ -236,13 +332,21 @@ export const INTERIOR_WINDOW_ITEM_ANCHOR = {
   oil_2coat: {
     Normal: { 'Window & Frame': 200, 'Window only': 150, 'Frame only': 110 },
     Awning: { 'Window & Frame': 235, 'Window only': 180, 'Frame only': 135 },
-    'Double Hung': { 'Window & Frame': 300, 'Window only': 230, 'Frame only': 175 },
+    'Double Hung': {
+      'Window & Frame': 300,
+      'Window only': 230,
+      'Frame only': 175,
+    },
     French: { 'Window & Frame': 400, 'Window only': 310, 'Frame only': 240 },
   },
   water_3coat_white_finish: {
     Normal: { 'Window & Frame': 275, 'Window only': 200, 'Frame only': 135 },
     Awning: { 'Window & Frame': 310, 'Window only': 230, 'Frame only': 160 },
-    'Double Hung': { 'Window & Frame': 375, 'Window only': 280, 'Frame only': 200 },
+    'Double Hung': {
+      'Window & Frame': 375,
+      'Window only': 280,
+      'Frame only': 200,
+    },
     French: { 'Window & Frame': 475, 'Window only': 360, 'Frame only': 265 },
   },
 } as const;
@@ -286,7 +390,7 @@ export const INTERIOR_HANDRAIL_ITEM_PRICING = {
 } as const;
 
 export const CAL_3B2B_FAIR_SINGLE_POINTS = [
-  { sqm: 120, min: 8500,  max: 11000 },
+  { sqm: 120, min: 8500, max: 11000 },
   { sqm: 135, min: 10000, max: 13500 },
   { sqm: 150, min: 12000, max: 15500 },
   { sqm: 180, min: 14500, max: 19000 },
@@ -311,7 +415,9 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-export function getRawMedianFromSqm(sqmInput: number | undefined | null): number {
+export function getRawMedianFromSqm(
+  sqmInput: number | undefined | null,
+): number {
   const sqm =
     sqmInput == null || !Number.isFinite(sqmInput) || isNaN(sqmInput)
       ? 90
@@ -333,9 +439,13 @@ export function getRawMedianFromSqm(sqmInput: number | undefined | null): number
   return a.rawMedian + (b.rawMedian - a.rawMedian) * t;
 }
 
-export function pickExteriorBand(wallArea?: number): { minMult: number; maxMult: number } {
+export function pickExteriorBand(wallArea?: number): {
+  minMult: number;
+  maxMult: number;
+} {
   const bands = EXTERIOR_WALL_AREA_BANDS;
-  if (!wallArea || wallArea <= 0) return { minMult: bands[0].minMult, maxMult: bands[0].maxMult };
+  if (!wallArea || wallArea <= 0)
+    return { minMult: bands[0].minMult, maxMult: bands[0].maxMult };
 
   for (let i = 0; i < bands.length - 1; i++) {
     const curr = bands[i];
@@ -348,16 +458,23 @@ export function pickExteriorBand(wallArea?: number): { minMult: number; maxMult:
       };
     }
   }
-  return { minMult: bands[bands.length - 1].minMult, maxMult: bands[bands.length - 1].maxMult };
+  return {
+    minMult: bands[bands.length - 1].minMult,
+    maxMult: bands[bands.length - 1].maxMult,
+  };
 }
 
 export function getExteriorWallRate(
   wallType: keyof typeof EXTERIOR_WALL_RATE_CURVES,
-  wallArea?: number
+  wallArea?: number,
 ): { min: number; max: number } {
-  const curve = EXTERIOR_WALL_RATE_CURVES[wallType] ?? EXTERIOR_WALL_RATE_CURVES.default;
+  const curve =
+    EXTERIOR_WALL_RATE_CURVES[wallType] ?? EXTERIOR_WALL_RATE_CURVES.default;
   const area =
-    wallArea == null || !Number.isFinite(wallArea) || isNaN(wallArea) || wallArea <= 0
+    wallArea == null ||
+    !Number.isFinite(wallArea) ||
+    isNaN(wallArea) ||
+    wallArea <= 0
       ? curve[0].wallArea
       : wallArea;
 
@@ -396,26 +513,36 @@ export function getInteriorHandrailWidthMultiplier(widthMm: number): number {
 export function calculateInteriorHandrailItemRange(
   lengthLm: number,
   widthMm: number,
-  system: keyof typeof INTERIOR_HANDRAIL_ITEM_PRICING
+  system: keyof typeof INTERIOR_HANDRAIL_ITEM_PRICING,
 ): { min: number; max: number } {
   const pricing = INTERIOR_HANDRAIL_ITEM_PRICING[system];
   const widthMultiplier = getInteriorHandrailWidthMultiplier(widthMm);
   return {
-    min: Math.round(Math.max(pricing.minJob.min, lengthLm * pricing.rate.min * widthMultiplier)),
-    max: Math.round(Math.max(pricing.minJob.max, lengthLm * pricing.rate.max * widthMultiplier)),
+    min: Math.round(
+      Math.max(
+        pricing.minJob.min,
+        lengthLm * pricing.rate.min * widthMultiplier,
+      ),
+    ),
+    max: Math.round(
+      Math.max(
+        pricing.minJob.max,
+        lengthLm * pricing.rate.max * widthMultiplier,
+      ),
+    ),
   };
 }
 
 export function getQtyScaleFactor(qty: number): number {
-  if (qty <= 3)  return 1.00;
-  if (qty <= 7)  return 0.92;
+  if (qty <= 3) return 1.0;
+  if (qty <= 7) return 0.92;
   if (qty <= 12) return 0.85;
-  return 0.80;
+  return 0.8;
 }
 
 export function calcTrimItemCost(
   items: { style?: string; type?: string; quantity: number }[],
-  anchor: Record<string, { min: number; max: number }>
+  anchor: Record<string, { min: number; max: number }>,
 ): { min: number; max: number } {
   let totalMin = 0;
   let totalMax = 0;
@@ -425,7 +552,7 @@ export function calcTrimItemCost(
     const a = anchor[key];
     if (!a) {
       throw new Error(
-        `Unknown trim anchor key "${key}". Expected one of: ${anchorKeys.join(', ')}`
+        `Unknown trim anchor key "${key}". Expected one of: ${anchorKeys.join(', ')}`,
       );
     }
     const qty = Math.max(0, item.quantity ?? 0);
@@ -464,20 +591,20 @@ export function capRangeWidthSmart(
   minVal: number,
   maxVal: number,
   _input: unknown,
-  context: 'interior' | 'exterior' | 'total' = 'interior'
+  context: 'interior' | 'exterior' | 'total' = 'interior',
 ): { min: number; max: number } {
   const gap = maxVal - minVal;
   let cap: number;
 
   if (context === 'exterior') {
-    if (minVal <= 10000) cap = 800;
-    else if (minVal <= 20000) cap = 1500;
-    else cap = 2500;
+    if (minVal <= 3000) cap = 1000;
+    else if (minVal <= 8000) cap = 1800;
+    else if (minVal <= 10000) cap = 1750;
+    else cap = 2000;
   } else {
     if (minVal <= 5000) cap = 1200;
     else if (minVal <= 10000) cap = 1800;
-    else if (minVal <= 18000) cap = 2500;
-    else cap = 3500;
+    else cap = 2000;
   }
 
   if (gap <= cap) return { min: minVal, max: maxVal };
@@ -486,7 +613,7 @@ export function capRangeWidthSmart(
 
 export function interpolateBySqm(
   points: readonly { sqm: number; min: number; max: number }[],
-  sqm: number
+  sqm: number,
 ): { min: number; max: number } {
   if (sqm <= points[0].sqm) {
     const p = points[0];

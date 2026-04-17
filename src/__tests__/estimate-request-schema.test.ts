@@ -77,6 +77,28 @@ describe('estimateRequestSchema', () => {
     );
   });
 
+  test('requires at least one Exterior Trim detail item when Exterior Trim is selected', () => {
+    const result = estimateRequestSchema.safeParse({
+      ...basePayload,
+      typeOfWork: ['Exterior Painting'],
+      scopeOfPainting: 'Specific areas only',
+      propertyType: 'House / Townhouse',
+      exteriorAreas: ['Exterior Trim'],
+      houseStories: '1 storey',
+      paintAreas: {
+        ceilingPaint: false,
+        wallPaint: false,
+        trimPaint: false,
+        ensuitePaint: false,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.success ? '' : result.error.flatten().fieldErrors.exteriorTrimItems?.[0]).toBe(
+      'Please select at least one exterior trim item.'
+    );
+  });
+
   test('rejects entire-property interior jobs when only ensuitePaint is true', () => {
     const result = estimateRequestSchema.safeParse({
       ...basePayload,

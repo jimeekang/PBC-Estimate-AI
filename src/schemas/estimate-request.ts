@@ -299,14 +299,47 @@ export const estimateRequestSchema = z
   )
   .refine(
     (data) => {
-      const trimOnly =
-        hasInteriorWork(data.typeOfWork) &&
+      if (!hasInteriorWork(data.typeOfWork)) return true;
+
+      const entireTrimOn =
+        data.scopeOfPainting === 'Entire property' && !!data.paintAreas?.trimPaint;
+      const specificTrimOnly =
+        data.scopeOfPainting === 'Specific areas only' && !!data.specificInteriorTrimOnly;
+      const specificRoomTrimOn =
         data.scopeOfPainting === 'Specific areas only' &&
-        !!data.specificInteriorTrimOnly;
-      if (!trimOnly) return true;
+        !data.specificInteriorTrimOnly &&
+        (data.interiorRooms ?? []).some((room) => room.paintAreas?.trimPaint);
+
+      const trimOptionsVisible = entireTrimOn || specificTrimOnly || specificRoomTrimOn;
+      if (!trimOptionsVisible) return true;
       return (data.trimPaintOptions?.trimItems ?? []).length > 0;
     },
-    { path: ['trimPaintOptions', 'trimItems'], message: 'Please select at least one trim item.' }
+    {
+      path: ['trimPaintOptions', 'trimItems'],
+      message: 'Select at least one trim item (Doors, Window Frames, or Skirting Boards).',
+    }
+  )
+  .refine(
+    (data) => {
+      if (!hasInteriorWork(data.typeOfWork)) return true;
+
+      const entireTrimOn =
+        data.scopeOfPainting === 'Entire property' && !!data.paintAreas?.trimPaint;
+      const specificTrimOnly =
+        data.scopeOfPainting === 'Specific areas only' && !!data.specificInteriorTrimOnly;
+      const specificRoomTrimOn =
+        data.scopeOfPainting === 'Specific areas only' &&
+        !data.specificInteriorTrimOnly &&
+        (data.interiorRooms ?? []).some((room) => room.paintAreas?.trimPaint);
+
+      const trimOptionsVisible = entireTrimOn || specificTrimOnly || specificRoomTrimOn;
+      if (!trimOptionsVisible) return true;
+      return !!data.trimPaintOptions?.paintType;
+    },
+    {
+      path: ['trimPaintOptions', 'paintType'],
+      message: 'Select a paint base (Oil or Water) for trim work.',
+    }
   )
   .refine(
     (data) => {

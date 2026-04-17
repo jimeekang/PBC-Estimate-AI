@@ -2939,6 +2939,9 @@ const showCeilingOptions =
                                   <div className="text-xs font-semibold text-primary">
                                     Select trim items to include
                                   </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Choose at least one trim detail so the estimate can price each item accurately.
+                                  </div>
 
                                   <FormField
                                     control={form.control}
@@ -3371,7 +3374,7 @@ const showCeilingOptions =
                     className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-0 text-lg font-bold text-primary-foreground shadow-lg transition-all h-14 hover:bg-primary/90"
                   >
                     <CalendarCheck className="h-6 w-6" />
-                    Book Free On-Site Quote
+                    Book Online for Final Quote
                     <ExternalLink className="ml-1 h-4 w-4" />
                   </a>
                 ) : (
@@ -3403,14 +3406,14 @@ const showCeilingOptions =
                 <div className="text-center p-6 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm space-y-2">
                   <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap">
                     <Calendar className="h-5 w-5 text-primary" />
-                    <span>Need an on-site assessment?</span>
+                    <span>Need a firm written quote instead?</span>
                     <a
                       href={BOOKING_URL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-primary font-bold underline hover:text-primary/80 transition-all inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-primary/20 shadow-sm"
                     >
-                      Book Free Quote <ExternalLink className="h-3 w-3" />
+                      Book Online Now <ExternalLink className="h-3 w-3" />
                     </a>
                   </p>
                 </div>

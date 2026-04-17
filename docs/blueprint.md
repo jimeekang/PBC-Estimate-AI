@@ -30,6 +30,16 @@ It generates instant indicative price ranges based on real historical quote data
 - Range width caps (interior vs exterior separate policies)
 - Price floor/ceiling enforcement (`MAX_PRICE_CAP = $35,000`)
 
+#### Trim Selection Rules
+
+Trim은 scope (specific / entire) 와 context (interior / exterior) 에 관계없이 동일한 강제 규칙을 따른다.
+
+- Trim 항목을 선택하면 **하위 세부 항목 선택이 필수(required)**
+- 하위 항목: window 종류 및 수량, door 종류 및 수량
+- **Specific Trim**: item-based 앵커 사용 (window/door 개수 × 단가)
+- **Entire Trim**: property-level 앵커 사용 (window/door 수량 범위에 따른 밴드 가격)
+- 어느 경우든 window/door 종류·수량 미입력 시 폼 제출 불가 (validation error)
+
 ### AI Integration
 - Genkit + Google Generative AI (Gemini 2.5 Flash)
 - AI generates a natural-language explanation of the estimate

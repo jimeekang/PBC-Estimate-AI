@@ -1,0 +1,759 @@
+================================================================================
+PBC ESTIMATE AI — 견적 테스트 체크리스트 & 가격 로직 감사 리포트
+Generated: 2026-04-16  |  Updated: 2026-04-17 (완벽 PASS 항목 숨김)
+Scope: src/lib/pricing-engine.ts, src/ai/flows/generate-painting-estimate*.ts,
+       src/lib/lite-estimate.ts, src/components/estimate/*
+Market: Sydney Northern Beaches 2026
+================================================================================
+
+본 문서는 두 파트로 구성됩니다.
+  PART A — 수동 테스트 체크리스트 (모든 견적 경우의 수)
+  PART B — 가격 로직 모순/오류 리포트 (심각성 기준 정렬)
+  PART C — 개선 권장사항 (우선순위 포함)
+
+--------------------------------------------------------------------------------
+PART A — 견적 경우의 수 체크리스트
+--------------------------------------------------------------------------------
+
+견적 UI의 디시전 트리 축:
+  A1. 견적 플로우 (Full estimate-form vs Lite-estimate-form)
+  A2. Type of Work (Interior / Exterior / Interior+Exterior)
+  A3. Property Type (Apartment / House / Townhouse / Office / Other)
+  A4. Scope (Entire property / Specific areas only)
+  A5. 옵션 모디파이어 (Condition, Stories, Wall type, Complexity, Ceiling type)
+
+각 케이스는 `[ ]` 체크박스로 하나씩 실행해 주세요.
+기대치(Expected Min / Max)는 노던비치 2026 시세 기반 rough 레퍼런스입니다.
+모두 AUD 기준, GST 제외.
+
+================================================================================
+A.1  LITE ESTIMATE (Quick guide)  —  /lite-estimate
+================================================================================
+[x] L0. Interior · All section 선택시 oil 선택 후 window, door, Skirting 선택안해도 넘어감
+        → 수정 완료 (2026-04-16):
+          src/schemas/estimate-request.ts 에 refine 2개 추가
+          ① paintAreas.trimPaint=true (Entire) 또는 specificInteriorTrimOnly 또는
+             어떤 room이 trimPaint=true일 때
+             trimPaintOptions.trimItems 배열이 비면 에러
+             "Select at least one trim item (Doors, Window Frames, or Skirting Boards)."
+          ② 동일 조건에서 paintType 누락 시 에러
+             "Select a paint base (Oil or Water) for trim work."
+          체크리스트 V-NEW1/V-NEW2로 회귀 테스트 포함.
+
+[x] L4.  Apartment · Interior · 2Bed2Bath · 90sqm · Fair
+         Expected: $3,200 – $4,650        Actual: $3,354 – $4,025  (PASS)
+         ⚠ 90sqm < 85sqm (B.2 버그 재현: rawMedian 4350 → 4300)
+[x] L6.  Apartment · Interior · 3Bed2Bath · 110sqm · Poor
+         Expected: $4,200 – $6,600        Actual: $4,030 – $5,167
+         ⚠ Poor인데 max가 Fair와 차이 작음 — cap이 Poor 상단 먹는 B.6 재현 가능성
+[x] L15. House · Exterior · 3B/2B · 140sqm · 2 storey · cladding · Fair
+         Expected: $7,000 – $11,000       Actual: $10,592 – $14,092
+         ⚠ 기대치보다 +$3~4k 상향 — Expected 재보정 혹은 STORY_MODIFIER 재검토 필요
+[x] L16. House · Exterior · 3B/2B · 140sqm · 3 storey · brick · Poor
+         Expected: $14,500 – $22,000      Actual: $21,684 – $26,684
+         ⚠ 기대치 +$7k 이상 — 3-storey brick Poor 의도적 상향인지 확인
+
+================================================================================
+A.2  FULL ESTIMATE  —  APARTMENT INTERIOR
+================================================================================
+
+--- A.2.1  Apartment · Entire property (SQM curve) -----------------------------
+     실행: src/__tests__/checklist-apartment-interior.test.ts (2026-04-16)
+
+[x] AE5.  2Bed2Bath 85sqm · wall+ceiling+trim · Water-based · Doors(French)
+          Expected: 기본 대비 4-6% 상승
+          Actual:  baseline(flush) $4,084 – $4,866 → french $4,330 – $5,158
+                   lift +6.0% / +6.0%  (PASS)
+[x] AE6.  3Bed2Bath 110sqm · wall+ceiling+trim+ensuite · Poor
+          Actual: $4,650 – $5,850  (PASS)
+          ⚠ 동일 scope 3B2B110 Fair 대비 Poor 상승폭 작음 → B.6 재현
+[x] AE7.  2Bed2Bath 85sqm · wall만 · Fair (ceiling/trim 제외)
+          Actual: $3,393 – $4,072
+[x] AE8.  2Bed2Bath 85sqm · ceiling만 · Fair
+          Actual: $3,393 – $4,072
+[x] AE9.  2Bed2Bath 85sqm · trim만 · Fair     ← trim-only branch
+          Actual: $3,393 – $4,072
+          ⚠ B.NEW2 [CRITICAL] AE7=AE8=AE9 완전히 동일
+             → Apartment Entire 모드에서 paintAreas 단일 선택시
+               surface별 가격 차이가 0. Wall만, Ceiling만, Trim만 모두
+               같은 가격. sumAreaFactorWholeApartment() 동작 확인 필요.
+
+--- A.2.2  Apartment · Specific areas only -------------------------------------
+     실행: src/__tests__/checklist-apartment-interior.test.ts (2026-04-16)
+
+[x] AS4.  Bathroom 1개만 · wall · Fair
+          Expected: 최소 $1,050 (single-room apt floor)
+          Actual: $800 – $1,200
+          ⚠ B.NEW3 Single-room apt floor($1,050)이 적용되지 않음. 전역
+            최소 $800로 clamp되어 bathroom만 선택 시 doc 기대치 미달.
+[x] AS6.  Stairwell 1개만 · wall+ceiling · Fair
+          Expected: 최소 $1,100
+          Actual: $800 – $1,200
+          ⚠ B.NEW3 Stairwell floor($1,100)이 적용되지 않음. AS4와 동일 원인.
+[x] AS7.  Handrail 1개만 · paint-to-paint water 3coat · 4lm × 70mm
+          Actual: $800 – $1,200
+          ⚠ Handrail 자체 가격(rate 180-210 × 4lm = 720-840) 보다
+            전역 floor($800)가 높아 floor로 치환됨. rate × 4lm가 minJob
+            보다 낮은 case가 floor로 덮이는지 확인 필요.
+[x] AS18. TwoBedStd 90sqm boundary vs TwoBedLg 91sqm (class cliff)
+          Expected: 불연속 가격 점프 확인 (B.8 참조)
+          Actual:  90sqm → $1,221 – $1,889
+                   91sqm → $1,221 – $1,889 (완전 동일, Δ=0)
+          ⚠ B.NEW4 Specific mode에선 single-room 기준 base anchor로 계산
+            되어 TwoBedStd/TwoBedLg class cliff 자체가 적용되지 않음.
+            Entire/Specific baseline 불일치(B.8) 재확인.
+
+================================================================================
+A.3  FULL ESTIMATE  —  HOUSE / TOWNHOUSE INTERIOR
+================================================================================
+
+--- A.3.1  House · Entire property --------------------------------------------
+     실행: src/__tests__/checklist-house-interior.test.ts (2026-04-17)
+     수정: shouldApply3B2BSingleHouseCalibration — condition 체크 제거 (모든 조건 calibration)
+           decorative ceiling modifier — calibration 이후로 이동 (BUG FIX)
+
+[x] HE1.  2B/1B · 90sqm · 1 storey · Fair · wall+ceiling
+          Expected: $7,500 – $11,000 floor
+          Actual: $6,984 – $7,632
+          ⚠ B.NEW5 anchor.min × areaFactor floor가 적용되지 않아 $16 미달
+            (ENTIRE_HOUSE_BAND.min(0.97) × median(9000) × areaFactor(0.80) = 6984,
+             floorMin = anchor.min(7500) × areaFactor(0.80) × 0.98 = 5880 — floor 미흡)
+[x] HE9.  4B/2B · 180sqm · 2 storey · Poor · Difficult access + Stairs
+          Expected: $18,000+ (체크리스트 기대)
+          Actual: $14,406 – $16,578
+          ⚠ 기대치보다 $3.5k 낮음 — Poor condition이 ENTIRE_HOUSE_BAND(narrow)로만 처리되어
+            4B2B에는 calibration curve 없음. B.5 연장.
+[x] HE10. 5B/3B · 230sqm · 3 storey · Poor · 모든 complexity
+          Expected: 30k+           Actual: $21,895 – $25,395
+          ⚠ 기대치보다 낮음 — 5B3B anchor(median 20000) × Poor band(max 1.10)로 상단 제한됨
+[x] HE11. Entire property wall+ceiling+trim+ensuite · Water-based 모든 trim items
+          Actual: $10,667 – $13,167 (base w+c: $10,667 – $13,167)
+          ⚠ 3B2B Fair 1st storey calibration이 trim/ensuite 가산분 override — 알려진 제한
+
+--- A.3.2  House · Specific areas only -----------------------------------------
+     (모든 항목 PASS — 생략됨)
+
+================================================================================
+A.4  FULL ESTIMATE  —  EXTERIOR
+================================================================================
+
+--- A.4.A  Fixed on 2026-04-17 ------------------------------------------------
+
+[x] EXT6. Exterior Trim area 선택 but 아이템 없음 → 스키마 에러 유지
+          Issue: Exterior Trim은 generic fallback보다 itemized pricing 정확도가 우선이므로 세부 아이템 필수 정책이 맞음.
+          Change:
+          - estimateRequestSchema에서 exteriorTrimItems required refine 유지
+          - estimate-form 안내 문구를 itemized pricing 기준으로 수정
+          - estimate-request-schema.test에 exteriorTrimItems 필수 검증 케이스 반영
+          Result: Exterior Trim 선택 시 세부 아이템이 없으면 제출 불가
+
+--- A.4.B  Remaining manual verification --------------------------------------
+
+[ ] EX8.  Full exterior · 180sqm · 2 storey · rendered · Poor
+[ ] EX9.  Full exterior · 230sqm · 3 storey · brick · Poor + Difficult access
+[ ] EXT1. Exterior Trim + Doors(Simple, 2개) · 1 storey
+[ ] EXT2. Exterior Trim + Doors(Complex, 4개) + Windows(French, 6개)
+[ ] EXT3. Exterior Trim + Architraves(Standard, 8개)
+[ ] EXT4. Front Door only (다른 trim 없음)                     ← front-door-only
+[ ] EXT5. Front Door + Doors + Windows 병행
+[ ] EXR2. Roof only · 140sqm · 2 storey
+[ ] EXR4. Wall + Roof · 200sqm · 2 storey
+[ ] EXD1. Deck only · 20sqm · stain-oil · good
+          Expected: 최소 $600
+[ ] EXD2. Deck only · 50sqm · paint-conversion · damaged
+[ ] EXD3. Deck only · 200sqm · stain-water · weathered
+          Expected: $22,000 ceiling hit      ← B.12 리스크
+[ ] EXD4. Wall + Deck 조합
+[ ] EXP1. Paving only · 30sqm · good
+          Expected: 최소 $950
+[ ] EXP2. Paving only · 150sqm · poor
+          Expected: $22 × 1.45 × 150 = ~$4,785 min
+[ ] EXP3. Wall + Deck + Paving + Roof 전부 조합 · 2 storey · Poor
+[ ] EXE7. 'Etc' area 선택 + otherExteriorArea 텍스트
+
+================================================================================
+A.5  MODIFIER 조합 매트릭스
+================================================================================
+
+[ ] MX1.  Excellent / Fair / Poor 비교 (같은 property에서)
+[ ] MX2.  1/2/3 storey 비교 (같은 property에서)
+[ ] MX3.  Ceiling type Flat vs Decorative (+10%)
+[ ] MX4.  Complexity factors: Stairs / High ceilings / Mouldings / Difficult
+          access — 단독 및 조합
+[ ] MX5.  Maintenance vs Preparing for sale (timingPurpose) — 현재 가격 영향
+          없음 검증
+[ ] MX6.  location input Google Places autocomplete (AU)
+[ ] MX7.  trimPaintType: Oil-based vs Water-based 차이 확인
+
+================================================================================
+A.6  폼 / 스키마 검증
+================================================================================
+
+[ ] V4.  interiorRooms.approxRoomSize <= 0 → 에러
+[ ] V5.  Skirting Boards 선택 but linearMetres/rooms 없음 → 에러
+[ ] V7.  wallType이 cladding/rendered/brick 외 값 → 스키마 에러
+
+================================================================================
+A.7  출력 / 포맷 검증
+================================================================================
+
+[ ] OP1. priceRange 형식: "AUD 10,000 - 15,000"
+[ ] OP2. priceRange 35000+ 시: "From AUD 35,000+ (Site Inspection Required)"
+[ ] OP3. Interior+Exterior 동시 선택 시 breakdown에 interior/exterior/total 모두
+[ ] OP4. Trim items 포함 시 trimPricingNote 추가
+[ ] OP5. Front Door 포함 시 frontDoorPricingNote 추가
+[ ] OP6. Deck 포함 시 "Deck (X sqm) — [service] / [condition]: AUD X - Y" 줄
+[ ] OP7. Paving 포함 시 "Paving (X sqm) — [condition], 2-coat system: AUD X - Y"
+[ ] OP8. interior_itemized 모드: priceRange 형식 "AUD X + GST"
+
+
+================================================================================
+PART B — 가격 로직 모순/오류 리포트 (심각성 기준)
+================================================================================
+
+각 이슈는 심각도 / 영향 / 재현 / 원인 / 제안 수정안 순으로 정리.
+
+--------------------------------------------------------------------------------
+B.1  [CRITICAL] [CONFIRMED 2026-04-16]  Roof pricing min == max 결과 (range width = 0)
+--------------------------------------------------------------------------------
+테스트 재현 (src/__tests__/checklist-verification.test.ts, B.1 테스트):
+  approxSize=50, 3 storey, Roof only
+  roofArea = 65 sqm
+  rawMin = 65 × 38 = 2,470
+  rawMax = 65 × 75 = 4,875
+  floor  = 7,000  ← triple-storey floor
+  clampedMin = max(2470, 7000) = 7,000
+  clampedMax = max(4875, 7000) = 7,000
+  → width = 0 (BUG CONFIRMED)
+
+File:    src/ai/flows/generate-painting-estimate.exterior.ts:328-336
+         src/lib/pricing-engine.ts:243-248 (EXTERIOR_ROOF_RATE)
+
+재현:
+  approxSize=50, 1 storey, Roof only.
+  roofArea = 50 × 1.3 = 65 sqm
+  roofMin = max(65 × 18, 3500) = 3500
+  roofMax = 65 × 42 = 2730
+  → rangeMin += 3500, rangeMax += max(2730, 3500) = 3500
+  최종 범위 폭이 0, min == max.
+
+원인:
+  Roof에 고정 floor($3,500)가 있는데, rate × area가 floor보다 작을 때
+  max도 floor로 올려서 min == max가 됨.
+
+영향:
+  사용자에게 단일 가격을 "Range"로 표시 → 모델의 리스크 신호 소실.
+  소형 지붕 + 단층 조합에서 자주 발생 예상.
+
+제안:
+  roofMax에도 별도 ceiling buffer (예: floor × 1.25) 적용해 최소 폭 확보.
+    const effectiveRoofFloorMax = roofRate.floor * 1.25;
+    roofMax = Math.max(roofArea * roofRate.max, effectiveRoofFloorMax);
+
+--------------------------------------------------------------------------------
+B.2  [CRITICAL] [CONFIRMED 2026-04-16]  APARTMENT_SQM_CURVE 비단조성 (85→90sqm 가격 하락)
+--------------------------------------------------------------------------------
+테스트 재현:
+  APARTMENT_SQM_CURVE[85].rawMedian = 4,350
+  APARTMENT_SQM_CURVE[90].rawMedian = 4,300
+  getRawMedianFromSqm(85) = 4,350
+  getRawMedianFromSqm(90) = 4,300
+  → 90sqm 견적이 85sqm보다 $50 낮음 (monotonic violation)
+  Lite L3 vs L4에서 동일 조건 Fair: $3,393-$4,072 vs $3,354-$4,025
+  (BUG CONFIRMED)
+
+File:    src/lib/pricing-engine.ts:27-43 (APARTMENT_SQM_CURVE)
+
+재현:
+  85sqm → rawMedian 4,350
+  90sqm → rawMedian 4,300   ← 5sqm 증가인데 -$50
+  85sqm과 90sqm 사이 interior 견적 시 큰 집이 더 싸게 나올 수 있음.
+
+원인:
+  주석에 "85sqm — key calibration point"이라고 기재되어 있으나,
+  그 다음 포인트(90sqm)를 감각적으로 낮게 잡음.
+  선형 보간 로직(lines 430-434)에서 역행 발생.
+
+영향:
+  같은 Fair 조건의 85sqm apt가 90sqm apt보다 견적이 높게 나옴.
+  sale agent 설명 불가능. 신뢰도 저하.
+
+제안:
+  curve를 단조 증가로 재조정. 예:
+    { sqm: 85, rawMedian: 4200 },   // 또는 90: 4400 로 올림
+    { sqm: 90, rawMedian: 4400 },
+  테스트로 단조성 검증 추가:
+    it('APARTMENT_SQM_CURVE is monotonically non-decreasing', ...)
+
+--------------------------------------------------------------------------------
+B.3  [HIGH]  Exterior full-exterior floor 매핑에 Eaves 의존 과다
+--------------------------------------------------------------------------------
+File:    src/ai/flows/generate-painting-estimate.exterior.ts:389-410
+
+재현:
+  Wall + Gutter + Fascia (Eaves 없음) · 1 storey · cladding
+  hasEaves = false, isFullExterior = false
+  → floor = wallOnly ($2,600)
+  하지만 실제 scope은 Gutter + Fascia까지 포함해서 $3,600 이상 필요.
+
+원인:
+  floor 결정 분기가 Eaves 포함 여부만 체크. Gutter/Fascia만 있는 중간 범위는
+  wallPlusEaves floor로 승격되지 않음.
+
+영향:
+  cladding 하우스에서 Eaves 제외 + Gutter/Fascia 포함 견적이 과소 책정됨.
+  (rangeMax 계산엔 각 item anchor가 합산되므로 총액은 맞지만, floor 하한선이
+  wallOnly 수준이라 Poor condition 등 낮은 가격대에서 floor 보호가 약함)
+
+제안:
+  floor 결정 로직 개선:
+    const scopeCount = [hasEaves, hasGutter, hasFascia, hasTrim].filter(Boolean).length;
+    const floor = isFullExterior ? fullExteriorTier
+                : scopeCount >= 2  ? wallPlusEaves
+                : hasEaves         ? wallPlusEaves
+                :                    wallOnly;
+
+--------------------------------------------------------------------------------
+B.4  [HIGH]  Triple-storey Exterior floor가 isFullExterior 아니면 적용 안 됨
+--------------------------------------------------------------------------------
+File:    src/ai/flows/generate-painting-estimate.exterior.ts:401-410
+
+재현:
+  Wall + Eaves · 3 storey · cladding (not full exterior)
+  isTriple=true, isFullExterior=false
+  → floor = wallPlusEaves ($3,600, single-storey 기준)
+  3층 집은 access 자체가 +35% 이상 비싼데 single-storey floor 적용됨.
+
+원인:
+  floor 매트릭스에 tripleStoreyWallOnly / tripleStoreyWallPlusEaves 항목 없음.
+  현재는 tripleStoreyFullExterior만 정의됨.
+
+영향:
+  3-storey partial-scope 견적 전부 과소평가.
+
+제안:
+  EXTERIOR_WALL_TYPE_FLOORS에 multi-storey partial 티어 추가:
+    doubleStoreyWallOnly, doubleStoreyWallPlusEaves,
+    tripleStoreyWallOnly, tripleStoreyWallPlusEaves
+  또는 storyMult을 floor에도 곱해주기:
+    floor * (isTriple ? 1.35 : isDouble ? 1.18 : 1)
+
+--------------------------------------------------------------------------------
+B.5  [HIGH]  CONDITION_MULTIPLIER / HOUSE_ / EXTERIOR_ 불일치
+--------------------------------------------------------------------------------
+File:    src/lib/pricing-engine.ts:127-143
+
+현황:
+  CONDITION_MULTIPLIER          Excellent {0.95, 1.05}  Fair {1.08, 1.22}  Poor {1.22, 1.55}
+  HOUSE_CONDITION_MULTIPLIER    Excellent {1.00, 1.08}  Fair {1.10, 1.24}  Poor {1.22, 1.40}
+  EXTERIOR_CONDITION_MULTIPLIER Excellent {1.00, 1.08}  Fair {1.10, 1.24}  Poor {1.22, 1.40}
+
+  Apartment CONDITION_MULTIPLIER만 Excellent min=0.95 (discount), Poor max=1.55 (가장 큼).
+  House/Exterior는 1.0부터 시작.
+
+영향:
+  같은 Excellent 조건이어도 Apartment specific 견적은 median 대비 -5%까지 내려가고,
+  House는 discount 없음. 내부 일관성 깨짐.
+  Poor 조건에서 Apartment가 더 과격한 uplift(+55%) 적용 → 합리성 재검토 필요.
+
+제안:
+  - 세 multiplier 간 정책 방향을 문서화 (discount/premium 허용 여부).
+  - Apartment도 Excellent min=1.0으로 통일하거나, House에도 discount 허용으로
+    결정. 실거래 데이터 기반 calibration 필요.
+
+--------------------------------------------------------------------------------
+B.6  [HIGH]  capRangeWidthSmart가 Poor condition의 상단 리스크를 소거
+--------------------------------------------------------------------------------
+File:    src/lib/pricing-engine.ts:590-613
+
+현황:
+  Interior $5k 이하 → cap 1,200.
+  Poor 조건으로 base max가 크게 벌어져도 cap 1,200에서 잘림.
+
+영향:
+  Poor 조건의 불확실성(= 가격 상단) 신호를 고객에게 전달 못 함.
+  실제 현장서 추가비용 발생 시 expectation management 실패 가능.
+
+제안:
+  condition-aware cap: Poor이면 cap을 1.5x로 확장:
+    const cap = baseCap * (input.paintCondition === 'Poor' ? 1.5 : 1);
+  또는 cap을 제거하고 UI에서 "Poor 조건은 편차가 큽니다" 안내 배너 추가.
+
+--------------------------------------------------------------------------------
+B.7  [HIGH]  Interior Difficult Access uplift가 Double storey에서 더 낮음
+--------------------------------------------------------------------------------
+File:    src/ai/flows/generate-painting-estimate.ts:692-700
+
+현황:
+  Difficult access areas:
+    1 storey:  +1% ~ +3%
+    2/3 storey: +0.5% ~ +1%    ← 더 낮음
+
+원인 (주석):
+  "Difficult access is handled strongly in exterior section, so avoid
+   double-counting in interior section for multi-storey."
+
+영향:
+  Interior만 하는 다층집 프로젝트에서 Difficult access premium이 거의 0.
+  Exterior 안 찍는 경우 double-counting이 아니라 undercount 발생.
+
+제안:
+  interior-only 플래그 체크 후 분기:
+    if (isInteriorOnly) → full uplift
+    else (with exterior) → reduced uplift (현행)
+
+--------------------------------------------------------------------------------
+B.8  [HIGH]  Apartment Entire vs Specific 가격 baseline 불일치
+--------------------------------------------------------------------------------
+File:    src/lib/pricing-engine.ts:19-25, 27-43
+
+현황:
+  - Entire property (apt): APARTMENT_SQM_CURVE 사용 (85sqm→$4,350)
+  - Specific areas (apt): APARTMENT_ANCHORS_OIL 사용 (TwoBedStd median $5,000)
+  같은 85sqm 2bed apt이 scope만 바꿔도 base 차이 $650.
+
+영향:
+  한 집에서 scope 선택만 다르게 해서 견적 두 번 뽑으면 논리적으로 비교 불가능.
+  고객 신뢰 저하. sales team 설명 부담.
+
+제안:
+  SQM CURVE를 single source of truth로 삼고, Specific 모드도 curve에서
+  파생된 base × partialRatio로 통일. 또는 반대로 ANCHORS를 단일화.
+  현재는 두 시스템이 독립 진화 중이라 long-term maintenance risk.
+
+--------------------------------------------------------------------------------
+B.9  [MEDIUM]  ENTIRE_HOUSE_BAND 중복 정의 (single source violation)
+--------------------------------------------------------------------------------
+File:    src/ai/flows/generate-painting-estimate.ts:119-123
+         src/lib/lite-estimate.ts:23-27
+         (같은 값이 두 곳에 복사)
+
+영향:
+  한쪽만 수정하면 Lite와 Full 견적 간 불일치 발생.
+  pricing-engine.ts의 SSoT 원칙을 위반.
+
+제안:
+  ENTIRE_HOUSE_BAND와 ENTIRE_APT_BAND를 pricing-engine.ts로 이동 후 re-export.
+
+--------------------------------------------------------------------------------
+B.10  [MEDIUM]  STORY_MODIFIER 라벨 중복 및 누락
+--------------------------------------------------------------------------------
+File:    src/lib/pricing-engine.ts:145-151
+
+현황:
+  '1 storey' / 'Single story'        → 1.0
+  '2 storey' / 'Double story or more' → 1.18
+  '3 storey'                          → 1.35
+  하지만 '3 storey' 에 해당하는 "Triple story or more" 라벨은 없음.
+  UI에선 어떤 라벨 세트를 쓰는지 혼재 — 폼(Lite)은 '1/2/3 storey' 만 사용.
+
+영향:
+  legacy 라벨 유지 보수 부담. STORY_MODIFIER[unknown] = 1.0 fallback 때문에
+  오타/누락 시 silent default로 잘못된 견적.
+
+제안:
+  - 신규 라벨 '1 storey' / '2 storey' / '3 storey' 로 단일화.
+  - legacy 라벨은 deprecated alias로만 유지.
+  - pricing-engine에 assertKnownStory(story) 헬퍼 추가 → unknown 시 throw.
+
+--------------------------------------------------------------------------------
+B.11  [MEDIUM]  Deck area band multiplier가 rate와 이중 스케일링
+--------------------------------------------------------------------------------
+File:    src/ai/flows/generate-painting-estimate.exterior.ts:49-56, 91-96
+
+현황:
+  DECK_RATE_PER_M2: 'stain-oil': { min: 32, max: 60 }
+  getDeckAreaBandMult: 20sqm 이하 +15%, 50~100 -10%, 100+ -18%
+
+  최종: rate × areaMult × conditionMult × area
+  Paving은 area band별 rate를 직접 설정 (이중 없음).
+
+영향:
+  Deck와 Paving이 다른 모델 → maintainer 실수 유발.
+  소형 deck(<20sqm)은 rate도 통상 더 비싼데 추가로 +15% 적용.
+
+제안:
+  Paving처럼 PAVING_RATE_PER_M2 구조로 통일하거나,
+  rate는 m² base만 두고 area band는 스케일 팩터로만 남기고 주석 명시.
+
+--------------------------------------------------------------------------------
+B.12  [MEDIUM]  Deck project ceiling ($22,000)이 MAX_PRICE_CAP($35,000) 미만
+--------------------------------------------------------------------------------
+File:    src/ai/flows/generate-painting-estimate.exterior.ts:65
+         src/lib/pricing-engine.ts:118
+
+재현:
+  200sqm 대형 deck, weathered, stain 조합 → rate × area × mult > $22,000
+  최종 deckCost.max = 22,000으로 잘림.
+
+영향:
+  대형 deck-only 프로젝트가 underquoted. 실제 견적이 22k 초과인 경우 표현 못 함.
+
+제안:
+  MAX_PRICE_CAP과 정렬하거나, deck의 경우 site inspection 뱃지로 안내:
+    if (raw > DECK_PROJECT_CEILING) → return { min: floor, max: MAX_PRICE_CAP }
+    + UI에 "대형 deck은 현장 확인 권장" 뱃지.
+
+--------------------------------------------------------------------------------
+B.13  [MEDIUM]  INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL: Lounge와 Living Room 동일
+--------------------------------------------------------------------------------
+File:    src/lib/pricing-engine.ts:286-288
+
+현황:
+  'Living Room': { min: 2200, max: 3200, median: 2650 }
+  Lounge:        { min: 2200, max: 3200, median: 2650 }
+  완전 동일.
+
+영향:
+  UI에서 두 옵션을 분리 제공하지만 내부 가격 차이 없음.
+  고객 혼란 + 데이터 수집 시 의미 없는 구분.
+
+제안:
+  UI에서 한 옵션으로 통합 ('Living Room / Lounge'),
+  또는 Lounge를 별개 의미(예: 가족실 vs 응접실)로 정의해 anchor 분리.
+
+--------------------------------------------------------------------------------
+B.14  [MEDIUM]  EXTERIOR_WALL_TYPE_FLOORS.default가 curve와 불일치
+--------------------------------------------------------------------------------
+File:    src/lib/pricing-engine.ts:52-81
+
+현황:
+  floors.default가 cladding과 rendered 사이 값으로 설정됨 (wallOnly 2900).
+  하지만 curve.default (lines 108-115)는 독자적 값으로 설계.
+  wallType = undefined 시 "default"로 fallback되는데 cladding/rendered/brick
+  중 하나여야 사실 정상 flow.
+
+영향:
+  폼 검증 미흡 시 wallType 누락 → default로 계산 → 오해의 소지.
+
+제안:
+  EXTERIOR_WALL_TYPE_FLOORS.default와 curve.default 제거 후 required 필드로
+  스키마 강화. 또는 default 사용 시 UI에 "wall type 미지정 — 보수적 추정" 경고.
+
+--------------------------------------------------------------------------------
+B.15  [LOW]  calcTrimItemCost가 unknown style/type에서 throw
+--------------------------------------------------------------------------------
+File:    src/lib/pricing-engine.ts:550-564
+
+영향:
+  스키마 변경 / 타이포 시 runtime throw → 500 에러.
+  UI 스키마와 anchor 키가 한번이라도 어긋나면 전체 견적 실패.
+
+제안:
+  정상 운영에서는 throw가 맞음 (스키마 sync 강제). 하지만 production 복원력
+  을 위해 fallback('Standard') 옵션 환경변수로 제공.
+  기존 assertion 은 dev/test에서만 throw 하도록 NODE_ENV 가드.
+
+--------------------------------------------------------------------------------
+B.16  [LOW]  MAX_PRICE_CAP 35,000은 3+ storey 풀리노에 부족
+--------------------------------------------------------------------------------
+File:    src/lib/pricing-engine.ts:118
+
+현황:
+  3 storey · full exterior · brick · Poor + Difficult access 조합은 쉽게
+  $35,000 초과 (노던비치 시세 기준 40-55k 빈번).
+
+영향:
+  실제 견적이 cap에 부딪혀 'Site Inspection Required'로 표시됨 — 동작 자체는
+  OK지만, range 상단이 사라져 고객이 가격대 감 못 잡음.
+
+제안:
+  MAX_PRICE_CAP을 $50,000 으로 상향. 대신 UI에서 $30,000 초과 시
+  "현장 방문 강력 권장" 뱃지 + 자동 booking CTA.
+
+--------------------------------------------------------------------------------
+B.17  [LOW]  roomScore fallback (0.6) 과소
+--------------------------------------------------------------------------------
+File:    src/ai/flows/generate-painting-estimate.ts:459-461, 113 (ROOM_WEIGHT)
+
+현황:
+  ROOM_WEIGHT[unknown] → 0.6.
+  같은 'Etc' 가중치로 처리됨. 커스텀 대형 공간 (예: Rumpus, Theatre)이 저평가.
+
+제안:
+  UI 'Etc' 옆에 "예상 크기(sqm)" 입력 강제 → weight 동적 산출,
+  또는 default를 1.0으로 올리고 'Etc'만 0.6으로 명시.
+
+--------------------------------------------------------------------------------
+B.NEW1 [RESOLVED 2026-04-17] Entire Apartment French 도어 premium — 정상 작동
+--------------------------------------------------------------------------------
+  INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT.french = 0.06 (6% whole-job lift)
+  Actual: baseline $4,084–$4,866 → french $4,330–$5,158 (+6.0% / +6.0%)
+  Expected: 4-6% 상승. 현재 6.0%로 범위 상한 내 PASS.
+  테스트 기대치: >= 0.04 (AE5)
+
+--------------------------------------------------------------------------------
+B.NEW2 [CRITICAL] [2026-04-16 발견] Entire Apartment paintAreas 단일 선택
+       시 surface별 가격 차이가 0
+--------------------------------------------------------------------------------
+재현 (checklist-apartment-interior.test.ts AE7/AE8/AE9):
+  2B2B · Apartment · 85sqm · Fair, 입력 paintAreas 만 다름:
+    wall만   (AE7) → $3,393 – $4,072
+    ceiling만 (AE8) → $3,393 – $4,072
+    trim만   (AE9) → $3,393 – $4,072
+  세 케이스 결과가 완전히 동일.
+
+예상 동작:
+  sumAreaFactorWholeApartment()가 각 surface를 가중치 합산해야 하므로
+  wall 단독 vs ceiling 단독 vs trim 단독은 각자 다른 areaFactor가 되어야 함.
+  AREA_SHARE: ceilingPaint / wallPaint / trimPaint = 0.35 / 0.45 / 0.2
+  와 같이 설계된 의도와 충돌.
+
+재현 경로 (추정):
+  sumAreaFactorWholeApartment는 최소값 floor(예: 0.85)를 적용하거나
+  모든 surface 선택과 동일한 factor로 degradation 되는 듯. 코드 확인 필요.
+
+영향:
+  고객이 scope을 줄였는데 가격이 똑같이 나옴 — 실제 판매자가 설명 불가능.
+  "ceiling only = wall only = trim only" 오류는 첫 인상 신뢰도 치명타.
+
+제안:
+  src/lib/pricing-engine.ts 의 sumAreaFactorWholeApartment 구현 점검.
+  AREA_SHARE 가중치가 정상 반영되도록 하고, 최소 factor floor 는
+  0.85 → 0.5 수준까지 내려 구분 신호가 유지되게.
+
+--------------------------------------------------------------------------------
+B.NEW3 [MEDIUM] [2026-04-16 발견] Single-room Apartment/Stairwell floor
+       ($1,050 / $1,100)이 적용되지 않고 전역 $800–$1,200 cap으로 내림
+--------------------------------------------------------------------------------
+재현 (AS4, AS6):
+  Bathroom only Apartment Specific Fair → $800 – $1,200
+  Stairwell only House Specific Fair     → $800 – $1,200
+  docs 기대: 각각 ≥$1,050, ≥$1,100
+
+원인 (추정):
+  specific mode에서 single-room 기준 base anchor가 $800 최소 clamp에
+  덮힘. INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL.Bathroom / Stairwell
+  가 있어도 clamp(range, 800, MAX_CAP)에서 하한 800으로 처리되는 듯.
+
+영향:
+  bathroom / stairwell 등 "짧지만 접근 어려운" 방의 최소 투입비(세척,
+  프라이머, 장비) 반영 실패. 현장 최소 job 비용보다 견적이 낮아짐.
+
+제안:
+  room-type별 minJob floor 도입. 예:
+    SPECIFIC_ROOM_MIN_JOB = {
+      Bathroom: { min: 1050, max: 1450 },
+      Stairwell: { min: 1100, max: 1600 },
+      Handrail: { handled separately },
+      ...
+    }
+  각 room anchor에서 per-room clamp 이후 global clamp.
+
+--------------------------------------------------------------------------------
+B.NEW4 [MEDIUM] [2026-04-16 발견] Apartment Specific mode에서 TwoBedStd
+       vs TwoBedLg class cliff가 반영되지 않음
+--------------------------------------------------------------------------------
+재현 (AS18):
+  Apartment · Specific · 1 room (Living 20sqm · wall+ceiling) · Fair
+    approxSize=90 → $1,221 – $1,889
+    approxSize=91 → $1,221 – $1,889  (완전 동일)
+  APARTMENT_ANCHORS_OIL.TwoBedStd.median = 5000
+  APARTMENT_ANCHORS_OIL.TwoBedLg.median = 6000 (20% 차이)
+
+원인:
+  Specific mode는 room-base anchor 방식이라 property 전체 sqm을 class
+  cliff에 전혀 반영하지 않음. Entire mode는 apartmentStructure로 class
+  분기하지만 Specific은 room-level base × count 계산만.
+
+영향:
+  B.8 연장 이슈. 같은 집에서 Entire 견적 → $5,000 부근, Specific 견적
+  → $1,200 부근으로 baseline 전혀 다름. "왜 scope만 바꿨는데 가격이
+  이렇게 다르냐" 질문에 답 불가.
+
+제안:
+  Specific 모드에도 property class 기반 global multiplier 적용.
+  classMult = (class.median / baseClass.median) 비율을 room subtotal
+  뒤에 곱해서 large property에서 single-room 견적도 상향.
+
+--------------------------------------------------------------------------------
+B.18  [LOW]  Paving poor condition multiplier (1.45)가 현실 과소 반영
+--------------------------------------------------------------------------------
+File:    src/ai/flows/generate-painting-estimate.exterior.ts:78-82
+
+현황:
+  paving poor = rate × 1.45.
+  실제 poor paving은 우선 고압세척 + 부분 보수 + etch/prime + 2coat 풀사이클이
+  필요 — 통상 2배 이상 시간 소요.
+
+영향:
+  Paving poor 견적이 underquoted. 고객이 예상보다 실견적 상회 경험.
+
+제안:
+  PAVING_CONDITION_MULT.poor = 1.65 로 상향. 또는 "surface repair required"
+  플래그를 추가해 시설 수리비 별도 anchor.
+
+
+================================================================================
+PART C — 개선 권장사항 (우선순위)
+================================================================================
+
+P0 — 다음 스프린트 안에 반드시 (Critical fixes)
+--------------------------------------------------------------------------------
+  [ ] C.P0.1  APARTMENT_SQM_CURVE 단조성 보정 (B.2)
+             → 85sqm 값을 4,200으로 낮추거나 90sqm을 4,400으로 상향.
+             → pricing-engine.test.ts에 "curve monotonic" 테스트 추가.
+
+  [ ] C.P0.2  Roof range width 0 버그 수정 (B.1)
+             → roofMax floor 도 rate.floor × 1.25 로 상향.
+
+  [ ] C.P0.3  Exterior full-exterior / partial floor 로직 개선 (B.3, B.4)
+             → doubleStorey / tripleStorey × wallOnly / wallPlusEaves 추가.
+             → scope count 기반 tier 결정.
+
+  [ ] C.P0.4  sumAreaFactorWholeApartment surface 차이 복원 (B.NEW2)
+             → wall/ceiling/trim 단일 선택이 모두 같은 factor로 떨어지는
+               문제. AE7=AE8=AE9 회귀 테스트로 단조성 보장.
+
+P1 — 다음 릴리즈 주기 (High severity)
+--------------------------------------------------------------------------------
+  [ ] C.P1.1  CONDITION_MULTIPLIER 3종 정책 정렬 (B.5)
+             → Product/Pricing 팀과 협의해 discount 허용 여부 결정.
+
+  [ ] C.P1.2  Apartment Entire vs Specific baseline 통합 (B.8, B.NEW4)
+             → SQM CURVE 기반으로 Specific mode도 파생.
+             → TwoBedStd/TwoBedLg class cliff Specific에도 반영.
+
+  [ ] C.P1.3  Interior Difficult Access 조건 재설계 (B.7)
+             → interior-only 플래그 기반 분기.
+
+  [ ] C.P1.4  capRangeWidthSmart condition-aware 확장 (B.6)
+             → Poor일 때 cap 1.5x.
+
+  [ ] C.P1.5  Single-room minJob floor 도입 (B.NEW3)
+             → Bathroom/Stairwell/Handrail 등 room-type별 minJob 정의.
+
+  [x] C.P1.6  Door type premium 전달률 재보정 (B.NEW1) — RESOLVED
+             → french +6.0% whole-job premium 정상 작동 확인 (2026-04-17)
+
+P2 — Tech debt / Consistency
+--------------------------------------------------------------------------------
+  [ ] C.P2.1  ENTIRE_HOUSE_BAND / ENTIRE_APT_BAND → pricing-engine 이동 (B.9)
+  [ ] C.P2.2  STORY_MODIFIER / DEFAULT_WALL_HEIGHT 라벨 단일화 (B.10)
+  [ ] C.P2.3  Deck / Paving 모델 구조 통일 (B.11)
+  [ ] C.P2.4  Deck project ceiling align (B.12)
+  [ ] C.P2.5  Living Room vs Lounge 정리 (B.13)
+  [ ] C.P2.6  'default' wallType 제거 또는 경고 (B.14)
+
+P3 — Nice-to-have
+--------------------------------------------------------------------------------
+  [ ] C.P3.1  calcTrimItemCost dev/prod 분기 (B.15)
+  [ ] C.P3.2  MAX_PRICE_CAP 상향 + UI 뱃지 (B.16)
+  [ ] C.P3.3  Etc room sqm 입력 (B.17)
+  [ ] C.P3.4  Paving poor multiplier 재조정 (B.18)
+
+--------------------------------------------------------------------------------
+테스트 자동화 백로그
+--------------------------------------------------------------------------------
+  [ ] T1. APARTMENT_SQM_CURVE 단조성 property-based test
+  [ ] T2. 모든 (wallType × story) 조합에서 wallOnly < wallPlusEaves < fullExterior
+  [ ] T3. Excellent < Fair < Poor (같은 property 기준)
+  [ ] T4. range.min <= range.max invariant 전체 함수 대상
+  [ ] T5. Apartment Entire vs Specific baseline 차이 < 10% 검증
+  [ ] T6. Roof / Deck / Paving 각 min/max 0보다 크고 min <= max
+  [ ] T7. interior_itemized mode quantity boundary (1, 50)
+  [ ] T8. Exterior restricted property types (Apartment 등) 차단 확인
+
+================================================================================
+EOF
+================================================================================

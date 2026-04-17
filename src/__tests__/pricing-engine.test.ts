@@ -11,7 +11,6 @@ import {
   // Constants
   APARTMENT_SQM_CURVE,
   HOUSE_INTERIOR_ANCHORS,
-  EXTERIOR_WALL_TYPE_ANCHOR,
   EXTERIOR_WALL_TYPE_FLOORS,
   EXTERIOR_AREA_UPLIFT_PCT,
   EXTERIOR_DOOR_ANCHOR,
@@ -81,9 +80,9 @@ describe('A: Interior Apartment Entire Property (SQM Curve)', () => {
     expect(maxPrice).toBeLessThanOrEqual(5800);
   });
 
-  test('A3: 90sqm Excellent — rawMedian ~4300', () => {
+  test('A3: 90sqm Excellent — rawMedian ~4400', () => {
     const raw = getRawMedianFromSqm(90);
-    expect(raw).toBe(4300);
+    expect(raw).toBe(4400);
   });
 
   test('A3: 90sqm Excellent — priced in range $3900–$5500', () => {
@@ -426,6 +425,89 @@ describe('D: Exterior Painting', () => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// GROUP D2: EXTERIOR_ITEM_ANCHORS — per-item standalone anchors
+// ─────────────────────────────────────────────────────────────
+import { EXTERIOR_ITEM_ANCHORS, EXTERIOR_ROOF_RATE } from '../lib/pricing-engine';
+
+describe('D2: EXTERIOR_ITEM_ANCHORS (standalone per-item anchors)', () => {
+  test('D2-1: Eaves single — $1200–$3500', () => {
+    expect(EXTERIOR_ITEM_ANCHORS.Eaves.single.min).toBe(1200);
+    expect(EXTERIOR_ITEM_ANCHORS.Eaves.single.max).toBe(3500);
+  });
+
+  test('D2-2: Eaves double > Eaves single', () => {
+    expect(EXTERIOR_ITEM_ANCHORS.Eaves.double.min).toBeGreaterThan(EXTERIOR_ITEM_ANCHORS.Eaves.single.min);
+    expect(EXTERIOR_ITEM_ANCHORS.Eaves.double.max).toBeGreaterThan(EXTERIOR_ITEM_ANCHORS.Eaves.single.max);
+  });
+
+  test('D2-3: Eaves triple > Eaves double', () => {
+    expect(EXTERIOR_ITEM_ANCHORS.Eaves.triple.min).toBeGreaterThan(EXTERIOR_ITEM_ANCHORS.Eaves.double.min);
+    expect(EXTERIOR_ITEM_ANCHORS.Eaves.triple.max).toBeGreaterThan(EXTERIOR_ITEM_ANCHORS.Eaves.double.max);
+  });
+
+  test('D2-4: Roof sqm-rate — single floor $3500, rate $18–$42/sqm', () => {
+    expect(EXTERIOR_ROOF_RATE.single.floor).toBe(3500);
+    expect(EXTERIOR_ROOF_RATE.single.min).toBe(18);
+    expect(EXTERIOR_ROOF_RATE.single.max).toBe(42);
+  });
+
+  test('D2-5: Roof sqm-rate — pitch factor 1.3 (sloped area 30% larger than floor)', () => {
+    expect(EXTERIOR_ROOF_RATE.pitchFactor).toBe(1.3);
+  });
+
+  test('D2-6: Roof sqm-rate — double storey rate > single storey', () => {
+    expect(EXTERIOR_ROOF_RATE.double.min).toBeGreaterThan(EXTERIOR_ROOF_RATE.single.min);
+    expect(EXTERIOR_ROOF_RATE.double.max).toBeGreaterThan(EXTERIOR_ROOF_RATE.single.max);
+  });
+
+  test('D2-7: Roof sqm-rate — triple storey floor $7000, rate rises above double', () => {
+    expect(EXTERIOR_ROOF_RATE.triple.floor).toBe(7000);
+    expect(EXTERIOR_ROOF_RATE.triple.min).toBeGreaterThan(EXTERIOR_ROOF_RATE.double.min);
+  });
+
+  test('D2-8: Gutter and Fascia are symmetrically priced at each storey tier', () => {
+    (['single', 'double', 'triple'] as const).forEach((tier) => {
+      expect(EXTERIOR_ITEM_ANCHORS.Gutter[tier].min).toBe(EXTERIOR_ITEM_ANCHORS.Fascia[tier].min);
+      expect(EXTERIOR_ITEM_ANCHORS.Gutter[tier].max).toBe(EXTERIOR_ITEM_ANCHORS.Fascia[tier].max);
+    });
+  });
+
+  test('D2-9: Pipes < Gutter at every storey tier (pipes are simpler)', () => {
+    (['single', 'double', 'triple'] as const).forEach((tier) => {
+      expect(EXTERIOR_ITEM_ANCHORS.Pipes[tier].max).toBeLessThan(EXTERIOR_ITEM_ANCHORS.Gutter[tier].max);
+    });
+  });
+
+  test('D2-10: All non-Roof items have positive min anchors and max > min', () => {
+    const items = ['Eaves', 'Gutter', 'Fascia', 'Pipes', 'Exterior Trim', 'Etc'];
+    for (const item of items) {
+      (['single', 'double', 'triple'] as const).forEach((tier) => {
+        expect(EXTERIOR_ITEM_ANCHORS[item][tier].min).toBeGreaterThan(0);
+        expect(EXTERIOR_ITEM_ANCHORS[item][tier].max).toBeGreaterThan(
+          EXTERIOR_ITEM_ANCHORS[item][tier].min,
+        );
+      });
+    }
+  });
+
+  test('D2-11: Roof at 150sqm single — priced $3510–$8190 (150 × 1.3 × rate)', () => {
+    const area = 150 * EXTERIOR_ROOF_RATE.pitchFactor;
+    const roofMin = Math.max(area * EXTERIOR_ROOF_RATE.single.min, EXTERIOR_ROOF_RATE.single.floor);
+    const roofMax = area * EXTERIOR_ROOF_RATE.single.max;
+    expect(roofMin).toBeCloseTo(3510, 0);
+    expect(roofMax).toBeCloseTo(8190, 0);
+  });
+
+  test('D2-12: Roof at 150sqm double — sqm-based $5460 min, max ~$11310', () => {
+    const area = 150 * EXTERIOR_ROOF_RATE.pitchFactor; // 195sqm
+    const roofMin = Math.max(area * EXTERIOR_ROOF_RATE.double.min, EXTERIOR_ROOF_RATE.double.floor);
+    const roofMax = area * EXTERIOR_ROOF_RATE.double.max;
+    expect(roofMin).toBeCloseTo(5460, 0); // 195 × $28 = $5460 (exceeds floor $5000)
+    expect(roofMax).toBeCloseTo(11310, 0); // 195 × $58 = $11310
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
 // GROUP E: Range Cap Policy
 // ─────────────────────────────────────────────────────────────
 describe('E: Range Cap Policy', () => {
@@ -441,34 +523,40 @@ describe('E: Range Cap Policy', () => {
     expect(result.max).toBe(8800); // 7000 + 1800
   });
 
-  test('E3: interior, min=$12000 — cap is 2500', () => {
+  test('E3: interior, min=$12000 — cap is 2000', () => {
     const result = capRangeWidthSmart(12000, 16000, {}, 'interior');
     expect(result.min).toBe(12000);
-    expect(result.max).toBe(14500); // 12000 + 2500
+    expect(result.max).toBe(14000); // 12000 + 2000
   });
 
-  test('E4: interior, min=$20000 — cap is 3500', () => {
+  test('E4: interior, min=$20000 — cap is 2000', () => {
     const result = capRangeWidthSmart(20000, 26000, {}, 'interior');
     expect(result.min).toBe(20000);
-    expect(result.max).toBe(23500); // 20000 + 3500
+    expect(result.max).toBe(22000); // 20000 + 2000
   });
 
-  test('E5: exterior, min=$8000 — cap is 800', () => {
+  test('E5: exterior, min=$2000 — cap is 1000', () => {
+    const result = capRangeWidthSmart(2000, 5000, {}, 'exterior');
+    expect(result.min).toBe(2000);
+    expect(result.max).toBe(3000); // 2000 + 1000
+  });
+
+  test('E5b: exterior, min=$8000 — cap is 1800', () => {
     const result = capRangeWidthSmart(8000, 12000, {}, 'exterior');
     expect(result.min).toBe(8000);
-    expect(result.max).toBe(8800); // 8000 + 800
+    expect(result.max).toBe(9800); // 8000 + 1800
   });
 
-  test('E6: exterior, min=$15000 — cap is 1500', () => {
+  test('E6: exterior, min=$15000 — cap is 2000', () => {
     const result = capRangeWidthSmart(15000, 20000, {}, 'exterior');
     expect(result.min).toBe(15000);
-    expect(result.max).toBe(16500); // 15000 + 1500
+    expect(result.max).toBe(17000); // 15000 + 2000
   });
 
-  test('E7: exterior, min=$22000 — cap is 2500', () => {
+  test('E7: exterior, min=$22000 — cap is 2000', () => {
     const result = capRangeWidthSmart(22000, 28000, {}, 'exterior');
     expect(result.min).toBe(22000);
-    expect(result.max).toBe(24500); // 22000 + 2500
+    expect(result.max).toBe(24000); // 22000 + 2000
   });
 
   test('E8: gap smaller than cap — range preserved unchanged', () => {
@@ -590,13 +678,6 @@ describe('G: Market Realism Sanity Check', () => {
       .toBeGreaterThan(EXTERIOR_WALL_TYPE_FLOORS.rendered.wallOnly);
     expect(EXTERIOR_WALL_TYPE_FLOORS.rendered.wallOnly)
       .toBeGreaterThan(EXTERIOR_WALL_TYPE_FLOORS.cladding.wallOnly);
-  });
-
-  test('G2: Exterior wall type median — brick > rendered > cladding', () => {
-    expect(EXTERIOR_WALL_TYPE_ANCHOR.brick.median)
-      .toBeGreaterThan(EXTERIOR_WALL_TYPE_ANCHOR.rendered.median);
-    expect(EXTERIOR_WALL_TYPE_ANCHOR.rendered.median)
-      .toBeGreaterThan(EXTERIOR_WALL_TYPE_ANCHOR.cladding.median);
   });
 
   test('G3: Storey modifiers increase with storeys (1 < 2 < 3)', () => {

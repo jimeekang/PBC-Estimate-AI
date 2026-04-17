@@ -131,6 +131,7 @@ const ENTIRE_APT_BAND = {
   Fair:      { min: 0.92, max: 1.08 },
   Poor:      { min: 0.90, max: 1.25 },
 } as const;
+const ENTIRE_APT_POOR_PREP_UPLIFT = { min: 1.06, max: 1.12 } as const;
 
 const WATER_BASED_UPLIFT = { minPct: 0.04, maxPct: 0.06 } as const;
 const TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM = { min: 50, max: 110 } as const;
@@ -289,6 +290,15 @@ function hasPricedInteriorSurfaceSelection(flags?: {
   return !!(flags?.ceilingPaint || flags?.wallPaint || flags?.trimPaint);
 }
 
+function countPricedInteriorSurfaces(flags?: {
+  ceilingPaint?: boolean;
+  wallPaint?: boolean;
+  trimPaint?: boolean;
+  ensuitePaint?: boolean;
+}) {
+  return Number(!!flags?.ceilingPaint) + Number(!!flags?.wallPaint) + Number(!!flags?.trimPaint);
+}
+
 function getInteriorDoorUnitPrice(system: string, scope: string, doorType = 'flush') {
   const pricingBySystem = INTERIOR_DOOR_ITEM_ANCHOR as Record<string, Record<string, number>>;
   const basePrice = pricingBySystem[system]?.[scope];
@@ -407,6 +417,7 @@ function calculateMeasuredSpecificInteriorBase(
 
   let min = 0;
   let max = 0;
+  let pricedRoomCount = 0;
 
   for (const room of rooms) {
     if (room.roomName === 'Handrail') continue;
@@ -417,6 +428,10 @@ function calculateMeasuredSpecificInteriorBase(
     const wallArea = perimeter * interiorWallHeight;
     const multiplier = getInteriorSpecificRoomMultiplier(room.roomName);
     const paintAreas = room.paintAreas ?? {};
+    const hasPricedSurface = !!(paintAreas.wallPaint || paintAreas.ceilingPaint || paintAreas.trimPaint || paintAreas.ensuitePaint);
+
+    if (!hasPricedSurface) continue;
+    pricedRoomCount += 1;
 
     if (paintAreas.wallPaint) {
       min += wallArea * INTERIOR_SPECIFIC_SURFACE_RATE.wall.min * multiplier;
@@ -439,6 +454,8 @@ function calculateMeasuredSpecificInteriorBase(
     }
   }
 
+  if (pricedRoomCount === 0 || (min <= 0 && max <= 0)) return undefined;
+
   return { min: Math.round(min), max: Math.round(max) };
 }
 
@@ -449,6 +466,24 @@ function inferApartmentClassFromSqm(sqm?: number) {
   if (sqm <= 90) return 'TwoBedStd' as const;
   if (sqm <= 110) return 'TwoBedLg' as const;
   return 'ThreeBed' as const;
+}
+
+function getApartmentSpecificClass(
+  input: GeneratePaintingEstimateInput,
+  hasMasterBedroom: boolean
+) {
+  const sqmForClass = toNumberOrUndefined(input.approxSize);
+  const classFromBedrooms = inferApartmentClassFromBedroomNumbers(
+    input.bedroomCount,
+    hasMasterBedroom,
+    sqmForClass
+  );
+
+  return (
+    (typeof input.bedroomCount === 'number' ? classFromBedrooms : undefined) ??
+    inferApartmentClassFromSqm(sqmForClass) ??
+    classFromBedrooms
+  );
 }
 
 function isApartmentLike(propertyType?: string) {
@@ -591,18 +626,16 @@ function applyWaterBasedUpliftTrimShareWholeJob(minVal: number, maxVal: number) 
 // 3B2B FAIR (House) curve — CAL_3B2B_FAIR_SINGLE_POINTS imported from '@/lib/pricing-engine'.
 // -----------------------------
 
-function shouldApply3B2BFairSingleHouseCalibration(
+function shouldApply3B2BSingleHouseCalibration(
   input: GeneratePaintingEstimateInput,
   houseKey?: keyof typeof HOUSE_INTERIOR_ANCHORS
 ) {
   const isHouse = input.propertyType === 'House / Townhouse';
-  const condition = input.paintCondition ?? 'Fair';
   const story = input.houseStories ?? '1 storey';
   return (
     input.scopeOfPainting === 'Entire property' &&
     isHouse &&
     houseKey === '3B2B' &&
-    condition === 'Fair' &&
     (story === 'Single story' || story === '1 storey')
   );
 }
@@ -613,15 +646,26 @@ function calibrate3B2BFairSingleHouse(
   currentMin: number,
   currentMax: number
 ) {
-  if (!shouldApply3B2BFairSingleHouseCalibration(input, houseKey)) {
+  if (!shouldApply3B2BSingleHouseCalibration(input, houseKey)) {
     return { min: currentMin, max: currentMax };
   }
   const sqm = input.approxSize ?? 135;
-  const target = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, sqm);
-  const min = clamp(target.min, 7000, 30000);
-  let max = clamp(target.max, 9000, 35000);
+  const fairTarget = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, sqm);
+  const fairMin = clamp(fairTarget.min, 7000, 30000);
+  let fairMax = clamp(fairTarget.max, 9000, 35000);
+  if (fairMax < fairMin) fairMax = fairMin + 800;
+
+  // Scale by condition relative to Fair baseline
+  const condition = input.paintCondition ?? 'Fair';
+  if (condition === 'Fair') {
+    return { min: Math.round(fairMin), max: Math.round(fairMax) };
+  }
+  // HOUSE_CONDITION_MULTIPLIER midpoints: Excellent=1.04, Fair=1.17, Poor=1.31
+  const condScale = condition === 'Excellent' ? (1.04 / 1.17) : (1.31 / 1.17);
+  const min = clamp(Math.round(fairMin * condScale), 7000, 30000);
+  let max = clamp(Math.round(fairMax * condScale), 9000, 35000);
   if (max < min) max = min + 800;
-  return { min: Math.round(min), max: Math.round(max) };
+  return { min, max };
 }
 
 // -----------------------------
@@ -1272,13 +1316,19 @@ export const generatePaintingEstimate = ai.defineFlow(
             toNumberOrUndefined(input.interiorWallHeight)
           )
         : undefined;
+      const wholeSurfaceCount = isWhole ? countPricedInteriorSurfaces(input.paintAreas) : 0;
+      const hasSingleSurfaceWholeApartment = isWhole && aptLike && wholeSurfaceCount === 1;
 
       if (!isWhole) {
         const rooms = (input.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail');
         const conditionBand = aptLike ? CONDITION_MULTIPLIER[condition] : HOUSE_CONDITION_MULTIPLIER[condition];
         if (measuredSpecificBase) {
-          intMin = Math.round(measuredSpecificBase.min * conditionBand.min);
-          intMax = Math.round(measuredSpecificBase.max * conditionBand.max);
+          const apartmentClassMultiplier = aptLike
+            ? APARTMENT_ANCHORS_OIL[getApartmentSpecificClass(input, hasMaster)].median /
+              APARTMENT_ANCHORS_OIL.TwoBedStd.median
+            : 1;
+          intMin = Math.round(measuredSpecificBase.min * conditionBand.min * apartmentClassMultiplier);
+          intMax = Math.round(measuredSpecificBase.max * conditionBand.max * apartmentClassMultiplier);
         } else {
           let baseSpecificMin = 0;
           let baseSpecificMax = 0;
@@ -1313,9 +1363,16 @@ export const generatePaintingEstimate = ai.defineFlow(
 
           const computedMin = Math.round(median * band.min);
           const computedMax = Math.round(median * band.max);
-          const absoluteFloor = Math.round(rawMedian * 0.78);
+          const absoluteFloor = hasSingleSurfaceWholeApartment
+            ? Math.round(rawMedian * areaFactor * 0.78)
+            : Math.round(rawMedian * 0.78);
           intMin = Number.isFinite(computedMin) ? Math.max(computedMin, absoluteFloor) : absoluteFloor;
           intMax = Number.isFinite(computedMax) ? Math.max(computedMax, Math.round(absoluteFloor * 1.2)) : Math.round(absoluteFloor * 1.2);
+
+          if (condition === 'Poor') {
+            intMin = Math.round(intMin * ENTIRE_APT_POOR_PREP_UPLIFT.min);
+            intMax = Math.round(intMax * ENTIRE_APT_POOR_PREP_UPLIFT.max);
+          }
         }
 
         // ── SPECIFIC AREAS: use class-based anchor + room scoring ────────────
@@ -1324,18 +1381,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             .filter((r) => r.roomName !== 'Handrail')
             .map((r) => r.roomName);
 
-          const sqmForClass = toNumberOrUndefined(input.approxSize);
-          const classFromBedrooms = inferApartmentClassFromBedroomNumbers(
-            input.bedroomCount,
-            hasMaster,
-            sqmForClass
-          );
-          const aptClass =
-            (typeof input.bedroomCount === 'number' ? classFromBedrooms : undefined) ??
-            inferApartmentClassFromSqm(sqmForClass) ??
-            classFromBedrooms;
-
-          const anchor = APARTMENT_ANCHORS_OIL[aptClass];
+          const anchor = APARTMENT_ANCHORS_OIL[getApartmentSpecificClass(input, hasMaster)];
 
           const totalRoomScore = specificRooms.reduce((sum, r) => sum + roomScore(r), 0);
           const minPartialRatio = specificRooms.length <= 1 ? 0.08 : 0.22;
@@ -1443,15 +1489,16 @@ export const generatePaintingEstimate = ai.defineFlow(
         }
       }
 
+      if (!isWhole && selectedRooms.length > 0) {
+        const hardFloor = getSpecificInteriorHardFloor(selectedRooms, aptLike);
+        const floorRangeMultiplier = selectedRooms.length === 1 ? 1.35 : aptLike ? 1.55 : 1.6;
+        intMin = Math.max(intMin, hardFloor);
+        intMax = Math.max(intMax, Math.round(hardFloor * floorRangeMultiplier));
+      }
+
       // storey modifier (interior)
       intMin = Math.round(intMin * storyMult);
       intMax = Math.round(intMax * storyMult);
-
-      // decorative ceiling modifier
-      if (input.ceilingType === 'Decorative') {
-        intMin = Math.round(intMin * 1.1);
-        intMax = Math.round(intMax * 1.1);
-      }
 
       // trim options
       if (input.trimPaintOptions) {
@@ -1586,14 +1633,26 @@ export const generatePaintingEstimate = ai.defineFlow(
         intMax = upliftedDouble.max;
       }
 
-      if (isWhole && wholePropertyDoorPremiumPct > 0) {
-        intMin += Math.round(intMin * AREA_SHARE.trimPaint * wholePropertyDoorPremiumPct);
-        intMax += Math.round(intMax * AREA_SHARE.trimPaint * wholePropertyDoorPremiumPct);
+      // decorative ceiling modifier (after calibration so it's not overridden)
+      if (input.ceilingType === 'Decorative') {
+        intMin = Math.round(intMin * 1.1);
+        intMax = Math.round(intMax * 1.1);
       }
 
-      if (isSkirtingOnlySpecific) {
+      if (isWhole && wholePropertyDoorPremiumPct > 0) {
+        intMin += Math.ceil(intMin * wholePropertyDoorPremiumPct);
+        intMax += Math.ceil(intMax * wholePropertyDoorPremiumPct);
+      }
+
+      const hasHandrailOnlySpecific =
+        !isWhole &&
+        selectedRooms.length === 0 &&
+        handrailCost.min > 0 &&
+        (input.interiorRooms ?? []).every((room) => room.roomName === 'Handrail');
+
+      if (isSkirtingOnlySpecific || hasHandrailOnlySpecific || hasSingleSurfaceWholeApartment) {
         intMin = clamp(intMin, 0, MAX_PRICE_CAP);
-        intMax = clamp(intMax, 0, MAX_PRICE_CAP);
+        intMax = clamp(intMax, intMin, MAX_PRICE_CAP);
       } else {
         intMin = clamp(intMin, 800, MAX_PRICE_CAP);
         intMax = clamp(intMax, 1200, MAX_PRICE_CAP);

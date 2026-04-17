@@ -466,11 +466,11 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
               <div className="flex items-center gap-2">
                 <CalendarCheck className="h-6 w-6 text-white" />
                 <h3 className="text-xl font-extrabold text-white">
-                  Ready for an accurate final quote?
+                  Best next step: book online for your final quote
                 </h3>
               </div>
               <p className="max-w-md text-sm text-white/80">
-                Your AI estimate is a great starting point. Lock in the best price with a FREE
+                Your AI estimate is a strong price guide. Booking online is the fastest path to a
                 on-site assessment — our painter comes to you, measures up, and gives you a firm
                 written quote.
               </p>
@@ -484,12 +484,12 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-6 py-3.5 text-sm font-bold sm:py-4"
                 >
-                  Book Free On-Site Quote
+                  Book Online Now
                   <ArrowRight className="h-4 w-4" />
                 </a>
               </Button>
               <p className="pt-1 text-xs text-white/60">
-                Takes less than 60 seconds to book &bull; No obligation
+                Takes less than 60 seconds to book online &bull; No obligation
               </p>
             </div>
 

@@ -1,0 +1,1071 @@
+PBC Estimate AI - Pricing Anchor Analysis
+Generated: 2026-04-17
+
+Scope
+- Main source of truth: src/lib/pricing-engine.ts
+- Main application path: src/ai/flows/generate-painting-estimate.ts
+- Exterior engine: src/ai/flows/generate-painting-estimate.exterior.ts
+- Calibration / issue notes: docs/estimate-test-checklist.txt
+
+Purpose of this document
+- List the app's current pricing anchors and related pricing constants.
+- Explain how each anchor is actually applied in the quote flow.
+- Explain, from code evidence, how these anchors appear to have been created.
+- Highlight places where the app is no longer using a simple "anchor only" model and instead combines anchors with curves, floors, modifiers, caps, and item pricing.
+
+Important reading rule
+- "Anchor" in this app does not always mean a single fixed price.
+- In practice there are 6 anchor families:
+  1. Whole-property base anchors
+  2. SQM curve anchors
+  3. Room-level anchors
+  4. Item-level anchors
+  5. Scope floors / minimum floors
+  6. Rate anchors ($/sqm, $/lm, per-item) with modifiers
+
+============================================================
+1. System summary
+============================================================
+
+The pricing system is hybrid, not purely anchor-based.
+
+At a high level:
+- Apartment entire-property interior pricing is driven by APARTMENT_SQM_CURVE.
+- Apartment specific-area interior pricing is driven by APARTMENT_ANCHORS_OIL plus room scoring and room anchors.
+- House interior pricing is driven by HOUSE_INTERIOR_ANCHORS plus whole-house bands, room ratios, and a special 3B2B fair calibration curve.
+- Exterior pricing is driven by a mix of:
+  - wall area rate curves,
+  - wall-type scope floors,
+  - per-area anchors for non-wall exterior elements,
+  - per-item trim anchors,
+  - roof/deck/paving rate tables,
+  - condition/storey/complexity modifiers.
+
+This means two things:
+- Some anchors are literal base prices.
+- Some anchors are only guardrails, calibration points, or fallback minimums.
+
+============================================================
+2. Core global pricing controls
+============================================================
+
+2.1 MAX_PRICE_CAP
+- Value: 35000
+- Role:
+  - Global hard cap on interior, exterior, and combined totals.
+  - If a result reaches the cap, the UI converts to "From AUD X+ (Site Inspection Required)" style output.
+- Effect:
+  - Prevents extreme outputs.
+  - Also compresses the top end for large premium jobs.
+- Likely creation logic:
+  - Business safeguard first, market calibration second.
+  - Checklist B.16 notes this cap may be too low for very large 3-storey premium jobs.
+
+2.2 STORY_MODIFIER
+- 1 storey = 1.0
+- 2 storey = 1.18
+- 3 storey = 1.35
+- Also contains legacy aliases: "Single story", "Double story or more"
+- Role:
+  - Applied to interior estimates after the base range is assembled.
+  - Exterior uses storey mostly through separate storey-aware anchors / rates rather than this exact multiplier.
+- Likely creation logic:
+  - Empirical access/labour uplift percentages.
+  - Chosen to be simple and monotonic.
+
+2.3 Condition multipliers
+- Apartment interior:
+  - Excellent {0.95, 1.05}
+  - Fair {1.08, 1.22}
+  - Poor {1.22, 1.55}
+- House interior:
+  - Excellent {1.00, 1.08}
+  - Fair {1.10, 1.24}
+  - Poor {1.22, 1.40}
+- Exterior:
+  - Excellent {1.00, 1.08}
+  - Fair {1.10, 1.24}
+  - Poor {1.22, 1.40}
+- Role:
+  - Expand or shift min/max ranges based on condition/prep intensity.
+- Likely creation logic:
+  - Apartment model allows stronger discount and stronger poor-condition penalty.
+  - House and exterior are more conservative.
+- Important note:
+  - Checklist B.5 explicitly flags these three multiplier systems as inconsistent by design or evolution.
+
+2.4 capRangeWidthSmart
+- Role:
+  - Narrows final range width after calculation.
+- Exterior cap policy:
+  - min <= 3000 => width cap 1000
+  - min <= 8000 => width cap 1800
+  - min <= 10000 => width cap 1750
+  - min <= 15000 => width cap 3000
+  - else => width cap 5000
+- Interior/total cap policy:
+  - min <= 5000 => width cap 1200
+  - min <= 10000 => width cap 1800
+  - min <= 18000 => width cap 2500
+  - else => width cap 3500
+- Important note:
+  - This is not an anchor, but it strongly shapes the visible output.
+  - Checklist B.6 notes this can hide uncertainty, especially for poor-condition jobs.
+
+============================================================
+3. Apartment interior anchors
+============================================================
+
+3.1 APARTMENT_SQM_CURVE
+- Values:
+  - 35sqm => rawMedian 2200
+  - 45sqm => 2800
+  - 55sqm => 3100
+  - 65sqm => 3450
+  - 80sqm => 3800
+  - 85sqm => 4350
+  - 90sqm => 4400
+  - 105sqm => 4850
+  - 120sqm => 5800
+  - 140sqm => 6900
+  - 160sqm => 7900
+  - 200sqm => 9500
+- Where used:
+  - Apartment + Entire property path in generate-painting-estimate.ts
+  - getRawMedianFromSqm interpolates between points.
+- How applied:
+  1. Read approxSize
+  2. Interpolate raw median from curve
+  3. Multiply by areaFactor based on selected surfaces
+  4. Apply ENTIRE_APT_BAND by condition
+  5. Apply absolute floor logic
+  6. For Poor, apply extra poor-prep uplift
+  7. Later apply trim premiums, handrail, complexity, ceiling modifier if relevant
+  8. Clamp and cap range width
+- Why this anchor exists:
+  - Avoid class cliffs for apartment whole-property pricing.
+  - Give smooth pricing as sqm changes.
+- How it appears to have been created:
+  - Manual calibration from market expectations, not a regression model.
+  - Code comment says 85sqm is a key calibration point.
+  - Tests and checklist reference market sanity targets around 35sqm, 85sqm, 120sqm, 200sqm.
+  - This strongly suggests the curve was hand-shaped around representative market points.
+
+3.2 APARTMENT_ANCHORS_OIL
+- Values:
+  - Studio {2200, 3500, 2700}
+  - OneBed {2800, 4200, 3300}
+  - TwoBedStd {4300, 6200, 5000}
+  - TwoBedLg {5000, 7500, 6000}
+  - ThreeBed {6500, 9500, 7500}
+- Where used:
+  - Apartment + Specific areas only path.
+- How applied:
+  1. Determine apartment class
+  2. Use class median as base
+  3. Multiply by partialRatio derived from room scores
+  4. Convert baseMid to baseMin/baseMax using 0.88 / 1.22 spread
+  5. Multiply by selected room/surface factor
+  6. Add pseudo-sqm uplift for larger room sets
+  7. Enforce specific hard floor
+  8. Apply apartment condition multiplier
+- Why this anchor exists:
+  - Specific-area mode needs a class baseline even when full sqm-based pricing is not used.
+- How it appears to have been created:
+  - Class-based market anchor table from an older or parallel pricing model.
+  - "OIL" naming indicates oil-based trim/base default assumptions.
+  - Checklist B.8 notes this system does not align perfectly with APARTMENT_SQM_CURVE, which implies these two anchor families were calibrated separately.
+
+3.3 ENTIRE_APT_BAND and ENTIRE_APT_POOR_PREP_UPLIFT
+- ENTIRE_APT_BAND:
+  - Excellent {0.95, 1.05}
+  - Fair {0.92, 1.08}
+  - Poor {0.90, 1.25}
+- ENTIRE_APT_POOR_PREP_UPLIFT:
+  - min 1.06
+  - max 1.12
+- Role:
+  - Turn raw median into quote range for entire apartments.
+- Likely creation logic:
+  - Narrower bands for good jobs, wider top-end for poor condition.
+  - Additional poor-prep uplift suggests the team found poor apartments were still underquoted after the base band alone.
+
+============================================================
+4. House interior anchors
+============================================================
+
+4.1 HOUSE_INTERIOR_ANCHORS
+- Values:
+  - 2B1B {7500, 11000, 9000}
+  - 3B2B {9500, 14000, 11500}
+  - 4B2B {13000, 18500, 15500}
+  - 5B3B {17000, 25000, 20000}
+- Where used:
+  - House + Entire property
+  - House + Specific areas only
+  - inferHouseKey chooses the anchor bucket.
+- How applied for Entire property:
+  1. Infer house class from bedroomCount, bathroomCount, or approxSize fallback
+  2. Take median as base
+  3. Multiply by areaFactor
+  4. Apply ENTIRE_HOUSE_BAND by condition
+  5. Floor against anchor.min * areaFactor * 0.98
+  6. Ceiling against anchor.max * areaFactor * 1.02
+  7. Apply storey modifier, trim premiums, complexity, calibration, ceiling type, etc.
+- How applied for Specific areas:
+  1. Infer house class
+  2. Convert room scores to partialRatio
+  3. Use anchor.median * partialRatio as baseMid
+  4. Convert to 0.86 / 1.24 spread
+  5. Apply pseudo-sqm uplift for larger room sets
+  6. Enforce hard floor
+  7. Apply house condition multiplier
+- How it appears to have been created:
+  - Class buckets reflect conventional sales logic:
+    - small house
+    - standard family house
+    - large family house
+    - premium large house
+  - The median values look hand-calibrated to Northern Beaches 2026 expectations.
+  - The range widths are not percentage-perfect; they look business-chosen for explainability and realism.
+
+4.2 ENTIRE_HOUSE_BAND
+- Values:
+  - Excellent {0.96, 1.04}
+  - Fair {0.97, 1.06}
+  - Poor {0.97, 1.10}
+- Role:
+  - Converts whole-house median into range before later modifiers.
+- Important note:
+  - This is defined in generate-painting-estimate.ts, not pricing-engine.ts.
+  - Checklist B.9 flags this duplication as a single-source-of-truth problem.
+
+4.3 CAL_3B2B_FAIR_SINGLE_POINTS
+- Values:
+  - 120sqm => {8500, 11000}
+  - 135sqm => {10000, 13500}
+  - 150sqm => {12000, 15500}
+  - 180sqm => {14500, 19000}
+- Role:
+  - Special calibration layer for 3B2B Fair Single storey house pricing.
+  - Applied after general house modelling.
+- Why it exists:
+  - 3B2B is probably the most common house quote profile, so it gets finer control.
+- How it appears to have been created:
+  - Hand-entered market checkpoints.
+  - interpolateBySqm gives smooth transitions between checkpoints.
+  - This is a clear example of "anchor curve built from known market examples."
+
+4.4 DOUBLE_STOREY_3B2B_UPLIFT
+- Values:
+  - baseMinPct 0.03
+  - baseMaxPct 0.05
+  - autoStairwellPct 0.01
+  - highCeilingReductionPct 0.02
+- Role:
+  - Fine-tunes double-storey 3B2B houses after the fair single-storey calibration logic.
+- How it appears to have been created:
+  - Manual overlap-control logic.
+  - Specifically designed to avoid charging twice for stairwell / high-ceiling effects.
+
+============================================================
+5. Interior specific-room anchors and trim anchors
+============================================================
+
+5.1 INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL
+- Values:
+  - Master Bedroom {1350, 1700, 1500}
+  - Bedroom 1/2/3 {980, 1280, 1130}
+  - Bathroom {1150, 1550, 1350}
+  - Living Room {2200, 3200, 2650}
+  - Lounge {2200, 3200, 2650}
+  - Dining {1700, 2400, 2000}
+  - Kitchen {1900, 2700, 2250}
+  - Study / Office {1050, 1450, 1250}
+  - Laundry {850, 1150, 1000}
+  - Hallway {900, 1400, 1150}
+  - Foyer {850, 1300, 1050}
+  - Stairwell {1250, 1850, 1500}
+  - Walk-in robe {800, 1200, 1000}
+  - Etc {1200, 1800, 1500}
+- Where used:
+  - Interior specific-area fallback when measured area model is not used.
+- How applied:
+  - Sum roomAnchor.min/max multiplied by selected room paint-area share.
+  - Then apply apartment or house condition band.
+- How it appears to have been created:
+  - Relative labour ranking by room complexity and prominence.
+  - Living/Kitchen high, Laundry/WIR low, Bathroom/Stairwell mid-high.
+  - Oil-based default assumption again suggests this table was anchored around a traditional trim/base system.
+
+5.2 ROOM_WEIGHT and score-based ratios
+- Not an anchor table, but essential to how anchors become partial-job prices.
+- Examples:
+  - Living Room 1.35
+  - Kitchen 1.3
+  - Bedroom 1.0
+  - Bathroom 0.88
+  - Laundry 0.52
+- Role:
+  - Converts selected rooms into partialRatio for apartment/house specific-area pricing.
+- How it appears to have been created:
+  - Relative room significance model rather than direct market quote model.
+  - Used to distribute whole-home anchor medians into partial-job estimates.
+
+5.3 INTERIOR_DOOR_ITEM_ANCHOR
+- oil_2coat:
+  - Door & Frame 220
+  - Door only 160
+  - Frame only 60
+- water_3coat_white_finish:
+  - Door & Frame 295
+  - Door only 210
+  - Frame only 85
+- Where used:
+  - Interior itemized trim quote path.
+  - Interior specific trim additions.
+- How applied:
+  - Unit price * quantity
+  - doorType premium added depending on flush/sliding/panelled/french/bi_folding
+  - whole-property path can also add percent premium from INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT
+- How it appears to have been created:
+  - Unit labour/material anchor by paint system and scope.
+  - Water-based is consistently higher, implying extra coats and finish standard.
+
+5.4 INTERIOR_DOOR_TYPE_PREMIUM
+- flush 0
+- sliding 5
+- panelled 10
+- french 15
+- bi_folding 25
+- Role:
+  - Small per-unit complexity premium layered over base door item pricing.
+- Creation logic:
+  - Hierarchy of complexity/detail level.
+
+5.5 INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT
+- flush 0
+- sliding 0.02
+- panelled 0.04
+- french 0.06
+- bi_folding 0.10
+- Role:
+  - Entire-property trim-on jobs can add whole-job percentage premium based on door mix.
+- Creation logic:
+  - Premium reflects broader labour overhead when many higher-complexity doors exist across the whole property.
+
+5.6 INTERIOR_WINDOW_ITEM_ANCHOR
+- oil_2coat and water_3coat_white_finish by:
+  - window type: Normal / Awning / Double Hung / French
+  - scope: Window & Frame / Window only / Frame only
+- Example:
+  - water French Window & Frame = 475
+- Role:
+  - Interior window itemized pricing and trim additions.
+- Creation logic:
+  - Built as matrix pricing:
+    - more complex window type => higher price
+    - fuller scope => higher price
+    - water-based white finish => premium over oil
+
+5.7 INTERIOR_SKIRTING_LINEAR_RATE
+- oil_2coat {7, 10} per lm
+- water_3coat_white_finish {8, 11} per lm
+- Role:
+  - Used for skirting-only and measured skirting pricing.
+- Creation logic:
+  - Linear metre pricing for predictable repetitive trim work.
+
+5.8 INTERIOR_HANDRAIL_ITEM_PRICING
+- Systems:
+  - paint_to_paint_oil_2coat
+  - paint_to_paint_water_3coat
+  - varnish_to_paint_oil_3coat_min
+  - varnish_to_paint_water_4coat_min
+  - varnish_to_varnish_stain
+  - varnish_to_varnish_clear
+- Each system has:
+  - label
+  - rate {min, max}
+  - minJob {min, max}
+- Role:
+  - Handrail pricing is measured by length and width multiplier, but never below system min job.
+- Creation logic:
+  - Strongly trade/labour based.
+  - Includes coating-conversion complexity directly in the anchor.
+
+============================================================
+6. Exterior anchors
+============================================================
+
+6.1 EXTERIOR_WALL_TYPE_FLOORS
+- cladding:
+  - wallOnly 2600
+  - wallPlusEaves 3600
+  - fullExterior 5200
+  - doubleStoreyFullExterior 7600
+  - tripleStoreyFullExterior 10600
+- rendered:
+  - 3200 / 4500 / 6200 / 8900 / 12300
+- brick:
+  - 3800 / 5400 / 7400 / 10500 / 14500
+- default:
+  - 2900 / 4100 / 5700 / 8100 / 11300
+- Where used:
+  - Exterior wall-included jobs in calculateExteriorEstimate().
+- How applied:
+  1. Build raw wall + area/item estimate
+  2. If Wall is included, identify scope class:
+     - wall only
+     - wall + eaves
+     - full exterior
+     - full exterior double/triple
+  3. Force rangeMin to be at least the scope floor
+  4. Force rangeMax to be at least floor * 1.25
+- Why this anchor exists:
+  - Protect against underpricing when area/rate logic yields too low a number.
+- How it appears to have been created:
+  - Market minimum acceptable quote by wall type and scope package.
+  - These are not median anchors; they are commercial floor anchors.
+
+6.2 EXTERIOR_WALL_RATE_CURVES
+- Each wall type has wallArea checkpoints with min/max $/sqm.
+- Example cladding:
+  - 60sqm => 28 to 36
+  - 95sqm => 25.5 to 33
+  - 130sqm => 23.5 to 30
+  - 175sqm => 22 to 28
+  - 230sqm => 20.5 to 26
+  - 320sqm => 19 to 24
+- Rendered and brick are consistently higher.
+- Where used:
+  - Wall pricing path in calculateExteriorEstimate().
+- How applied:
+  1. Convert floor sqm to footprint sqm using storey count
+  2. Estimate wall area = 4.2 * sqrt(sqm) * wallHeight
+  3. Interpolate wall min/max rate from curve
+  4. wallArea * rate => raw wall component
+- Why this anchor exists:
+  - Exterior wall work scales more smoothly as a rate curve than as a class anchor.
+  - Larger jobs get lower unit rates.
+- How it appears to have been created:
+  - Hybrid of:
+    - geometric wall-area estimation,
+    - market $/sqm rates by substrate,
+    - volume discount curve.
+  - Brick highest, rendered mid, cladding lowest reflects prep/coating complexity.
+
+6.3 EXTERIOR_ITEM_ANCHORS
+- Eaves:
+  - single {1200, 3500}
+  - double {1800, 5000}
+  - triple {2500, 7000}
+- Gutter:
+  - single {500, 1500}
+  - double {800, 2200}
+  - triple {1200, 3200}
+- Fascia:
+  - same as Gutter
+- Pipes:
+  - single {300, 800}
+  - double {450, 1200}
+  - triple {650, 1700}
+- Exterior Trim generic:
+  - single {600, 2000}
+  - double {900, 3000}
+  - triple {1200, 4000}
+- Etc:
+  - single {300, 1500}
+  - double {450, 2200}
+  - triple {650, 3000}
+- Where used:
+  - Exterior areas other than wall/roof/deck/paving.
+- How applied:
+  - Directly added to rangeMin/rangeMax by selected area and storey tier.
+  - Then condition and complexity are applied to the structural subtotal.
+- Important note:
+  - The generic "Exterior Trim" anchor is currently mostly a fallback concept in the engine, but the form/schema policy now requires detailed trim selection.
+  - So operationally, the per-item trim anchors are more important than the generic trim anchor.
+- How it appears to have been created:
+  - Standalone trade minimum/typical range for each scope element.
+  - Storey tiers represent access burden more than area.
+
+6.4 EXTERIOR_ROOF_RATE
+- pitchFactor 1.3
+- single {min 18, max 42, floor 3500}
+- double {min 28, max 58, floor 5000}
+- triple {min 38, max 75, floor 7000}
+- Where used:
+  - Roof pricing path in calculateExteriorEstimate().
+- How applied:
+  1. roofArea = floorSqm * 1.3
+  2. roofMin = max(roofArea * minRate, floor)
+  3. roofMax = roofArea * maxRate
+  4. Add to structural subtotal
+  5. Apply condition and complexity later
+- How it appears to have been created:
+  - Trade-style area pricing with slope correction and storey access load.
+  - Floors protect small roof jobs from underpricing.
+
+6.5 Exterior trim item anchors
+- EXTERIOR_DOOR_ANCHOR:
+  - Simple {150, 280}
+  - Standard {250, 420}
+  - Complex {400, 680}
+- EXTERIOR_WINDOW_ANCHOR:
+  - Normal {80, 160}
+  - Awning {130, 220}
+  - Double Hung {180, 320}
+  - French {280, 500}
+- EXTERIOR_ARCHITRAVE_ANCHOR:
+  - Simple {50, 110}
+  - Standard {80, 170}
+  - Complex {140, 300}
+- EXTERIOR_FRONT_DOOR_ANCHOR:
+  - {520, 880}
+- Where used:
+  - Added outside condition in the exterior flow.
+- How applied:
+  - calcTrimItemCost sums quantity * item anchor with quantity scale factor:
+    - 1 to 3 => 1.00
+    - 4 to 7 => 0.92
+    - 8 to 12 => 0.85
+    - 13+ => 0.80
+  - Front door is special-cased and added separately.
+  - Specific trim items replace the generic trim anchor to avoid double counting.
+- Why this anchor exists:
+  - Trim details vary too much to keep inside a generic exterior base.
+- How it appears to have been created:
+  - Unit-based painter quote logic.
+  - Clear hierarchy:
+    - front door is premium standalone feature
+    - complex doors > standard > simple
+    - French windows highest
+    - quantity discounts reflect repetitive work efficiency
+
+6.6 Deck pricing anchors
+- DECK_RATE_PER_M2:
+  - stain-oil {32, 60}
+  - stain-water {34, 62}
+  - clear-oil {28, 53}
+  - clear-water {30, 55}
+  - paint-conversion {60, 91}
+  - paint-recoat {35, 60}
+- DECK_CONDITION_MULT:
+  - good 1.0
+  - weathered 1.25
+  - damaged 1.55
+- DECK_MINIMUM_CHARGE = 600
+- DECK_PROJECT_CEILING = 22000
+- Where used:
+  - calcDeckCost() in generate-painting-estimate.exterior.ts
+- How applied:
+  1. Pick service key from service/product
+  2. Apply area band multiplier:
+     - <=20sqm => 1.15
+     - <=50sqm => 1.0
+     - <=100sqm => 0.9
+     - >100sqm => 0.82
+  3. Multiply rate * area * areaBand * condition
+  4. Enforce minimum charge and project ceiling
+- How it appears to have been created:
+  - Combination of:
+    - base service rates,
+    - small-job inefficiency premium,
+    - large-job volume discount,
+    - timber-condition prep uplift.
+- Important note:
+  - Checklist B.11 and B.12 flag this as a model with potential double-scaling and ceiling compression.
+
+6.7 Paving pricing anchors
+- PAVING_RATE_PER_M2 bands:
+  - <=25sqm {44, 56}
+  - <=70sqm {34, 44}
+  - <=140sqm {27, 35}
+  - >140sqm {22, 29}
+- PAVING_CONDITION_MULT:
+  - good 1.0
+  - fair 1.2
+  - poor 1.45
+- PAVING_MINIMUM_CHARGE = 950
+- PAVING_PROJECT_CEILING = 18000
+- Where used:
+  - calcPavingCost()
+- How applied:
+  - Choose rate band by area
+  - Multiply by area and condition
+  - Enforce minimum and ceiling
+- How it appears to have been created:
+  - Cleaner area-band model than deck.
+  - Larger paving areas receive lower unit rates.
+
+============================================================
+7. How anchors are actually combined
+============================================================
+
+7.1 Interior entire apartment
+- Base source: APARTMENT_SQM_CURVE
+- Then:
+  - areaFactor
+  - ENTIRE_APT_BAND
+  - poor-prep uplift if Poor
+  - trim additions
+  - handrail
+  - complexity
+  - decorative ceiling
+  - clamp and cap
+
+7.2 Interior specific apartment
+- Base source:
+  - measured room surface rates if measured inputs exist
+  - otherwise APARTMENT_ANCHORS_OIL + roomScore partial ratio
+- Then:
+  - hard floor
+  - apartment condition multiplier
+  - trim additions
+  - handrail
+  - complexity
+  - clamp and cap
+
+7.3 Interior house
+- Base source:
+  - HOUSE_INTERIOR_ANCHORS
+  - for 3B2B Fair Single, special calibration curve overrides/adjusts
+- Then:
+  - areaFactor or room partial ratio
+  - condition band
+  - hard floor
+  - story modifier
+  - trim additions
+  - handrail
+  - complexity
+  - 3B2B double uplift if applicable
+  - decorative ceiling
+  - clamp and cap
+
+7.4 Exterior
+- Base source:
+  - wall rate curve if Wall selected
+  - item anchors for eaves/gutter/fascia/pipes/etc
+  - roof rate table if Roof selected
+  - deck/paving rate tables
+  - trim item anchors
+- Then:
+  - exterior condition multiplier on structural subtotal
+  - exterior complexity uplift
+  - specific trim items added outside condition
+  - deck/paving added outside structural condition
+  - wall-type scope floors if Wall selected
+  - clamp and cap
+
+============================================================
+8. How these anchors were likely created
+============================================================
+
+This section is partly direct evidence and partly inference from the codebase.
+
+Direct evidence from code/comments
+- Multiple files explicitly say the values are calibrated to Sydney Northern Beaches market, 2026.
+- Several comments call out:
+  - "key calibration point"
+  - "updated"
+  - "market range"
+  - "full exterior scope"
+  - "premium market"
+- The test suite validates many anchor values against market sanity expectations instead of purely mathematical properties.
+
+Strong inference
+- The anchors appear to be hand-calibrated commercial pricing tables, not ML-generated.
+- The design style suggests this workflow:
+  1. Pick representative market jobs
+  2. Decide baseline acceptable ranges
+  3. Encode those as medians, min/max bands, floors, or rate points
+  4. Add modifiers for condition/storey/access/finish
+  5. Add special corrections where the generic model was too inaccurate
+
+Evidence for hand-calibration
+- The 85sqm apartment point is explicitly singled out.
+- 3B2B fair single-storey house gets its own custom interpolation curve.
+- Exterior has both rate curves and package floors, which is typical when a pure formula underquotes common jobs.
+- Trim/front door pricing is separated because bundled pricing was probably too noisy or inaccurate.
+
+Why some anchors are min/max/median and others are rates
+- Whole-property jobs:
+  - Better handled by anchor/median models because customers think in property package terms.
+- Partial rooms and trim:
+  - Better handled by room or item anchors because scope is discrete.
+- Exterior walls, roofs, deck, paving:
+  - Better handled by rate logic because size materially changes labour and materials.
+- Floors exist because rate logic alone tends to underquote small or awkward jobs.
+
+============================================================
+9. Current inconsistencies and maintenance risks
+============================================================
+
+These are important if someone wants to trust or extend the anchor list.
+
+9.1 Apartment has two baseline systems
+- Entire property uses APARTMENT_SQM_CURVE.
+- Specific areas uses APARTMENT_ANCHORS_OIL.
+- Checklist B.8 flags this mismatch.
+
+9.2 Some important pricing bands live outside pricing-engine.ts
+- ENTIRE_HOUSE_BAND and ENTIRE_APT_BAND are in generate-painting-estimate.ts.
+- Checklist B.9 flags this as a single-source-of-truth issue.
+
+9.3 Generic Exterior Trim anchor is conceptually present but operationally weak
+- Engine still contains it.
+- Product policy currently requires detailed trim item selection.
+- So maintainers should treat per-item trim anchors as the real production path.
+
+9.4 Deck and paving models are different in shape
+- Deck uses base rates plus separate area multiplier.
+- Paving uses area-banded rates.
+- This raises comparison/maintenance complexity.
+
+9.5 Range caps can hide true anchor spread
+- Final displayed range may be much tighter than raw anchor-derived range.
+- If someone audits anchors only from UI output, they may misread the underlying calibration.
+
+============================================================
+10. Practical "anchor map" by use case
+============================================================
+
+If a user asks for this quote type, these anchors matter most:
+
+10.1 Apartment entire property
+- APARTMENT_SQM_CURVE
+- ENTIRE_APT_BAND
+- CONDITION_MULTIPLIER
+- AREA_SHARE
+- capRangeWidthSmart
+
+10.2 Apartment specific rooms
+- APARTMENT_ANCHORS_OIL
+- INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL
+- ROOM_WEIGHT
+- CONDITION_MULTIPLIER
+- specific hard floor logic
+
+10.3 House entire property
+- HOUSE_INTERIOR_ANCHORS
+- ENTIRE_HOUSE_BAND
+- HOUSE_CONDITION_MULTIPLIER
+- STORY_MODIFIER
+- CAL_3B2B_FAIR_SINGLE_POINTS for common 3B2B fair single-storey path
+
+10.4 House specific rooms
+- HOUSE_INTERIOR_ANCHORS
+- INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL
+- ROOM_WEIGHT
+- HOUSE_CONDITION_MULTIPLIER
+
+10.5 Exterior wall jobs
+- EXTERIOR_WALL_RATE_CURVES
+- DEFAULT_WALL_HEIGHT
+- EXTERIOR_WALL_TYPE_FLOORS
+- EXTERIOR_CONDITION_MULTIPLIER
+
+10.6 Exterior trim-heavy jobs
+- EXTERIOR_DOOR_ANCHOR
+- EXTERIOR_WINDOW_ANCHOR
+- EXTERIOR_ARCHITRAVE_ANCHOR
+- EXTERIOR_FRONT_DOOR_ANCHOR
+- getQtyScaleFactor
+
+10.7 Exterior roof/deck/paving jobs
+- EXTERIOR_ROOF_RATE
+- DECK_RATE_PER_M2
+- PAVING_RATE_PER_M2
+- related condition multipliers, floors, and ceilings
+
+============================================================
+11. Recommended reading order for maintainers
+============================================================
+
+If you need to understand or change pricing safely:
+1. Read src/lib/pricing-engine.ts first.
+2. Read src/ai/flows/generate-painting-estimate.exterior.ts second.
+3. Read src/ai/flows/generate-painting-estimate.ts third.
+4. Read docs/estimate-test-checklist.txt for known contradictions and calibration history.
+5. Run pricing tests before and after any change.
+
+============================================================
+12. Bottom line
+============================================================
+
+The app does not have one single "price anchor list".
+It has a layered pricing architecture where:
+- medians anchor whole-property expectations,
+- room and item anchors break that expectation into partial scopes,
+- rate tables price scale-sensitive work,
+- floors protect minimum commercial viability,
+- modifiers and caps shape the final customer-visible range.
+
+The anchors were almost certainly created by manual market calibration against Sydney Northern Beaches 2026 expectations, then refined through edge-case fixes and regression tests.
+
+If this system is expanded further, the biggest long-term cleanup opportunity is to:
+- centralize all anchor/band definitions in pricing-engine.ts,
+- decide whether apartment pricing should be curve-led or class-led,
+- and remove any remaining legacy fallback anchors that are no longer part of the intended product behavior.
+
+============================================================
+13. Quick Reference Tables
+============================================================
+
+13.1 Whole-property anchor tables
+
+| Anchor set | Key | Min | Max | Median / RawMedian | Primary use |
+|---|---:|---:|---:|---:|---|
+| APARTMENT_ANCHORS_OIL | Studio | 2200 | 3500 | 2700 | Apartment specific areas baseline |
+| APARTMENT_ANCHORS_OIL | OneBed | 2800 | 4200 | 3300 | Apartment specific areas baseline |
+| APARTMENT_ANCHORS_OIL | TwoBedStd | 4300 | 6200 | 5000 | Apartment specific areas baseline |
+| APARTMENT_ANCHORS_OIL | TwoBedLg | 5000 | 7500 | 6000 | Apartment specific areas baseline |
+| APARTMENT_ANCHORS_OIL | ThreeBed | 6500 | 9500 | 7500 | Apartment specific areas baseline |
+| HOUSE_INTERIOR_ANCHORS | 2B1B | 7500 | 11000 | 9000 | House entire/specific baseline |
+| HOUSE_INTERIOR_ANCHORS | 3B2B | 9500 | 14000 | 11500 | House entire/specific baseline |
+| HOUSE_INTERIOR_ANCHORS | 4B2B | 13000 | 18500 | 15500 | House entire/specific baseline |
+| HOUSE_INTERIOR_ANCHORS | 5B3B | 17000 | 25000 | 20000 | House entire/specific baseline |
+
+13.2 Apartment SQM curve table
+
+| SQM | RawMedian | Notes |
+|---:|---:|---|
+| 35 | 2200 | Small apartment calibration start |
+| 45 | 2800 | Curve point |
+| 55 | 3100 | Curve point |
+| 65 | 3450 | Curve point |
+| 80 | 3800 | Pre-2bed range |
+| 85 | 4350 | Key calibration point for avg 2-bed apartment |
+| 90 | 4400 | Near-2bed median checkpoint |
+| 105 | 4850 | Larger apartment checkpoint |
+| 120 | 5800 | Upper mid-size apartment |
+| 140 | 6900 | Large apartment checkpoint |
+| 160 | 7900 | Premium apartment checkpoint |
+| 200 | 9500 | Top of current curve |
+
+13.3 Whole-property band / multiplier tables
+
+| Table | Condition / Key | Min | Max | Purpose |
+|---|---|---:|---:|---|
+| CONDITION_MULTIPLIER | Excellent | 0.95 | 1.05 | Apartment interior condition band |
+| CONDITION_MULTIPLIER | Fair | 1.08 | 1.22 | Apartment interior condition band |
+| CONDITION_MULTIPLIER | Poor | 1.22 | 1.55 | Apartment interior condition band |
+| HOUSE_CONDITION_MULTIPLIER | Excellent | 1.00 | 1.08 | House interior condition band |
+| HOUSE_CONDITION_MULTIPLIER | Fair | 1.10 | 1.24 | House interior condition band |
+| HOUSE_CONDITION_MULTIPLIER | Poor | 1.22 | 1.40 | House interior condition band |
+| EXTERIOR_CONDITION_MULTIPLIER | Excellent | 1.00 | 1.08 | Exterior condition band |
+| EXTERIOR_CONDITION_MULTIPLIER | Fair | 1.10 | 1.24 | Exterior condition band |
+| EXTERIOR_CONDITION_MULTIPLIER | Poor | 1.22 | 1.40 | Exterior condition band |
+| ENTIRE_HOUSE_BAND | Excellent | 0.96 | 1.04 | House whole-property band |
+| ENTIRE_HOUSE_BAND | Fair | 0.97 | 1.06 | House whole-property band |
+| ENTIRE_HOUSE_BAND | Poor | 0.97 | 1.10 | House whole-property band |
+| ENTIRE_APT_BAND | Excellent | 0.95 | 1.05 | Apartment whole-property band |
+| ENTIRE_APT_BAND | Fair | 0.92 | 1.08 | Apartment whole-property band |
+| ENTIRE_APT_BAND | Poor | 0.90 | 1.25 | Apartment whole-property band |
+
+13.4 Story / global control tables
+
+| Table | Key | Value | Purpose |
+|---|---|---:|---|
+| STORY_MODIFIER | 1 storey | 1.00 | Interior storey uplift |
+| STORY_MODIFIER | 2 storey | 1.18 | Interior storey uplift |
+| STORY_MODIFIER | 3 storey | 1.35 | Interior storey uplift |
+| MAX_PRICE_CAP | Global | 35000 | Hard output ceiling |
+| DOUBLE_STOREY_3B2B_UPLIFT | baseMinPct | 0.03 | 3B2B double-storey calibration |
+| DOUBLE_STOREY_3B2B_UPLIFT | baseMaxPct | 0.05 | 3B2B double-storey calibration |
+| DOUBLE_STOREY_3B2B_UPLIFT | autoStairwellPct | 0.01 | 3B2B double-storey overlap control |
+| DOUBLE_STOREY_3B2B_UPLIFT | highCeilingReductionPct | 0.02 | 3B2B double-storey overlap control |
+
+13.5 Interior room anchor table
+
+| Room | Min | Max | Median | Typical role in model |
+|---|---:|---:|---:|---|
+| Master Bedroom | 1350 | 1700 | 1500 | Larger premium bedroom |
+| Bedroom 1 | 980 | 1280 | 1130 | Standard bedroom |
+| Bedroom 2 | 980 | 1280 | 1130 | Standard bedroom |
+| Bedroom 3 | 980 | 1280 | 1130 | Standard bedroom |
+| Bathroom | 1150 | 1550 | 1350 | Small but prep-heavy wet area |
+| Living Room | 2200 | 3200 | 2650 | Major feature room |
+| Lounge | 2200 | 3200 | 2650 | Same anchor as Living Room |
+| Dining | 1700 | 2400 | 2000 | Mid-large living area |
+| Kitchen | 1900 | 2700 | 2250 | Prep-heavy service area |
+| Study / Office | 1050 | 1450 | 1250 | Small-medium room |
+| Laundry | 850 | 1150 | 1000 | Lower-complexity service room |
+| Hallway | 900 | 1400 | 1150 | Circulation space |
+| Foyer | 850 | 1300 | 1050 | Entry space |
+| Stairwell | 1250 | 1850 | 1500 | Access/height-heavy area |
+| Walk-in robe | 800 | 1200 | 1000 | Small utility room |
+| Etc | 1200 | 1800 | 1500 | Generic fallback room |
+
+13.6 Interior door item pricing table
+
+| System | Scope | Base unit price | Notes |
+|---|---|---:|---|
+| oil_2coat | Door & Frame | 220 | Interior per-door item pricing |
+| oil_2coat | Door only | 160 | Interior per-door item pricing |
+| oil_2coat | Frame only | 60 | Interior per-door item pricing |
+| water_3coat_white_finish | Door & Frame | 295 | Water-based premium system |
+| water_3coat_white_finish | Door only | 210 | Water-based premium system |
+| water_3coat_white_finish | Frame only | 85 | Water-based premium system |
+
+13.7 Interior door complexity premium table
+
+| Table | Key | Value | Purpose |
+|---|---|---:|---|
+| INTERIOR_DOOR_TYPE_PREMIUM | flush | 0 | Base type |
+| INTERIOR_DOOR_TYPE_PREMIUM | sliding | 5 | Added complexity |
+| INTERIOR_DOOR_TYPE_PREMIUM | panelled | 10 | Added complexity |
+| INTERIOR_DOOR_TYPE_PREMIUM | french | 15 | Added complexity |
+| INTERIOR_DOOR_TYPE_PREMIUM | bi_folding | 25 | Highest complexity |
+| INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT | flush | 0.00 | Entire-job door mix premium |
+| INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT | sliding | 0.02 | Entire-job door mix premium |
+| INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT | panelled | 0.04 | Entire-job door mix premium |
+| INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT | french | 0.06 | Entire-job door mix premium |
+| INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT | bi_folding | 0.10 | Entire-job door mix premium |
+
+13.8 Interior window item pricing table
+
+| System | Type | Window & Frame | Window only | Frame only |
+|---|---|---:|---:|---:|
+| oil_2coat | Normal | 200 | 150 | 110 |
+| oil_2coat | Awning | 235 | 180 | 135 |
+| oil_2coat | Double Hung | 300 | 230 | 175 |
+| oil_2coat | French | 400 | 310 | 240 |
+| water_3coat_white_finish | Normal | 275 | 200 | 135 |
+| water_3coat_white_finish | Awning | 310 | 230 | 160 |
+| water_3coat_white_finish | Double Hung | 375 | 280 | 200 |
+| water_3coat_white_finish | French | 475 | 360 | 265 |
+
+13.9 Interior skirting / handrail reference table
+
+| Table | Key | Min | Max | Unit |
+|---|---|---:|---:|---|
+| INTERIOR_SKIRTING_LINEAR_RATE | oil_2coat | 7 | 10 | per lm |
+| INTERIOR_SKIRTING_LINEAR_RATE | water_3coat_white_finish | 8 | 11 | per lm |
+| INTERIOR_HANDRAIL_ITEM_PRICING | paint_to_paint_oil_2coat | 155 | 180 | per lm |
+| INTERIOR_HANDRAIL_ITEM_PRICING | paint_to_paint_water_3coat | 180 | 210 | per lm |
+| INTERIOR_HANDRAIL_ITEM_PRICING | varnish_to_paint_oil_3coat_min | 185 | 215 | per lm |
+| INTERIOR_HANDRAIL_ITEM_PRICING | varnish_to_paint_water_4coat_min | 210 | 245 | per lm |
+| INTERIOR_HANDRAIL_ITEM_PRICING | varnish_to_varnish_stain | 200 | 235 | per lm |
+| INTERIOR_HANDRAIL_ITEM_PRICING | varnish_to_varnish_clear | 170 | 200 | per lm |
+
+13.10 Exterior wall scope floor table
+
+| Wall type | Wall only | Wall + Eaves | Full exterior | Double-storey full | Triple-storey full |
+|---|---:|---:|---:|---:|---:|
+| cladding | 2600 | 3600 | 5200 | 7600 | 10600 |
+| rendered | 3200 | 4500 | 6200 | 8900 | 12300 |
+| brick | 3800 | 5400 | 7400 | 10500 | 14500 |
+| default | 2900 | 4100 | 5700 | 8100 | 11300 |
+
+13.11 Exterior wall rate curve table
+
+| Wall type | Area checkpoint | Min rate | Max rate | Unit |
+|---|---:|---:|---:|---|
+| cladding | 60 | 28.0 | 36.0 | per sqm wall area |
+| cladding | 95 | 25.5 | 33.0 | per sqm wall area |
+| cladding | 130 | 23.5 | 30.0 | per sqm wall area |
+| cladding | 175 | 22.0 | 28.0 | per sqm wall area |
+| cladding | 230 | 20.5 | 26.0 | per sqm wall area |
+| cladding | 320 | 19.0 | 24.0 | per sqm wall area |
+| rendered | 60 | 34.0 | 44.0 | per sqm wall area |
+| rendered | 95 | 31.0 | 40.0 | per sqm wall area |
+| rendered | 130 | 29.0 | 37.0 | per sqm wall area |
+| rendered | 175 | 27.5 | 35.0 | per sqm wall area |
+| rendered | 230 | 26.0 | 33.0 | per sqm wall area |
+| rendered | 320 | 24.5 | 31.0 | per sqm wall area |
+| brick | 60 | 39.0 | 50.0 | per sqm wall area |
+| brick | 95 | 36.0 | 46.0 | per sqm wall area |
+| brick | 130 | 34.0 | 43.0 | per sqm wall area |
+| brick | 175 | 32.0 | 40.0 | per sqm wall area |
+| brick | 230 | 30.5 | 38.0 | per sqm wall area |
+| brick | 320 | 29.0 | 36.0 | per sqm wall area |
+
+13.12 Exterior area anchor table
+
+| Area | Single min | Single max | Double min | Double max | Triple min | Triple max |
+|---|---:|---:|---:|---:|---:|---:|
+| Eaves | 1200 | 3500 | 1800 | 5000 | 2500 | 7000 |
+| Gutter | 500 | 1500 | 800 | 2200 | 1200 | 3200 |
+| Fascia | 500 | 1500 | 800 | 2200 | 1200 | 3200 |
+| Pipes | 300 | 800 | 450 | 1200 | 650 | 1700 |
+| Exterior Trim | 600 | 2000 | 900 | 3000 | 1200 | 4000 |
+| Etc | 300 | 1500 | 450 | 2200 | 650 | 3000 |
+
+13.13 Exterior roof table
+
+| Storey tier | Min rate | Max rate | Floor | Pitch factor |
+|---|---:|---:|---:|---:|
+| single | 18 | 42 | 3500 | 1.3 |
+| double | 28 | 58 | 5000 | 1.3 |
+| triple | 38 | 75 | 7000 | 1.3 |
+
+13.14 Exterior trim item anchor table
+
+| Table | Key | Min | Max | Use |
+|---|---|---:|---:|---|
+| EXTERIOR_DOOR_ANCHOR | Simple | 150 | 280 | Exterior door item |
+| EXTERIOR_DOOR_ANCHOR | Standard | 250 | 420 | Exterior door item |
+| EXTERIOR_DOOR_ANCHOR | Complex | 400 | 680 | Exterior door item |
+| EXTERIOR_WINDOW_ANCHOR | Normal | 80 | 160 | Exterior window item |
+| EXTERIOR_WINDOW_ANCHOR | Awning | 130 | 220 | Exterior window item |
+| EXTERIOR_WINDOW_ANCHOR | Double Hung | 180 | 320 | Exterior window item |
+| EXTERIOR_WINDOW_ANCHOR | French | 280 | 500 | Exterior window item |
+| EXTERIOR_ARCHITRAVE_ANCHOR | Simple | 50 | 110 | Exterior architrave item |
+| EXTERIOR_ARCHITRAVE_ANCHOR | Standard | 80 | 170 | Exterior architrave item |
+| EXTERIOR_ARCHITRAVE_ANCHOR | Complex | 140 | 300 | Exterior architrave item |
+| EXTERIOR_FRONT_DOOR_ANCHOR | Front Door | 520 | 880 | Premium standalone front door |
+
+13.15 Quantity scaling table
+
+| Quantity range | Scale factor | Applied to |
+|---|---:|---|
+| 1 to 3 | 1.00 | calcTrimItemCost |
+| 4 to 7 | 0.92 | calcTrimItemCost |
+| 8 to 12 | 0.85 | calcTrimItemCost |
+| 13+ | 0.80 | calcTrimItemCost |
+
+13.16 Deck pricing table
+
+| Service key | Min rate | Max rate | Unit | Notes |
+|---|---:|---:|---|---|
+| stain-oil | 32 | 60 | per sqm | Deck staining, oil |
+| stain-water | 34 | 62 | per sqm | Deck staining, water |
+| clear-oil | 28 | 53 | per sqm | Clear finish, oil |
+| clear-water | 30 | 55 | per sqm | Clear finish, water |
+| paint-conversion | 60 | 91 | per sqm | Highest complexity deck system |
+| paint-recoat | 35 | 60 | per sqm | Recoat path |
+
+Deck multipliers / controls
+
+| Table | Key | Value | Purpose |
+|---|---|---:|---|
+| DECK_CONDITION_MULT | good | 1.00 | Condition uplift |
+| DECK_CONDITION_MULT | weathered | 1.25 | Condition uplift |
+| DECK_CONDITION_MULT | damaged | 1.55 | Condition uplift |
+| Deck area band | <=20sqm | 1.15 | Small-job inefficiency uplift |
+| Deck area band | <=50sqm | 1.00 | Baseline |
+| Deck area band | <=100sqm | 0.90 | Volume discount |
+| Deck area band | >100sqm | 0.82 | Larger volume discount |
+| DECK_MINIMUM_CHARGE | Global | 600 | Deck minimum charge |
+| DECK_PROJECT_CEILING | Global | 22000 | Deck ceiling |
+
+13.17 Paving pricing table
+
+| Area band | Min rate | Max rate | Unit |
+|---|---:|---:|---|
+| <=25sqm | 44 | 56 | per sqm |
+| <=70sqm | 34 | 44 | per sqm |
+| <=140sqm | 27 | 35 | per sqm |
+| >140sqm | 22 | 29 | per sqm |
+
+Paving multipliers / controls
+
+| Table | Key | Value | Purpose |
+|---|---|---:|---|
+| PAVING_CONDITION_MULT | good | 1.00 | Condition uplift |
+| PAVING_CONDITION_MULT | fair | 1.20 | Condition uplift |
+| PAVING_CONDITION_MULT | poor | 1.45 | Condition uplift |
+| PAVING_MINIMUM_CHARGE | Global | 950 | Paving minimum charge |
+| PAVING_PROJECT_CEILING | Global | 18000 | Paving ceiling |
