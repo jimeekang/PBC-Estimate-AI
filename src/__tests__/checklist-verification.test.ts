@@ -587,7 +587,7 @@ describe('Checklist PART A.4 — Exterior subsystem direct calls', () => {
     out.push({ id: 'EXR1', actualMin: r.extMin, actualMax: r.extMax });
   });
 
-  test('EXR3 (B.1 reproducer): Roof only · 50sqm · 3 storey → min==max risk', () => {
+  test('EXR3: Roof only · 50sqm · 3 storey keeps a positive range width', () => {
     const r = calculateExteriorEstimate({
       typeOfWork: ['Exterior Painting'],
       paintCondition: 'Fair',
@@ -601,13 +601,14 @@ describe('Checklist PART A.4 — Exterior subsystem direct calls', () => {
       actualMin: r.extMin,
       actualMax: r.extMax,
       rangeWidth: r.extMax - r.extMin,
-      note: 'B.1 bug: width should be > 0; if 0 → bug reproduced',
+      note: 'B.1 fix: roof-only high-storey case should preserve a positive width',
     });
+    expect(r.extMax).toBeGreaterThan(r.extMin);
   });
 });
 
 describe('Checklist PART B — Known bug reproducers', () => {
-  test('B.1 Roof: verifies min/max divergence on small roof + high storey', () => {
+  test('B.1 Roof: small roof + high storey preserves a non-zero range', () => {
     // Direct calc: floor 50 × 1.3 (pitchFactor) = 65 sqm
     const pitch = EXTERIOR_ROOF_RATE.pitchFactor;
     const roofArea = 50 * pitch;
@@ -616,18 +617,14 @@ describe('Checklist PART B — Known bug reproducers', () => {
     const rawMax = roofArea * tripleRate.max;
     const floor = tripleRate.floor;
     const clampedMin = Math.max(rawMin, floor);
-    const clampedMax = Math.max(rawMax, clampedMin);
+    const clampedMax = Math.max(rawMax, floor * 1.25);
 
     // eslint-disable-next-line no-console
     console.log('[B.1] roofArea', roofArea, 'rawMin', rawMin, 'rawMax', rawMax, 'floor', floor);
     // eslint-disable-next-line no-console
     console.log('[B.1] clampedMin', clampedMin, 'clampedMax', clampedMax, 'width', clampedMax - clampedMin);
-
-    if (clampedMax - clampedMin === 0) {
-      // eslint-disable-next-line no-console
-      console.warn('[B.1] BUG CONFIRMED — roof range width is 0');
-    }
     expect(clampedMin).toBeGreaterThan(0);
+    expect(clampedMax - clampedMin).toBeGreaterThan(0);
   });
 
   test('B.2 APARTMENT_SQM_CURVE 85→90sqm monotonicity check', () => {

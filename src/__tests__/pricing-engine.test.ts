@@ -517,22 +517,22 @@ describe('E: Range Cap Policy', () => {
     expect(result.max).toBe(5200); // 4000 + 1200
   });
 
-  test('E2: interior, min=$7000 — cap is 1800', () => {
+  test('E2: interior, min=$7000 — cap is 1500', () => {
     const result = capRangeWidthSmart(7000, 10000, {}, 'interior');
     expect(result.min).toBe(7000);
-    expect(result.max).toBe(8800); // 7000 + 1800
+    expect(result.max).toBe(8500); // 7000 + 1500
   });
 
-  test('E3: interior, min=$12000 — cap is 2000', () => {
+  test('E3: interior, min=$12000 — cap is 1500', () => {
     const result = capRangeWidthSmart(12000, 16000, {}, 'interior');
     expect(result.min).toBe(12000);
-    expect(result.max).toBe(14000); // 12000 + 2000
+    expect(result.max).toBe(13500); // 12000 + 1500
   });
 
-  test('E4: interior, min=$20000 — cap is 2000', () => {
+  test('E4: interior, min=$20000 — cap is 1500', () => {
     const result = capRangeWidthSmart(20000, 26000, {}, 'interior');
     expect(result.min).toBe(20000);
-    expect(result.max).toBe(22000); // 20000 + 2000
+    expect(result.max).toBe(21500); // 20000 + 1500
   });
 
   test('E5: exterior, min=$2000 — cap is 1000', () => {

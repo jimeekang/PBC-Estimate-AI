@@ -337,7 +337,7 @@ export function calculateExteriorEstimate(input: ExteriorEstimateInput) {
     const roofArea = floorSqm * EXTERIOR_ROOF_RATE.pitchFactor;
     const roofRate = EXTERIOR_ROOF_RATE[storeyTier];
     const roofMin = Math.max(roofArea * roofRate.min, roofRate.floor);
-    const roofMax = roofArea * roofRate.max;
+    const roofMax = Math.max(roofArea * roofRate.max, roofRate.floor * 1.25);
     rangeMin += roofMin;
     rangeMax += Math.max(roofMax, roofMin);
   }

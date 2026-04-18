@@ -134,7 +134,10 @@ const ENTIRE_APT_BAND = {
 const ENTIRE_APT_POOR_PREP_UPLIFT = { min: 1.06, max: 1.12 } as const;
 
 const WATER_BASED_UPLIFT = { minPct: 0.04, maxPct: 0.06 } as const;
-const TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM = { min: 50, max: 110 } as const;
+const TRIM_PREMIUM_ENTIRE_WATER_WHOLE_JOB = {
+  base: { min: 3500, max: 3900 },
+  extraItem: { min: 250, max: 400 },
+} as const;
 const INTERIOR_DOOR_TYPE_OPTIONS = ['flush', 'sliding', 'panelled', 'french', 'bi_folding'] as const;
 const TRIM_PREMIUM_SPECIFIC_PER_ROOM = {
   'Oil-based': { min: 130, max: 220 },
@@ -175,6 +178,17 @@ const INTERIOR_WINDOW_TYPE_PREMIUM = {
 const INTERIOR_TRIM_ONLY_BASE = {
   apartment: { min: 2850, max: 3600 },
   house: { min: 3200, max: 4100 },
+} as const;
+
+const WHOLE_APARTMENT_SINGLE_SURFACE_SHARE = {
+  wallPaint: 0.54,
+  ceilingPaint: 0.33,
+  trimPaint: 0.18,
+} as const;
+
+const ENTIRE_APARTMENT_TRIM_ONLY_BASE = {
+  min: 780,
+  max: 920,
 } as const;
 
 const INTERIOR_SKIRTING_ROOM_ANCHOR = {
@@ -281,6 +295,49 @@ function formatMoney(n: number) {
   return n.toLocaleString('en-AU');
 }
 
+function formatDeckServiceLabel(serviceType?: string, productType?: string) {
+  if (serviceType === 'paint-conversion') return 'paint conversion';
+  if (serviceType === 'paint-recoat') return 'paint recoat';
+  const base = serviceType === 'clear' ? 'clear finish' : 'stain';
+  if (productType === 'water') return `${base} / water-based`;
+  if (productType === 'oil') return `${base} / oil-based`;
+  return base;
+}
+
+function getExteriorScopeDetailLines(input: GeneratePaintingEstimateInput, costs: {
+  deckCost?: { min: number; max: number } | null;
+  pavingCost?: { min: number; max: number } | null;
+}) {
+  const lines: string[] = [];
+
+  if ((input.exteriorAreas ?? []).includes('Deck') && costs.deckCost && input.deckArea) {
+    const condition = input.deckCondition ?? 'good';
+    lines.push(
+      `Deck (${input.deckArea} sqm) - ${formatDeckServiceLabel(
+        input.deckServiceType,
+        input.deckProductType
+      )} / ${condition}: AUD ${formatMoney(costs.deckCost.min)} - ${formatMoney(costs.deckCost.max)}`
+    );
+  }
+
+  if ((input.exteriorAreas ?? []).includes('Paving') && costs.pavingCost && input.pavingArea) {
+    const condition = input.pavingCondition ?? 'good';
+    lines.push(
+      `Paving (${input.pavingArea} sqm) - ${condition}, 2-coat system: AUD ${formatMoney(
+        costs.pavingCost.min
+      )} - ${formatMoney(costs.pavingCost.max)}`
+    );
+  }
+
+  if ((input.exteriorAreas ?? []).includes('Etc') && input.otherExteriorArea?.trim()) {
+    lines.push(
+      `Custom exterior area selected (${input.otherExteriorArea.trim()}) - site inspection required for final pricing.`
+    );
+  }
+
+  return lines;
+}
+
 function hasPricedInteriorSurfaceSelection(flags?: {
   ceilingPaint?: boolean;
   wallPaint?: boolean;
@@ -297,6 +354,18 @@ function countPricedInteriorSurfaces(flags?: {
   ensuitePaint?: boolean;
 }) {
   return Number(!!flags?.ceilingPaint) + Number(!!flags?.wallPaint) + Number(!!flags?.trimPaint);
+}
+
+function getWholeApartmentSingleSurfaceShare(flags?: {
+  ceilingPaint?: boolean;
+  wallPaint?: boolean;
+  trimPaint?: boolean;
+  ensuitePaint?: boolean;
+}) {
+  if (flags?.wallPaint) return WHOLE_APARTMENT_SINGLE_SURFACE_SHARE.wallPaint;
+  if (flags?.ceilingPaint) return WHOLE_APARTMENT_SINGLE_SURFACE_SHARE.ceilingPaint;
+  if (flags?.trimPaint) return WHOLE_APARTMENT_SINGLE_SURFACE_SHARE.trimPaint;
+  return 1.0;
 }
 
 function getInteriorDoorUnitPrice(system: string, scope: string, doorType = 'flush') {
@@ -611,6 +680,17 @@ function applyWaterBasedUpliftTrimShareWholeJob(minVal: number, maxVal: number) 
   return {
     min: Math.round(minVal * minMult),
     max: Math.round(maxVal * maxMult),
+  };
+}
+
+function getWholeJobWaterTrimPremium(itemCount: number) {
+  if (itemCount <= 0) return { min: 0, max: 0 };
+  const extraItems = Math.max(0, itemCount - 1);
+  return {
+    min: TRIM_PREMIUM_ENTIRE_WATER_WHOLE_JOB.base.min +
+      TRIM_PREMIUM_ENTIRE_WATER_WHOLE_JOB.extraItem.min * extraItems,
+    max: TRIM_PREMIUM_ENTIRE_WATER_WHOLE_JOB.base.max +
+      TRIM_PREMIUM_ENTIRE_WATER_WHOLE_JOB.extraItem.max * extraItems,
   };
 }
 
@@ -1281,6 +1361,8 @@ export const generatePaintingEstimate = ai.defineFlow(
       const aptLike = isApartmentLike(input.propertyType);
       const isSkirtingOnlySpecific = isSkirtingOnlyTrimSpecific(input);
       let wholePropertyDoorPremiumPct = 0;
+      let baseBeforeWholePropertyModifiersMin = 0;
+      let baseBeforeWholePropertyModifiersMax = 0;
 
       let selectedRooms: string[] = [];
       let areaFactor = 1.0;
@@ -1358,16 +1440,24 @@ export const generatePaintingEstimate = ai.defineFlow(
           // Guard: approxSize may be undefined, NaN, or empty string from form
           const sqmRaw = toNumberOrUndefined(input.approxSize);
           const rawMedian = getRawMedianFromSqm(sqmRaw); // handles undefined/NaN internally
-          const median = rawMedian * areaFactor;
+          const singleSurfaceShare = hasSingleSurfaceWholeApartment
+            ? getWholeApartmentSingleSurfaceShare(input.paintAreas)
+            : areaFactor;
+          const median = rawMedian * singleSurfaceShare;
           const band = ENTIRE_APT_BAND[condition];
 
           const computedMin = Math.round(median * band.min);
           const computedMax = Math.round(median * band.max);
           const absoluteFloor = hasSingleSurfaceWholeApartment
-            ? Math.round(rawMedian * areaFactor * 0.78)
+            ? Math.round(rawMedian * singleSurfaceShare * 0.78)
             : Math.round(rawMedian * 0.78);
           intMin = Number.isFinite(computedMin) ? Math.max(computedMin, absoluteFloor) : absoluteFloor;
           intMax = Number.isFinite(computedMax) ? Math.max(computedMax, Math.round(absoluteFloor * 1.2)) : Math.round(absoluteFloor * 1.2);
+
+          if (hasSingleSurfaceWholeApartment && input.paintAreas?.trimPaint) {
+            intMin = Math.max(intMin, ENTIRE_APARTMENT_TRIM_ONLY_BASE.min);
+            intMax = Math.max(intMax, ENTIRE_APARTMENT_TRIM_ONLY_BASE.max);
+          }
 
           if (condition === 'Poor') {
             intMin = Math.round(intMin * ENTIRE_APT_POOR_PREP_UPLIFT.min);
@@ -1499,6 +1589,8 @@ export const generatePaintingEstimate = ai.defineFlow(
       // storey modifier (interior)
       intMin = Math.round(intMin * storyMult);
       intMax = Math.round(intMax * storyMult);
+      baseBeforeWholePropertyModifiersMin = intMin;
+      baseBeforeWholePropertyModifiersMax = intMax;
 
       // trim options
       if (input.trimPaintOptions) {
@@ -1526,8 +1618,9 @@ export const generatePaintingEstimate = ai.defineFlow(
           if (globalTrimOn && paintType === 'Water-based') {
             const itemCount = trimItems.length;
             if (itemCount > 0) {
-              intMin += TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM.min * itemCount;
-              intMax += TRIM_PREMIUM_ENTIRE_WATER_PER_ITEM.max * itemCount;
+              const premium = getWholeJobWaterTrimPremium(itemCount);
+              intMin += premium.min;
+              intMax += premium.max;
             }
             const uplifted = applyWaterBasedUpliftTrimShareWholeJob(intMin, intMax);
             intMin = uplifted.min;
@@ -1624,6 +1717,8 @@ export const generatePaintingEstimate = ai.defineFlow(
       const finalHouseKey = computedHouseKey;
 
       if (!isApartmentLike(input.propertyType) && isWhole && finalHouseKey) {
+        const preservedModifierDeltaMin = Math.max(0, intMin - baseBeforeWholePropertyModifiersMin);
+        const preservedModifierDeltaMax = Math.max(0, intMax - baseBeforeWholePropertyModifiersMax);
         const calibrated = calibrate3B2BFairSingleHouse(input, finalHouseKey, intMin, intMax);
         intMin = calibrated.min;
         intMax = calibrated.max;
@@ -1631,6 +1726,9 @@ export const generatePaintingEstimate = ai.defineFlow(
         const upliftedDouble = applyDoubleStorey3B2BUplift(input, finalHouseKey, intMin, intMax);
         intMin = upliftedDouble.min;
         intMax = upliftedDouble.max;
+
+        intMin += preservedModifierDeltaMin;
+        intMax += preservedModifierDeltaMax;
       }
 
       // decorative ceiling modifier (after calibration so it's not overridden)
@@ -1717,8 +1815,24 @@ export const generatePaintingEstimate = ai.defineFlow(
       total: { min: totalMin, max: totalMax, priceRange: totalPriceRange },
     };
 
+    const customExteriorSelected =
+      (input.exteriorAreas ?? []).includes('Etc') && !!input.otherExteriorArea?.trim();
+    const exteriorScopeDetailLines = getExteriorScopeDetailLines(input, {
+      deckCost: deckCostForPrompt,
+      pavingCost: pavingCostForPrompt,
+    });
+
+    const resolvedExteriorPriceRange = customExteriorSelected
+      ? `From AUD ${formatMoney(extMin)}+ (Custom Scope - Site Inspection Required)`
+      : exteriorPriceRange;
+    const resolvedTotalPriceRange =
+      customExteriorSelected && isExt
+        ? `From AUD ${formatMoney(totalMin)}+ (Custom Scope - Site Inspection Required)`
+        : totalPriceRange;
+
+    breakdown.total.priceRange = resolvedTotalPriceRange;
     if (isInt) breakdown.interior = { min: intMin, max: intMax, priceRange: interiorPriceRange };
-    if (isExt) breakdown.exterior = { min: extMin, max: extMax, priceRange: exteriorPriceRange };
+    if (isExt) breakdown.exterior = { min: extMin, max: extMax, priceRange: resolvedExteriorPriceRange };
     const includeTrimPricingNote = hasSelectedTrimOptions(input);
     const includeFrontDoorPricingNote = hasSelectedFrontDoor(input);
     const handrailPricingDetails = getInteriorHandrailRange(input.interiorRooms ?? []).details;
@@ -1785,6 +1899,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             output.details && output.details.length
             ? [
                 ...output.details,
+                ...exteriorScopeDetailLines.filter((detail) => !output.details?.includes(detail)),
                 ...handrailPricingDetails.filter((detail) => !output.details?.includes(detail)),
                 ...(includeTrimPricingNote && !output.details.includes(trimPricingDetail)
                   ? [trimPricingDetail]
@@ -1795,8 +1910,9 @@ export const generatePaintingEstimate = ai.defineFlow(
               ]
             : [
                 ...(isInt ? [`Interior: ${interiorPriceRange}`] : []),
-                ...(isExt ? [`Exterior: ${exteriorPriceRange}`] : []),
-                `Total: ${totalPriceRange}`,
+                ...(isExt ? [`Exterior: ${resolvedExteriorPriceRange}`] : []),
+                `Total: ${resolvedTotalPriceRange}`,
+                ...exteriorScopeDetailLines,
                 ...handrailPricingDetails,
                 ...(includeTrimPricingNote ? [trimPricingDetail] : []),
                 ...(includeFrontDoorPricingNote ? [frontDoorPricingDetail] : []),
@@ -1809,7 +1925,7 @@ export const generatePaintingEstimate = ai.defineFlow(
     }
 
     return {
-      priceRange: totalPriceRange,
+      priceRange: resolvedTotalPriceRange,
       explanation: withFrontDoorPricingNote(
         withTrimPricingNote(
           'This is an indicative estimate based on the information provided and is subject to site inspection for a final quote.',
@@ -1819,8 +1935,9 @@ export const generatePaintingEstimate = ai.defineFlow(
       ),
       details: [
         ...(isInt ? [`Interior: ${interiorPriceRange}`] : []),
-        ...(isExt ? [`Exterior: ${exteriorPriceRange}`] : []),
-        `Total: ${totalPriceRange}`,
+        ...(isExt ? [`Exterior: ${resolvedExteriorPriceRange}`] : []),
+        `Total: ${resolvedTotalPriceRange}`,
+        ...exteriorScopeDetailLines,
         ...handrailPricingDetails,
         ...(includeTrimPricingNote ? [trimPricingDetail] : []),
         ...(includeFrontDoorPricingNote ? [frontDoorPricingDetail] : []),

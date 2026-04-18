@@ -45,15 +45,40 @@ type Row = {
 const aeRows: Row[] = [];
 const asRows: Row[] = [];
 
+function findRemainingIssues(rows: Row[]) {
+  return rows
+    .map((row) => {
+      const issues: string[] = [];
+      if (
+        typeof row.actualMin === 'number' &&
+        typeof row.actualMax === 'number' &&
+        row.actualMax - row.actualMin > 1500
+      ) {
+        issues.push(`range width ${row.actualMax - row.actualMin} > 1500`);
+      }
+      if (typeof row.expectedMin === 'number' && row.actualMin < row.expectedMin) {
+        issues.push(`min ${row.actualMin} < expected ${row.expectedMin}`);
+      }
+      if (typeof row.expectedMax === 'number' && row.actualMax > row.expectedMax) {
+        issues.push(`max ${row.actualMax} > expected ${row.expectedMax}`);
+      }
+      return issues.length > 0 ? { id: row.id, label: row.label, issues: issues.join('; ') } : null;
+    })
+    .filter((row): row is { id: string; label: string; issues: string } => row !== null);
+}
+
 afterAll(() => {
+  const aeIssues = findRemainingIssues(aeRows);
+  const asIssues = findRemainingIssues(asRows);
+
   // eslint-disable-next-line no-console
-  console.log('\n=== A.2.1 APT · Entire property (AE1-AE14) ===');
+  console.log('\n=== A.2.1 APT · Entire property (Remaining issues only) ===');
   // eslint-disable-next-line no-console
-  console.table(aeRows);
+  console.table(aeIssues.length > 0 ? aeIssues : [{ status: 'No remaining issues' }]);
   // eslint-disable-next-line no-console
-  console.log('\n=== A.2.2 APT · Specific areas only (AS1-AS18) ===');
+  console.log('\n=== A.2.2 APT · Specific areas only (Remaining issues only) ===');
   // eslint-disable-next-line no-console
-  console.table(asRows);
+  console.table(asIssues.length > 0 ? asIssues : [{ status: 'No remaining issues' }]);
 });
 
 function base(): GeneratePaintingEstimateInput {
@@ -305,6 +330,10 @@ describe('A.2.1 Apartment · Entire property', () => {
     expect(ceiling.min).toBeGreaterThan(trim.min);
     expect(wall.max).toBeGreaterThan(ceiling.max);
     expect(ceiling.max).toBeGreaterThan(trim.max);
+    expect(ceiling.min / wall.min).toBeGreaterThanOrEqual(0.6);
+    expect(ceiling.min / wall.min).toBeLessThanOrEqual(0.63);
+    expect(ceiling.max / wall.max).toBeGreaterThanOrEqual(0.6);
+    expect(ceiling.max / wall.max).toBeLessThanOrEqual(0.63);
   });
 
   test('AE10: ensuite-only edge case — throws because no priced surface selected', async () => {
@@ -394,6 +423,7 @@ describe('A.2.1 Apartment · Entire property', () => {
     });
     expect(i.min).toBeGreaterThan(0);
   });
+
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -866,4 +896,5 @@ describe('A.2.2 Apartment · Specific areas only', () => {
     expect(b.min).toBeGreaterThan(a.min);
     expect(b.max).toBeGreaterThan(a.max);
   });
+
 });

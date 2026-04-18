@@ -33,15 +33,39 @@ type Row = {
 const heRows: Row[] = [];
 const hsRows: Row[] = [];
 
+function findGapIssues(rows: Row[]) {
+  return rows
+    .filter((row) => !row.id.includes('-INV'))
+    .filter((row) => row.actualMax - row.actualMin > 1500)
+    .map((row) => ({
+      id: row.id,
+      label: row.label,
+      gap: row.actualMax - row.actualMin,
+      range: `${row.actualMin}-${row.actualMax}`,
+      note: row.note ?? '',
+    }));
+}
+
 afterAll(() => {
+  const heGapIssues = findGapIssues(heRows);
+  const hsGapIssues = findGapIssues(hsRows);
+
   // eslint-disable-next-line no-console
   console.log('\n=== A.3.1 HOUSE · Entire property (HE1-HE12) ===');
   // eslint-disable-next-line no-console
   console.table(heRows);
   // eslint-disable-next-line no-console
+  console.log('\n=== A.3.1 HOUSE · Gap > AUD 1,500 ===');
+  // eslint-disable-next-line no-console
+  console.table(heGapIssues.length > 0 ? heGapIssues : [{ status: 'No gap issues' }]);
+  // eslint-disable-next-line no-console
   console.log('\n=== A.3.2 HOUSE · Specific areas only (HS1-HS9) ===');
   // eslint-disable-next-line no-console
   console.table(hsRows);
+  // eslint-disable-next-line no-console
+  console.log('\n=== A.3.2 HOUSE · Gap > AUD 1,500 ===');
+  // eslint-disable-next-line no-console
+  console.table(hsGapIssues.length > 0 ? hsGapIssues : [{ status: 'No gap issues' }]);
 });
 
 function base(): GeneratePaintingEstimateInput {
@@ -358,6 +382,7 @@ describe('A.3.1 House · Entire property', () => {
       expect(i.min).toBeLessThanOrEqual(i.max);
     }
   });
+
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -545,4 +570,5 @@ describe('A.3.2 House · Specific areas only', () => {
       expect(i.min).toBeLessThanOrEqual(i.max);
     }
   });
+
 });

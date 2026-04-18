@@ -52,9 +52,9 @@ describe('generatePaintingEstimate', () => {
     });
 
     expect(result.breakdown?.interior?.min).toBe(10000);
-    expect(result.breakdown?.interior?.max).toBe(11800);
+    expect(result.breakdown?.interior?.max).toBe(11500);
     expect(result.breakdown?.total?.min).toBe(10000);
-    expect(result.breakdown?.total?.max).toBe(11800);
+    expect(result.breakdown?.total?.max).toBe(11500);
   });
 
   test('whole-house door type premiums apply on top of the trim share for entire-property pricing', async () => {
@@ -84,5 +84,30 @@ describe('generatePaintingEstimate', () => {
     expect((premium.breakdown?.interior?.max ?? 0)).toBeGreaterThan(
       baseline.breakdown?.interior?.max ?? 0
     );
+  });
+
+  test('whole-house water-based trim carries at least AUD 3,500 more than oil-based trim', async () => {
+    const oil = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      roomsToPaint: [],
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors'],
+        interiorDoorTypes: ['flush'],
+      },
+    });
+
+    const water = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      roomsToPaint: [],
+      trimPaintOptions: {
+        paintType: 'Water-based',
+        trimItems: ['Doors'],
+        interiorDoorTypes: ['flush'],
+      },
+    });
+
+    expect((water.breakdown?.interior?.min ?? 0) - (oil.breakdown?.interior?.min ?? 0)).toBeGreaterThanOrEqual(3500);
+    expect((water.breakdown?.interior?.max ?? 0) - (oil.breakdown?.interior?.max ?? 0)).toBeGreaterThanOrEqual(3500);
   });
 });

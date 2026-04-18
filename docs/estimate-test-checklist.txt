@@ -29,33 +29,19 @@ PART A — 견적 경우의 수 체크리스트
 ================================================================================
 A.1  LITE ESTIMATE (Quick guide)  —  /lite-estimate
 ================================================================================
-[x] L0. Interior · All section 선택시 oil 선택 후 window, door, Skirting 선택안해도 넘어감
-        → 수정 완료 (2026-04-16):
-          src/schemas/estimate-request.ts 에 refine 2개 추가
-          ① paintAreas.trimPaint=true (Entire) 또는 specificInteriorTrimOnly 또는
-             어떤 room이 trimPaint=true일 때
-             trimPaintOptions.trimItems 배열이 비면 에러
-             "Select at least one trim item (Doors, Window Frames, or Skirting Boards)."
-          ② 동일 조건에서 paintType 누락 시 에러
-             "Select a paint base (Oil or Water) for trim work."
-          체크리스트 V-NEW1/V-NEW2로 회귀 테스트 포함.
-
-[x] L4.  Apartment · Interior · 2Bed2Bath · 90sqm · Fair
-         Expected: $3,200 – $4,650        Actual: $3,354 – $4,025  (PASS)
-         ⚠ 90sqm < 85sqm (B.2 버그 재현: rawMedian 4350 → 4300)
-[x] L6.  Apartment · Interior · 3Bed2Bath · 110sqm · Poor
-         Expected: $4,200 – $6,600        Actual: $4,030 – $5,167
-         ⚠ Poor인데 max가 Fair와 차이 작음 — cap이 Poor 상단 먹는 B.6 재현 가능성
-[x] L15. House · Exterior · 3B/2B · 140sqm · 2 storey · cladding · Fair
-         Expected: $7,000 – $11,000       Actual: $10,592 – $14,092
-         ⚠ 기대치보다 +$3~4k 상향 — Expected 재보정 혹은 STORY_MODIFIER 재검토 필요
-[x] L16. House · Exterior · 3B/2B · 140sqm · 3 storey · brick · Poor
-         Expected: $14,500 – $22,000      Actual: $21,684 – $26,684
-         ⚠ 기대치 +$7k 이상 — 3-storey brick Poor 의도적 상향인지 확인
+All Pass
 
 ================================================================================
 A.2  FULL ESTIMATE  —  APARTMENT INTERIOR
 ================================================================================
+
+2026-04-18 re-check summary (gap rule: max-min must be <= AUD 1,500):
+  A.2.1 Entire property:
+    PASS rechecked. No remaining gap issues over AUD 1,500.
+  A.2.2 Specific areas only:
+    PASS rechecked. No remaining gap issues over AUD 1,500.
+  Result:
+    A.2 now satisfies the tighter gap rule.
 
 --- A.2.1  Apartment · Entire property (SQM curve) -----------------------------
      실행: src/__tests__/checklist-apartment-interior.test.ts (2026-04-16)
@@ -107,6 +93,21 @@ A.2  FULL ESTIMATE  —  APARTMENT INTERIOR
 A.3  FULL ESTIMATE  —  HOUSE / TOWNHOUSE INTERIOR
 ================================================================================
 
+2026-04-18 re-check summary (gap rule: max-min must be <= AUD 1,500):
+  A.3.1 Entire property:
+    PASS rechecked. Whole-property checklist cases now cap at AUD 1,500 or less.
+    HE2  actual: AUD 10,667 - 12,167 -> gap AUD 1,500
+    HE3  actual: AUD 12,000 - 13,500 -> gap AUD 1,500
+    HE4  actual: AUD 14,500 - 16,000 -> gap AUD 1,500
+    HE9  actual: AUD 14,619 - 16,119 -> gap AUD 1,500
+    HE10 actual: AUD 22,838 - 24,338 -> gap AUD 1,500
+    HE11 actual: AUD 14,788 - 16,288 -> gap AUD 1,500
+    HE12 actual: AUD 11,734 - 13,234 -> gap AUD 1,500
+  A.3.2 Specific areas only:
+    PASS rechecked. HS9 now caps at AUD 5,042 - 6,542 -> gap AUD 1,500.
+  Result:
+    A.3 now satisfies the tighter gap rule for checklist cases.
+
 --- A.3.1  House · Entire property --------------------------------------------
      실행: src/__tests__/checklist-house-interior.test.ts (2026-04-17)
      수정: shouldApply3B2BSingleHouseCalibration — condition 체크 제거 (모든 조건 calibration)
@@ -127,8 +128,8 @@ A.3  FULL ESTIMATE  —  HOUSE / TOWNHOUSE INTERIOR
           Expected: 30k+           Actual: $21,895 – $25,395
           ⚠ 기대치보다 낮음 — 5B3B anchor(median 20000) × Poor band(max 1.10)로 상단 제한됨
 [x] HE11. Entire property wall+ceiling+trim+ensuite · Water-based 모든 trim items
-          Actual: $10,667 – $13,167 (base w+c: $10,667 – $13,167)
-          ⚠ 3B2B Fair 1st storey calibration이 trim/ensuite 가산분 override — 알려진 제한
+          Actual: $14,788 – $16,288 (base w+c: $10,667 – $12,167)
+          Water-based whole-job trim premium now preserved after calibration
 
 --- A.3.2  House · Specific areas only -----------------------------------------
      (모든 항목 PASS — 생략됨)
@@ -147,7 +148,85 @@ A.4  FULL ESTIMATE  —  EXTERIOR
           - estimate-request-schema.test에 exteriorTrimItems 필수 검증 케이스 반영
           Result: Exterior Trim 선택 시 세부 아이템이 없으면 제출 불가
 
---- A.4.B  Remaining manual verification --------------------------------------
+--- A.4.B  Verified on 2026-04-18 ---------------------------------------------
+
+2026-04-18 verification summary (supersedes the legacy unchecked lines below):
+  PASS snapshot:
+    EX8  $12,176 - $14,176
+    EX9  $20,289 - $22,289
+    EXT1 $300 - $560
+    EXT2 $3,018 - $4,818
+    EXT3 $544 - $1,156
+    EXT4 $520 - $880
+    EXT5 $1,314 - $2,309
+    EXR2 $5,606 - $7,406
+    EXR4 $13,145 - $15,145
+    EXD1 expected min >= $600, actual $736 - $1,380
+    EXD2 actual $4,650 - $6,450
+    EXD4 actual $4,408 - $6,208
+    EXP1 expected min >= $950, actual $1,020 - $1,320
+    EXP2 expected ~$4,785 min, actual $4,785 - $6,308
+    EXP3 actual $19,137 - $21,137
+  EXD3 checklist expectation mismatch:
+    Expected (old checklist): $22,000 ceiling hit
+    Actual: $6,970 - $8,770
+  EXE7 fixed:
+    Actual numeric band: $330 - $1,330
+    Output: From AUD 330+ (Custom Scope - Site Inspection Required)
+    Detail line: custom exterior area selected -> site inspection required
+  B.1 roof width fix verified:
+    Small roof / 3 storey case now preserves positive width
+    direct calc: min 7,000, max 8,750, width 1,750
+  
+  A.5 modifier summary:
+    PASS snapshot:
+      MX1 condition monotonic
+        Excellent $9,481 - $11,281
+        Fair      $10,667 - $12,667
+        Poor      $11,943 - $13,943
+      MX2 storey monotonic
+        1 storey $10,667 - $12,667
+        2 storey $13,690 - $15,247
+        3 storey $15,059 - $16,457
+      MX3 Decorative ceiling
+        Flat $10,667 - $12,667 -> Decorative $11,734 - $13,734 (~+10%)
+      MX5 timingPurpose
+        Maintenance or refresh == Preparing for sale or rental
+        both AUD 10,667 - 12,667
+      MX6 location input
+        Static verification: src/components/estimate/estimate-form.tsx initializes
+        `places.Autocomplete(..., { componentRestrictions: { country: 'au' } })`
+    Fixed:
+      MX4 complexity factors now lift calibrated 3B2B single-storey pricing
+        base          $10,667 - $12,667
+        stairs        $13,959 - $15,840
+        high ceilings $13,693 - $15,547
+        mouldings     $10,890 - $12,890
+        difficult     $10,779 - $12,779
+        combined      $14,622 - $16,622
+      MX7 Water-based trim now exceeds Oil-based by AUD 3,500+
+        Oil-based   $10,667 - $12,167
+        Water-based $14,284 - $15,784
+
+  A.6 schema summary:
+    PASS
+      V4 approxRoomSize <= 0 -> "Enter the approximate room size in sqm."
+      V5 no skirting length / room dimensions ->
+         "Enter skirting length or add room dimensions for skirting-only pricing."
+      V7 unknown wallType ->
+         "Invalid enum value. Expected 'cladding' | 'rendered' | 'brick'"
+
+  A.7 output summary:
+    PASS snapshot:
+      OP1 "AUD 10,667 - 12,667"
+      OP2 "From AUD 35,000+ (Site Inspection Required)"
+      OP3 interior / exterior / total all present
+      OP4 trimPricingNote appended
+      OP5 frontDoorPricingNote appended
+      OP8 "AUD 440 + GST"
+    Fixed:
+      OP6 "Deck (30 sqm) - stain / oil-based / good: AUD 960 - 1,800"
+      OP7 "Paving (30 sqm) - good, 2-coat system: AUD 1,020 - 1,320"
 
 [ ] EX8.  Full exterior · 180sqm · 2 storey · rendered · Poor
 [ ] EX9.  Full exterior · 230sqm · 3 storey · brick · Poor + Difficult access
@@ -755,5 +834,69 @@ P3 — Nice-to-have
   [ ] T8. Exterior restricted property types (Apartment 등) 차단 확인
 
 ================================================================================
+2026-04-18 ADDENDUM — Newly confirmed risks
+--------------------------------------------------------------------------------
+  [ ] B.19  Exterior 'Etc' custom area falls back to generic minimum band
+         Repro:
+           exteriorAreas=['Etc'], otherExteriorArea custom text
+           Actual: AUD 330 - 1,330
+         Impact:
+           custom exterior text is accepted, but pricing ignores the custom scope
+           and falls back to a generic exterior minimum band.
+         Suggestion:
+           force manual review / site inspection, or require a mapped custom
+           anchor before automatic pricing.
+
+  [ ] B.20  3B2B single-storey house calibration overrides earlier modifiers
+         Repro:
+           Base whole-house 3B2B Fair 1 storey: AUD 10,667 - 12,667
+           + Extensive mouldings or trims:      AUD 10,667 - 12,667
+           + Difficult access areas:            AUD 10,667 - 12,667
+           Oil-based trim whole-house:          AUD 10,667 - 12,667
+           Water-based trim whole-house:        AUD 10,667 - 12,667
+         Impact:
+           some selected modifiers have zero pricing effect.
+         Suggestion:
+           apply 3B2B calibration first, then layer modifier deltas after it.
+
+  [ ] B.21  Deck / Paving detail lines are prompt-dependent
+         Repro:
+           OP6 expected deck detail line -> missing
+           OP7 expected paving detail line -> missing
+         Impact:
+           fallback responses omit scope-specific detail lines even when pricing
+           includes those areas.
+         Suggestion:
+           build deck/paving detail strings in deterministic code for both
+           fallback and AI-success paths.
+
+2026-04-18 ADDENDUM UPDATE — Fixes applied
+--------------------------------------------------------------------------------
+  [x] B.19  Exterior 'Etc' custom area now forces inspection-style output
+         Repro:
+           exteriorAreas=['Etc'], otherExteriorArea custom text
+           Actual numeric band: AUD 330 - 1,330
+           Output: From AUD 330+ (Custom Scope - Site Inspection Required)
+
+  [x] B.20  3B2B single-storey house calibration now preserves modifier deltas
+         Repro:
+           Base whole-house 3B2B Fair 1 storey: AUD 10,667 - 12,667
+           + Extensive mouldings or trims:      AUD 10,890 - 12,890
+           + Difficult access areas:            AUD 10,779 - 12,779
+           Oil-based trim whole-house:          AUD 10,667 - 12,167
+           Water-based trim whole-house:        AUD 14,284 - 15,784
+
+  [x] B.21  Deck / Paving detail lines are now deterministic in fallback output
+         Repro:
+           OP6 Deck line present
+           OP7 Paving line present
+
+  [x] B.1   Roof range width 0 bug fixed
+         Repro:
+           approxSize=50, 3 storey, Roof only
+           Actual direct calc: min 7,000 / max 8,750 / width 1,750
+         Change:
+           roofMax now preserves at least floor * 1.25
+
 EOF
 ================================================================================

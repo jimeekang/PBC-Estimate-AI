@@ -603,8 +603,7 @@ export function capRangeWidthSmart(
     else cap = 2000;
   } else {
     if (minVal <= 5000) cap = 1200;
-    else if (minVal <= 10000) cap = 1800;
-    else cap = 2000;
+    else cap = 1500;
   }
 
   if (gap <= cap) return { min: minVal, max: maxVal };
