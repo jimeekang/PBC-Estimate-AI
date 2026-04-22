@@ -310,10 +310,11 @@ describe('A.3.1 House · Entire property', () => {
     const iBase = interior(rBase);
 
     heRows.push({ id: 'HE11', label: '3B2B 140sqm w+c+trim+ensuite water', ...i, actualMin: i.min, actualMax: i.max, note: `base w+c: ${iBase.min}-${iBase.max}` });
-    // Note: 3B2B Fair 1st storey calibration overrides trim additions (known limitation).
-    // Water-based window premium IS additive post-calibration if window frames specified.
-    // Just verify valid range.
+    // Regression guard: 3B2B Fair 1st storey calibration must not erase later trim deltas.
+    // Water-based window premium stays additive post-calibration if window frames are specified.
     expect(i.min).toBeGreaterThanOrEqual(9000);
+    expect(i.min).toBeGreaterThan(iBase.min);
+    expect(i.max).toBeGreaterThan(iBase.max);
     expect(i.min).toBeLessThanOrEqual(i.max);
   });
 

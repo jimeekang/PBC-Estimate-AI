@@ -110,4 +110,65 @@ describe('generatePaintingEstimate', () => {
     expect((water.breakdown?.interior?.min ?? 0) - (oil.breakdown?.interior?.min ?? 0)).toBeGreaterThanOrEqual(3500);
     expect((water.breakdown?.interior?.max ?? 0) - (oil.breakdown?.interior?.max ?? 0)).toBeGreaterThanOrEqual(3500);
   });
+
+  test('custom large rooms such as Rumpus are normalized to the Living Room score path', async () => {
+    const baseSpecificPayload: GeneratePaintingEstimateInput = {
+      name: 'Test User',
+      email: 'test@example.com',
+      typeOfWork: ['Interior Painting'],
+      scopeOfPainting: 'Specific areas only',
+      propertyType: 'House / Townhouse',
+      houseStories: '1 storey',
+      timingPurpose: 'Maintenance or refresh',
+      paintCondition: 'Fair',
+      roomsToPaint: ['Living Room'],
+    };
+
+    const livingRoom = await generatePaintingEstimate(baseSpecificPayload);
+    const rumpusRoom = await generatePaintingEstimate({
+      ...baseSpecificPayload,
+      roomsToPaint: ['Rumpus'],
+    });
+
+    expect(rumpusRoom.breakdown?.interior).toEqual(livingRoom.breakdown?.interior);
+  });
+
+  test('measured custom rooms such as Rumpus share the same anchor and multiplier as Living Room', async () => {
+    const baseMeasuredPayload: GeneratePaintingEstimateInput = {
+      name: 'Test User',
+      email: 'test@example.com',
+      typeOfWork: ['Interior Painting'],
+      scopeOfPainting: 'Specific areas only',
+      propertyType: 'House / Townhouse',
+      houseStories: '1 storey',
+      timingPurpose: 'Maintenance or refresh',
+      paintCondition: 'Fair',
+      interiorWallHeight: 2.7,
+      interiorRooms: [
+        {
+          roomName: 'Living Room',
+          approxRoomSize: 24,
+          paintAreas: {
+            ceilingPaint: true,
+            wallPaint: true,
+            trimPaint: false,
+            ensuitePaint: false,
+          },
+        },
+      ],
+    };
+
+    const livingRoom = await generatePaintingEstimate(baseMeasuredPayload);
+    const rumpusRoom = await generatePaintingEstimate({
+      ...baseMeasuredPayload,
+      interiorRooms: [
+        {
+          ...baseMeasuredPayload.interiorRooms![0],
+          roomName: 'Rumpus',
+        },
+      ],
+    });
+
+    expect(rumpusRoom.breakdown?.interior).toEqual(livingRoom.breakdown?.interior);
+  });
 });

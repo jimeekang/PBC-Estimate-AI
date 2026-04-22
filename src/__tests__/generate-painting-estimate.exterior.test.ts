@@ -1,4 +1,10 @@
 import { calculateExteriorEstimate } from '@/ai/flows/generate-painting-estimate.exterior';
+import {
+  EXTERIOR_FULL_PROJECT_CEILING,
+  EXTERIOR_WALL_TYPE_FLOORS,
+  MAX_PRICE_CAP,
+  STORY_MODIFIER,
+} from '@/lib/pricing-engine';
 
 describe('calculateExteriorEstimate', () => {
   // ── Stale data isolation ─────────────────────────────────────────────────────
@@ -112,6 +118,54 @@ describe('calculateExteriorEstimate', () => {
     expect(triple.extMin).toBeGreaterThan(double.extMin);
     expect(triple.extMax).toBeGreaterThan(double.extMax);
   });
+
+  test('Wall + Eaves triple storey — priced higher than double storey for partial scope', () => {
+    const double = calculateExteriorEstimate({
+      typeOfWork: ['Exterior Painting'],
+      paintCondition: 'Fair',
+      houseStories: '2 storey',
+      exteriorAreas: ['Wall', 'Eaves'],
+      wallType: 'cladding',
+      approxSize: 150,
+    });
+    const triple = calculateExteriorEstimate({
+      typeOfWork: ['Exterior Painting'],
+      paintCondition: 'Fair',
+      houseStories: '3 storey',
+      exteriorAreas: ['Wall', 'Eaves'],
+      wallType: 'cladding',
+      approxSize: 150,
+    });
+
+    expect(triple.extMin).toBeGreaterThan(double.extMin);
+    expect(triple.extMax).toBeGreaterThan(double.extMax);
+  });
+
+  const wallAdjacencyScopes = [
+    { label: 'Wall + Gutter', exteriorAreas: ['Wall', 'Gutter'] as const },
+    { label: 'Wall + Fascia', exteriorAreas: ['Wall', 'Fascia'] as const },
+  ];
+
+  for (const { label, exteriorAreas } of wallAdjacencyScopes) {
+    for (const houseStories of ['1 storey', '2 storey', '3 storey'] as const) {
+      test(`${label} ${houseStories} — uses wallPlusEaves floor uplift`, () => {
+        const result = calculateExteriorEstimate({
+          typeOfWork: ['Exterior Painting'],
+          paintCondition: 'Excellent',
+          houseStories,
+          exteriorAreas: [...exteriorAreas],
+          wallType: 'cladding',
+          approxSize: 60,
+        });
+
+        const expectedFloor = Math.round(
+          EXTERIOR_WALL_TYPE_FLOORS.cladding.wallPlusEaves * STORY_MODIFIER[houseStories]
+        );
+
+        expect(result.extMin).toBeGreaterThanOrEqual(expectedFloor);
+      });
+    }
+  }
 
   test('Eaves double storey — priced higher than single', () => {
     const single = calculateExteriorEstimate({
@@ -240,6 +294,39 @@ describe('calculateExteriorEstimate', () => {
     expect(damaged.extMax).toBeGreaterThan(good.extMax);
   });
 
+  test('deck-only pricing can rise above the old $22k ceiling but stays under the global cap', () => {
+    const result = calculateExteriorEstimate({
+      typeOfWork: ['Exterior Painting'],
+      paintCondition: 'Fair',
+      houseStories: '1 storey',
+      exteriorAreas: ['Deck'],
+      deckArea: 200,
+      deckServiceType: 'paint-conversion',
+      deckProductType: 'oil',
+      deckCondition: 'weathered',
+    });
+
+    expect(result.deckCost?.max).toBeGreaterThan(22000);
+    expect(result.deckCost?.max).toBeLessThanOrEqual(MAX_PRICE_CAP);
+    expect(result.extMin).toBe(result.deckCost?.min);
+    expect(result.extMax).toBe(result.deckCost?.max);
+  });
+
+  test('3 storey full exterior no longer clips at $35k when the scope is genuinely high risk', () => {
+    const result = calculateExteriorEstimate({
+      typeOfWork: ['Exterior Painting'],
+      paintCondition: 'Poor',
+      houseStories: '3 storey',
+      exteriorAreas: ['Wall', 'Eaves', 'Gutter', 'Fascia', 'Exterior Trim'],
+      wallType: 'brick',
+      approxSize: 1500,
+      jobDifficulty: ['Difficult access areas'],
+    });
+
+    expect(result.extMax).toBeGreaterThan(MAX_PRICE_CAP);
+    expect(result.extMax).toBeLessThanOrEqual(EXTERIOR_FULL_PROJECT_CEILING);
+  });
+
   // ── Condition multiplier ─────────────────────────────────────────────────────
 
   test('Poor condition raises Eaves estimate above Excellent', () => {
@@ -253,5 +340,26 @@ describe('calculateExteriorEstimate', () => {
     const poor = calculateExteriorEstimate({ ...base, paintCondition: 'Poor' });
 
     expect(poor.extMin).toBeGreaterThan(excellent.extMin);
+  });
+
+  test('poor paving pricing is materially above fair paving pricing', () => {
+    const fair = calculateExteriorEstimate({
+      typeOfWork: ['Exterior Painting'],
+      houseStories: '1 storey',
+      exteriorAreas: ['Paving'],
+      pavingArea: 30,
+      pavingCondition: 'fair',
+    });
+
+    const poor = calculateExteriorEstimate({
+      typeOfWork: ['Exterior Painting'],
+      houseStories: '1 storey',
+      exteriorAreas: ['Paving'],
+      pavingArea: 30,
+      pavingCondition: 'poor',
+    });
+
+    expect(poor.pavingCost?.min).toBeGreaterThanOrEqual(Math.round((fair.pavingCost?.min ?? 0) * 1.5));
+    expect(poor.pavingCost?.max).toBeGreaterThanOrEqual(Math.round((fair.pavingCost?.max ?? 0) * 1.5));
   });
 });

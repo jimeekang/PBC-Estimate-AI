@@ -1,5 +1,7 @@
 import {
   EXTERIOR_ARCHITRAVE_ANCHOR,
+  assertKnownStory,
+  assertKnownWallType,
   EXTERIOR_CONDITION_MULTIPLIER,
   EXTERIOR_DOOR_ANCHOR,
   EXTERIOR_FRONT_DOOR_ANCHOR,
@@ -8,11 +10,13 @@ import {
   EXTERIOR_WALL_TYPE_FLOORS,
   EXTERIOR_WINDOW_ANCHOR,
   DEFAULT_WALL_HEIGHT,
-  MAX_PRICE_CAP,
+  STORY_MODIFIER,
+  calcDeckCost,
   calcTrimItemCost,
   capRangeWidthSmart,
   clamp,
   estimateWallArea,
+  getExteriorProjectCap,
   getExteriorWallRate,
 } from '@/lib/pricing-engine';
 
@@ -43,42 +47,22 @@ type ExteriorEstimateInput = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Deck pricing
-// ─────────────────────────────────────────────────────────────
-
-const DECK_RATE_PER_M2: Record<string, { min: number; max: number }> = {
-  'stain-oil': { min: 32, max: 60 },
-  'stain-water': { min: 34, max: 62 },
-  'clear-oil': { min: 28, max: 53 },
-  'clear-water': { min: 30, max: 55 },
-  'paint-conversion': { min: 60, max: 91 },
-  'paint-recoat': { min: 35, max: 60 },
-};
-
-const DECK_CONDITION_MULT: Record<string, number> = {
-  good: 1.0,
-  weathered: 1.25,
-  damaged: 1.55,
-};
-
-const DECK_MINIMUM_CHARGE = 600;
-const DECK_PROJECT_CEILING = 22000;
-
-// ─────────────────────────────────────────────────────────────
 // Paving pricing
 // ─────────────────────────────────────────────────────────────
 
 const PAVING_RATE_PER_M2: { maxArea: number; min: number; max: number }[] = [
-  { maxArea: 25, min: 44, max: 56 },
-  { maxArea: 70, min: 34, max: 44 },
-  { maxArea: 140, min: 27, max: 35 },
-  { maxArea: Infinity, min: 22, max: 29 },
+  { maxArea: 25, min: 52, max: 65 },
+  { maxArea: 70, min: 42, max: 52 },
+  { maxArea: 140, min: 34, max: 42 },
+  { maxArea: Infinity, min: 28, max: 36 },
 ];
 
 const PAVING_CONDITION_MULT: Record<string, number> = {
   good: 1.0,
   fair: 1.2,
-  poor: 1.45,
+  // Poor paving typically includes pressure wash, patch repair, etch/prime,
+  // and the full 2-coat system.
+  poor: 1.9,
 };
 
 const PAVING_MINIMUM_CHARGE = 950;
@@ -88,22 +72,8 @@ const PAVING_PROJECT_CEILING = 18000;
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
-function getDeckAreaBandMult(areaSqm: number): number {
-  if (areaSqm <= 20) return 1.15;
-  if (areaSqm <= 50) return 1.0;
-  if (areaSqm <= 100) return 0.9;
-  return 0.82;
-}
-
 function getPavingRate(area: number): { min: number; max: number } {
   return PAVING_RATE_PER_M2.find((band) => area <= band.maxArea)!;
-}
-
-function getDeckServiceKey(serviceType: string, productType?: string): string {
-  if (serviceType === 'paint-conversion' || serviceType === 'paint-recoat') {
-    return serviceType;
-  }
-  return `${serviceType}-${productType ?? 'oil'}`;
 }
 
 function toNumberOrUndefined(value: unknown): number | undefined {
@@ -114,15 +84,15 @@ function toNumberOrUndefined(value: unknown): number | undefined {
 }
 
 /** Returns the storey tier key for EXTERIOR_ITEM_ANCHORS. */
-function getStoreyTier(story: string): 'single' | 'double' | 'triple' {
+function getStoreyTier(story: '1 storey' | '2 storey' | '3 storey'): 'single' | 'double' | 'triple' {
   if (story === '3 storey') return 'triple';
-  if (story === '2 storey' || story === 'Double story or more') return 'double';
+  if (story === '2 storey') return 'double';
   return 'single';
 }
 
-function getStoreyCount(story: string): number {
+function getStoreyCount(story: '1 storey' | '2 storey' | '3 storey'): number {
   if (story === '3 storey') return 3;
-  if (story === '2 storey' || story === 'Double story or more') return 2;
+  if (story === '2 storey') return 2;
   return 1;
 }
 
@@ -144,7 +114,7 @@ export function calcPavingCost(input: {
   pavingArea?: number | null;
   pavingCondition?: string;
 }): { min: number; max: number } | null {
-  const area = input.pavingArea;
+  const area = toNumberOrUndefined(input.pavingArea);
   if (!area || area <= 0) return null;
 
   const rate = getPavingRate(area);
@@ -153,28 +123,6 @@ export function calcPavingCost(input: {
   return {
     min: Math.max(PAVING_MINIMUM_CHARGE, Math.round(area * rate.min * conditionMultiplier)),
     max: Math.min(PAVING_PROJECT_CEILING, Math.round(area * rate.max * conditionMultiplier)),
-  };
-}
-
-export function calcDeckCost(input: {
-  deckArea?: number | null;
-  deckServiceType?: string;
-  deckProductType?: string;
-  deckCondition?: string;
-}): { min: number; max: number } | null {
-  const area = input.deckArea;
-  if (!area || area <= 0) return null;
-
-  const key = getDeckServiceKey(input.deckServiceType ?? 'stain', input.deckProductType);
-  const rate = DECK_RATE_PER_M2[key];
-  if (!rate) return null;
-
-  const areaMultiplier = getDeckAreaBandMult(area);
-  const conditionMultiplier = DECK_CONDITION_MULT[input.deckCondition ?? 'good'] ?? 1.0;
-
-  return {
-    min: Math.max(DECK_MINIMUM_CHARGE, Math.round(area * rate.min * areaMultiplier * conditionMultiplier)),
-    max: Math.min(DECK_PROJECT_CEILING, Math.round(area * rate.max * areaMultiplier * conditionMultiplier)),
   };
 }
 
@@ -203,8 +151,8 @@ function applyExteriorComplexityUpliftPct(
   maxVal: number,
 ) {
   const factors = input.jobDifficulty ?? [];
-  const story = input.houseStories ?? '1 storey';
-  const isDouble = story === '2 storey' || story === 'Double story or more';
+  const story = assertKnownStory(input.houseStories ?? '1 storey');
+  const isDouble = story === '2 storey';
   const isTriple = story === '3 storey';
 
   let minPct = 0;
@@ -270,11 +218,13 @@ function applyExteriorComplexityUpliftPct(
 export function calculateExteriorEstimate(input: ExteriorEstimateInput) {
   const condition = (input.paintCondition ?? 'Fair') as keyof typeof EXTERIOR_CONDITION_MULTIPLIER;
   const exteriorConditionMultiplier = EXTERIOR_CONDITION_MULTIPLIER[condition];
-  const story = input.houseStories ?? '1 storey';
+  const story = assertKnownStory(input.houseStories ?? '1 storey');
   const storeyTier = getStoreyTier(story);
-  const isDouble = story === 'Double story or more' || story === '2 storey';
+  const storyMultiplier = STORY_MODIFIER[story];
+  const isDouble = story === '2 storey';
   const isTriple = story === '3 storey';
   const isMultiStorey = isDouble || isTriple;
+  const exteriorProjectCap = getExteriorProjectCap(input);
 
   const deckCost = calcDeckCost(input);
   const pavingCost = calcPavingCost(input);
@@ -292,7 +242,11 @@ export function calculateExteriorEstimate(input: ExteriorEstimateInput) {
   }
 
   const hasWall = areas.includes('Wall');
-  const wallTypeKey = (input.wallType ?? 'default') as keyof typeof EXTERIOR_WALL_TYPE_FLOORS;
+  const hasEaves = areas.includes('Eaves');
+  const hasGutter = areas.includes('Gutter');
+  const hasFascia = areas.includes('Fascia');
+  const hasTrim = areas.includes('Exterior Trim');
+  const wallTypeKey = hasWall ? assertKnownWallType(input.wallType) : undefined;
 
   const frontDoorOnlyTrim = isFrontDoorOnlyExteriorTrim(input);
   // If specific items (doors/windows/architraves) are provided, use those instead
@@ -309,10 +263,9 @@ export function calculateExteriorEstimate(input: ExteriorEstimateInput) {
   if (hasWall) {
     const floorSqm = toNumberOrUndefined(input.approxSize) ?? 150;
     const footprintSqm = floorSqm / getStoreyCount(story);
-    const wallHeight =
-      toNumberOrUndefined(input.wallHeight) ?? DEFAULT_WALL_HEIGHT[story] ?? 2.7;
+    const wallHeight = toNumberOrUndefined(input.wallHeight) ?? DEFAULT_WALL_HEIGHT[story];
     const wallArea = estimateWallArea(footprintSqm, wallHeight);
-    const wallRate = getExteriorWallRate(wallTypeKey, wallArea);
+    const wallRate = getExteriorWallRate(wallTypeKey!, wallArea);
     rangeMin += wallArea * wallRate.min;
     rangeMax += wallArea * wallRate.max;
   }
@@ -352,38 +305,89 @@ export function calculateExteriorEstimate(input: ExteriorEstimateInput) {
   rangeMax = uplifted.max;
 
   // ── Step 5: Specific trim items (outside condition) ───────
+  // Trim items are added after complexity uplift, so we re-apply difficulty
+  // to the trim portion only and add it on top.
+  const isTrimOnly =
+    areas.includes('Exterior Trim') &&
+    !hasWall &&
+    !areas.includes('Eaves') &&
+    !areas.includes('Gutter') &&
+    !areas.includes('Fascia') &&
+    !areas.includes('Roof') &&
+    !areas.includes('Deck') &&
+    !areas.includes('Paving');
+
   if (areas.includes('Exterior Trim')) {
+    let trimMin = 0;
+    let trimMax = 0;
     if (!frontDoorOnlyTrim) {
       if (input.exteriorDoors?.length) {
         const doorCost = calcTrimItemCost(input.exteriorDoors, EXTERIOR_DOOR_ANCHOR);
-        rangeMin += doorCost.min;
-        rangeMax += doorCost.max;
+        trimMin += doorCost.min;
+        trimMax += doorCost.max;
       }
       if (input.exteriorWindows?.length) {
         const windowCost = calcTrimItemCost(input.exteriorWindows, EXTERIOR_WINDOW_ANCHOR);
-        rangeMin += windowCost.min;
-        rangeMax += windowCost.max;
+        trimMin += windowCost.min;
+        trimMax += windowCost.max;
       }
       if (input.exteriorArchitraves?.length) {
         const architraveCost = calcTrimItemCost(
           input.exteriorArchitraves,
           EXTERIOR_ARCHITRAVE_ANCHOR,
         );
-        rangeMin += architraveCost.min;
-        rangeMax += architraveCost.max;
+        trimMin += architraveCost.min;
+        trimMax += architraveCost.max;
       }
       const frontDoorCost = getFrontDoorCost(input);
-      rangeMin += frontDoorCost.min;
-      rangeMax += frontDoorCost.max;
+      trimMin += frontDoorCost.min;
+      trimMax += frontDoorCost.max;
     } else {
       // Front door only
       const frontDoorCost = getFrontDoorCost(input);
-      rangeMin += frontDoorCost.min;
-      rangeMax += frontDoorCost.max;
+      trimMin += frontDoorCost.min;
+      trimMax += frontDoorCost.max;
     }
+    // Re-apply difficulty uplift to trim items (Step 4 ran before trim was added)
+    const trimUplifted = applyExteriorComplexityUpliftPct(input, trimMin, trimMax);
+    rangeMin += trimUplifted.min;
+    rangeMax += trimUplifted.max;
   }
 
-  // ── Step 6: Deck and Paving (own condition; outside multiplier) ──
+  // ── Step 6: Floor price when Wall is included ─────────────
+  if (hasWall) {
+    const wallFloors = EXTERIOR_WALL_TYPE_FLOORS[wallTypeKey!];
+    const isFullExterior =
+      areas.includes('Wall') &&
+      areas.includes('Eaves') &&
+      areas.includes('Gutter') &&
+      areas.includes('Fascia') &&
+      areas.includes('Exterior Trim');
+    const hasWallAdjacencyScope = hasEaves || hasGutter || hasFascia || hasTrim;
+    const partialScopeFloor = hasWallAdjacencyScope
+      ? wallFloors.wallPlusEaves
+      : wallFloors.wallOnly;
+
+    const floor =
+      isFullExterior && isTriple
+        ? wallFloors.tripleStoreyFullExterior
+        : isFullExterior && isMultiStorey
+          ? wallFloors.doubleStoreyFullExterior
+          : isFullExterior
+            ? wallFloors.fullExterior
+            : Math.round(partialScopeFloor * storyMultiplier);
+
+    rangeMin = Math.max(rangeMin, floor);
+    rangeMax = Math.max(rangeMax, Math.round(floor * 1.25));
+  }
+
+  const cappedStructuralRange = isTrimOnly
+    ? { min: Math.round(rangeMin), max: Math.round(rangeMax) }
+    : capRangeWidthSmart(Math.round(rangeMin), Math.round(rangeMax), input, 'exterior');
+  rangeMin = cappedStructuralRange.min;
+  rangeMax = cappedStructuralRange.max;
+
+  // ── Step 7: Deck and Paving add-on and final clamp ─────────────────
   if (areas.includes('Deck') && deckCost) {
     rangeMin += deckCost.min;
     rangeMax += deckCost.max;
@@ -393,55 +397,18 @@ export function calculateExteriorEstimate(input: ExteriorEstimateInput) {
     rangeMax += pavingCost.max;
   }
 
-  // ── Step 7: Floor price when Wall is included ─────────────
-  if (hasWall) {
-    const wallFloors =
-      EXTERIOR_WALL_TYPE_FLOORS[wallTypeKey] ?? EXTERIOR_WALL_TYPE_FLOORS.default;
-    const hasEaves = areas.includes('Eaves');
-    const isFullExterior =
-      areas.includes('Wall') &&
-      areas.includes('Eaves') &&
-      areas.includes('Gutter') &&
-      areas.includes('Fascia') &&
-      areas.includes('Exterior Trim');
-
-    const floor =
-      isFullExterior && isTriple
-        ? wallFloors.tripleStoreyFullExterior
-        : isFullExterior && isMultiStorey
-          ? wallFloors.doubleStoreyFullExterior
-          : isFullExterior
-            ? wallFloors.fullExterior
-            : hasEaves
-              ? wallFloors.wallPlusEaves
-              : wallFloors.wallOnly;
-
-    rangeMin = Math.max(rangeMin, floor);
-    rangeMax = Math.max(rangeMax, Math.round(floor * 1.25));
-  }
-
-  // ── Step 8: Cap and clamp ─────────────────────────────────
   // Fallback when only Deck/Paving selected with no structural items
   if (rangeMin === 0 && rangeMax === 0) {
     rangeMin = 300;
     rangeMax = 800;
   }
 
-  if (!areas.includes('Roof') && rangeMax > 30000) rangeMax = 30000;
-  if (!areas.includes('Roof') && rangeMin > 28000) rangeMin = 28000;
-
   const minFloor = hasWall ? 1200 : 300;
   const maxFloor = hasWall ? 1800 : 400;
 
-  extMin = clamp(Math.round(rangeMin), minFloor, MAX_PRICE_CAP);
-  extMax = clamp(Math.round(rangeMax), maxFloor, MAX_PRICE_CAP);
+  extMin = clamp(Math.round(rangeMin), minFloor, exteriorProjectCap);
+  extMax = clamp(Math.round(rangeMax), maxFloor, exteriorProjectCap);
   if (extMax < extMin) extMax = Math.round(extMin * (hasWall ? 1.25 : 1.3));
-
-  const cappedRange = capRangeWidthSmart(extMin, extMax, input, 'exterior');
-  return {
-    extMin: cappedRange.min,
-    extMax: cappedRange.max,
-    deckCost,
-    pavingCost,
-  };
+  extMax = Math.min(extMax, exteriorProjectCap);
+  return { extMin, extMax, deckCost, pavingCost };
 }

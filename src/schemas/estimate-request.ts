@@ -283,6 +283,15 @@ export const estimateRequestSchema = z
   )
   .refine(
     (data) => {
+      const needsWallFinish =
+        hasExteriorWork(data.typeOfWork) && (data.exteriorAreas ?? []).includes('Wall');
+      if (!needsWallFinish) return true;
+      return !!data.wallType;
+    },
+    { path: ['wallType'], message: 'Please select the main exterior wall finish.' }
+  )
+  .refine(
+    (data) => {
       const needsExteriorTrimItems =
         hasExteriorWork(data.typeOfWork) && (data.exteriorAreas ?? []).includes('Exterior Trim');
       if (!needsExteriorTrimItems) return true;

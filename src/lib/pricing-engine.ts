@@ -42,11 +42,23 @@ export const APARTMENT_SQM_CURVE: readonly {
   { sqm: 200, rawMedian: 9500 },
 ] as const;
 
+export const ENTIRE_APT_BAND = {
+  Excellent: { min: 0.95, max: 1.05 },
+  Fair: { min: 0.92, max: 1.08 },
+  Poor: { min: 0.9, max: 1.18 },
+} as const;
+
 export const HOUSE_INTERIOR_ANCHORS = {
   '2B1B': { min: 7500, max: 11000, median: 9000 },
   '3B2B': { min: 9500, max: 14000, median: 11500 },
   '4B2B': { min: 13000, max: 18500, median: 15500 },
   '5B3B': { min: 17000, max: 25000, median: 20000 },
+} as const;
+
+export const ENTIRE_HOUSE_BAND = {
+  Excellent: { min: 0.96, max: 1.04 },
+  Fair: { min: 0.99, max: 1.1 },
+  Poor: { min: 1.05, max: 1.44 },
 } as const;
 
 export const EXTERIOR_WALL_TYPE_FLOORS = {
@@ -70,13 +82,6 @@ export const EXTERIOR_WALL_TYPE_FLOORS = {
     fullExterior: 7400,
     doubleStoreyFullExterior: 10500,
     tripleStoreyFullExterior: 14500,
-  },
-  default: {
-    wallOnly: 2900,
-    wallPlusEaves: 4100,
-    fullExterior: 5700,
-    doubleStoreyFullExterior: 8100,
-    tripleStoreyFullExterior: 11300,
   },
 } as const;
 
@@ -105,17 +110,10 @@ export const EXTERIOR_WALL_RATE_CURVES = {
     { wallArea: 230, min: 30.5, max: 38.0 },
     { wallArea: 320, min: 29.0, max: 36.0 },
   ],
-  default: [
-    { wallArea: 60, min: 31.0, max: 40.0 },
-    { wallArea: 95, min: 28.0, max: 36.0 },
-    { wallArea: 130, min: 26.0, max: 34.0 },
-    { wallArea: 175, min: 24.5, max: 32.0 },
-    { wallArea: 230, min: 23.0, max: 30.0 },
-    { wallArea: 320, min: 21.5, max: 28.0 },
-  ],
 } as const;
 
 export const MAX_PRICE_CAP = 35000;
+export const EXTERIOR_FULL_PROJECT_CEILING = 55000;
 
 export const AREA_SHARE = {
   ceilingPaint: 0.25,
@@ -124,39 +122,197 @@ export const AREA_SHARE = {
   ensuitePaint: 0.08,
 };
 
+// Scope-specific condition bands are intentional:
+// apartments allow an entry-level discount, houses stay broader than apartments,
+// and exterior carries the highest Poor ceiling.
 export const CONDITION_MULTIPLIER = {
   Excellent: { min: 0.95, max: 1.05 },
   Fair: { min: 1.08, max: 1.22 },
-  Poor: { min: 1.22, max: 1.55 },
+  Poor: { min: 1.20, max: 1.42 },
 } as const;
 
 export const HOUSE_CONDITION_MULTIPLIER = {
   Excellent: { min: 1.0, max: 1.08 },
-  Fair: { min: 1.1, max: 1.24 },
-  Poor: { min: 1.22, max: 1.4 },
+  Fair: { min: 1.11, max: 1.26 },
+  Poor: { min: 1.28, max: 1.54 },
 } as const;
 
 export const EXTERIOR_CONDITION_MULTIPLIER = {
   Excellent: { min: 1.0, max: 1.08 },
   Fair: { min: 1.1, max: 1.24 },
-  Poor: { min: 1.22, max: 1.4 },
+  Poor: { min: 1.22, max: 1.58 },
 } as const;
 
-export const STORY_MODIFIER: Record<string, number> = {
+export const CANONICAL_STORY_MODIFIER = {
   '1 storey': 1.0,
   '2 storey': 1.18,
   '3 storey': 1.35,
-  'Single story': 1.0,
-  'Double story or more': 1.18,
-};
+} as const;
 
-export const DEFAULT_WALL_HEIGHT: Record<string, number> = {
+export const STORY_MODIFIER = {
+  ...CANONICAL_STORY_MODIFIER,
+  'Single story': CANONICAL_STORY_MODIFIER['1 storey'],
+  'Double story or more': CANONICAL_STORY_MODIFIER['2 storey'],
+} as const;
+
+export type StoryKey = keyof typeof CANONICAL_STORY_MODIFIER;
+
+const STORY_LABEL_ALIASES = {
+  'Single story': '1 storey',
+  'Double story or more': '2 storey',
+} as const;
+
+export function normalizeStoryKey(story?: string | null): StoryKey {
+  const candidate = story ?? '1 storey';
+  const canonical =
+    STORY_LABEL_ALIASES[candidate as keyof typeof STORY_LABEL_ALIASES] ?? candidate;
+
+  if (canonical === '1 storey' || canonical === '2 storey' || canonical === '3 storey') {
+    return canonical;
+  }
+
+  throw new Error(
+    `Unknown house story "${story}". Expected one of: 1 storey, 2 storey, 3 storey`,
+  );
+}
+
+export function assertKnownStory(story: string): StoryKey {
+  return normalizeStoryKey(story);
+}
+
+export const CANONICAL_DEFAULT_WALL_HEIGHT = {
   '1 storey': 2.7,
   '2 storey': 5.4,
   '3 storey': 8.1,
-  'Single story': 2.7,
-  'Double story or more': 5.4,
+} as const;
+
+export const DEFAULT_WALL_HEIGHT = {
+  ...CANONICAL_DEFAULT_WALL_HEIGHT,
+  'Single story': CANONICAL_DEFAULT_WALL_HEIGHT['1 storey'],
+  'Double story or more': CANONICAL_DEFAULT_WALL_HEIGHT['2 storey'],
+} as const;
+
+export function getStoryModifier(story?: string | null): number {
+  return STORY_MODIFIER[normalizeStoryKey(story)];
+}
+
+export function getDefaultWallHeight(story?: string | null): number {
+  return DEFAULT_WALL_HEIGHT[normalizeStoryKey(story)];
+}
+
+export const DECK_RATE_PER_M2: Record<string, { min: number; max: number }> = {
+  'stain-oil': { min: 42, max: 78 },
+  'stain-water': { min: 44, max: 85 },
+  'clear-oil': { min: 38, max: 63 },
+  'clear-water': { min: 40, max: 65 },
+  'paint-conversion': { min: 85, max: 118 },
+  'paint-recoat': { min: 54, max: 79 },
 };
+
+export const DECK_CONDITION_MULT: Record<string, number> = {
+  good: 1.0,
+  weathered: 1.25,
+  damaged: 1.55,
+};
+
+// Deck keeps a single area scale factor layered on top of the base m² rate.
+// Do not apply any second size multiplier outside this table.
+export const DECK_AREA_BANDS = [
+  { maxArea: 20, multiplier: 1.15 },
+  { maxArea: 50, multiplier: 1.0 },
+  { maxArea: 100, multiplier: 0.9 },
+  { maxArea: Infinity, multiplier: 0.95 },
+] as const;
+
+export const DECK_MINIMUM_CHARGE = 600;
+// Keep deck ceiling aligned with the global output cap so large jobs are not
+// silently truncated below MAX_PRICE_CAP.
+export const DECK_PROJECT_CEILING = MAX_PRICE_CAP;
+
+export function getDeckServiceKey(serviceType: string, productType?: string): string {
+  if (serviceType === 'paint-conversion' || serviceType === 'paint-recoat') {
+    return serviceType;
+  }
+  return `${serviceType}-${productType ?? 'oil'}`;
+}
+
+function normalizeTrimAnchorLookupKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\band\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resolveTrimAnchorKey(
+  candidate: string,
+  anchor: Record<string, { min: number; max: number }>,
+): string | undefined {
+  const keys = Object.keys(anchor);
+  if (!keys.length) return undefined;
+
+  const lookupKey = normalizeTrimAnchorLookupKey(candidate);
+  const exactMatch = keys.find((key) => normalizeTrimAnchorLookupKey(key) === lookupKey);
+  if (exactMatch) return exactMatch;
+
+  const aliasMap: Record<string, string> = {
+    door: 'Door & Frame',
+    'door frame': 'Door & Frame',
+    doors: 'Door & Frame',
+    window: 'Normal',
+    'window frame': 'Normal',
+    windows: 'Normal',
+    architrave: 'Standard',
+    architraves: 'Standard',
+    simple: 'Simple',
+    standard: 'Standard',
+    normal: 'Normal',
+    complex: 'Complex',
+    french: 'French',
+    awning: 'Awning',
+    'double hung': 'Double Hung',
+  };
+
+  const alias = aliasMap[lookupKey];
+  if (alias && anchor[alias]) return alias;
+
+  if (anchor.Standard) return 'Standard';
+  if (anchor.Normal) return 'Normal';
+  return keys[0];
+}
+
+export function getDeckAreaBandMultiplier(areaSqm: number): number {
+  const band = DECK_AREA_BANDS.find((entry) => areaSqm <= entry.maxArea);
+  return band?.multiplier ?? DECK_AREA_BANDS[DECK_AREA_BANDS.length - 1].multiplier;
+}
+
+export function calcDeckCost(input: {
+  deckArea?: number | null;
+  deckServiceType?: string;
+  deckProductType?: string;
+  deckCondition?: string;
+}): { min: number; max: number } | null {
+  const area = input.deckArea;
+  if (!area || area <= 0) return null;
+
+  const key = getDeckServiceKey(input.deckServiceType ?? 'stain', input.deckProductType);
+  const rate = DECK_RATE_PER_M2[key];
+  if (!rate) return null;
+
+  const areaMultiplier = getDeckAreaBandMultiplier(area);
+  const conditionMultiplier = DECK_CONDITION_MULT[input.deckCondition ?? 'good'] ?? 1.0;
+  const rawMin = Math.round(area * rate.min * areaMultiplier * conditionMultiplier);
+  const rawMax = Math.round(area * rate.max * areaMultiplier * conditionMultiplier);
+  const cappedMax = Math.min(DECK_PROJECT_CEILING, Math.max(DECK_MINIMUM_CHARGE, rawMax));
+  const cappedMin = Math.min(cappedMax, Math.max(DECK_MINIMUM_CHARGE, rawMin));
+
+  return {
+    min: cappedMin,
+    max: cappedMax,
+  };
+}
 
 export const EXTERIOR_WALL_AREA_BANDS = [
   { minArea: 0, maxArea: 75, minMult: 0.45, maxMult: 0.58 },
@@ -284,7 +440,6 @@ export const INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL = {
   'Bedroom 3': { min: 980, max: 1280, median: 1130 },
   Bathroom: { min: 1150, max: 1550, median: 1350 },
   'Living Room': { min: 2200, max: 3200, median: 2650 },
-  Lounge: { min: 2200, max: 3200, median: 2650 },
   Dining: { min: 1700, max: 2400, median: 2000 },
   Kitchen: { min: 1900, max: 2700, median: 2250 },
   'Study / Office': { min: 1050, max: 1450, median: 1250 },
@@ -295,6 +450,46 @@ export const INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL = {
   'Walk-in robe': { min: 800, max: 1200, median: 1000 },
   Etc: { min: 1200, max: 1800, median: 1500 },
 } as const;
+
+const INTERIOR_SPECIFIC_ROOM_ALIASES = {
+  Lounge: 'Living Room',
+  'Family Room': 'Living Room',
+  Rumpus: 'Living Room',
+  Theatre: 'Living Room',
+  'Media Room': 'Living Room',
+  'Games Room': 'Living Room',
+  'Open Plan': 'Living Room',
+  'Open Plan Living': 'Living Room',
+  'Living / Dining': 'Living Room',
+  'Walk in robe': 'Walk-in robe',
+  WIR: 'Walk-in robe',
+  Ensuite: 'Bathroom',
+} as const;
+
+export function resolveInteriorSpecificRoomName(roomName: string) {
+  const normalized = roomName.trim();
+  const alias =
+    INTERIOR_SPECIFIC_ROOM_ALIASES[normalized as keyof typeof INTERIOR_SPECIFIC_ROOM_ALIASES];
+  if (alias) return alias as keyof typeof INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL;
+
+  const lowered = normalized.toLowerCase();
+  if (/lounge|family|rumpus|theatre|media|games|open plan|living/.test(lowered)) {
+    return 'Living Room';
+  }
+  if (/walk.?in robe|\bwir\b|robe/.test(lowered)) {
+    return 'Walk-in robe';
+  }
+  if (/ensuite|bath/.test(lowered)) {
+    return 'Bathroom';
+  }
+  if (/master/.test(lowered) && /bed/.test(lowered)) {
+    return 'Master Bedroom';
+  }
+  if (normalized in INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL) {
+    return normalized as keyof typeof INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL;
+  }
+  return 'Etc';
+}
 
 export const INTERIOR_DOOR_ITEM_ANCHOR: Record<
   string,
@@ -468,8 +663,7 @@ export function getExteriorWallRate(
   wallType: keyof typeof EXTERIOR_WALL_RATE_CURVES,
   wallArea?: number,
 ): { min: number; max: number } {
-  const curve =
-    EXTERIOR_WALL_RATE_CURVES[wallType] ?? EXTERIOR_WALL_RATE_CURVES.default;
+  const curve = EXTERIOR_WALL_RATE_CURVES[wallType];
   const area =
     wallArea == null ||
     !Number.isFinite(wallArea) ||
@@ -496,6 +690,20 @@ export function getExteriorWallRate(
 
   const last = curve[curve.length - 1];
   return { min: last.min, max: last.max };
+}
+
+export function assertKnownWallType(wallType?: string): keyof typeof EXTERIOR_WALL_RATE_CURVES {
+  if (!wallType) {
+    throw new Error('Select the main exterior wall finish before pricing.');
+  }
+
+  if (wallType in EXTERIOR_WALL_RATE_CURVES) {
+    return wallType as keyof typeof EXTERIOR_WALL_RATE_CURVES;
+  }
+
+  throw new Error(
+    `Unknown wall type "${wallType}". Expected one of: cladding, rendered, brick.`,
+  );
 }
 
 export function estimateWallArea(sqm: number, wallHeight: number): number {
@@ -546,15 +754,12 @@ export function calcTrimItemCost(
 ): { min: number; max: number } {
   let totalMin = 0;
   let totalMax = 0;
-  const anchorKeys = Object.keys(anchor);
   for (const item of items) {
     const key = item.style ?? item.type ?? 'Standard';
-    const a = anchor[key];
-    if (!a) {
-      throw new Error(
-        `Unknown trim anchor key "${key}". Expected one of: ${anchorKeys.join(', ')}`,
-      );
-    }
+    const resolvedKey = resolveTrimAnchorKey(key, anchor);
+    if (!resolvedKey) continue;
+    const a = anchor[resolvedKey];
+    if (!a) continue;
     const qty = Math.max(0, item.quantity ?? 0);
     if (qty === 0) continue;
     const scale = getQtyScaleFactor(qty);
@@ -594,6 +799,14 @@ export function capRangeWidthSmart(
   context: 'interior' | 'exterior' | 'total' = 'interior',
 ): { min: number; max: number } {
   const gap = maxVal - minVal;
+  const input = (_input ?? {}) as {
+    paintCondition?: string;
+    jobDifficulty?: string[];
+    deckArea?: number | null;
+    deckServiceType?: string;
+    deckProductType?: string;
+    deckCondition?: string;
+  };
   let cap: number;
 
   if (context === 'exterior') {
@@ -601,13 +814,62 @@ export function capRangeWidthSmart(
     else if (minVal <= 8000) cap = 1800;
     else if (minVal <= 10000) cap = 1750;
     else cap = 2000;
+  } else if (context === 'total') {
+    if (minVal <= 5000) cap = 1200;
+    else if (minVal <= 12000) cap = 1700;
+    else if (minVal <= 20000) cap = 2200;
+    else cap = 3000;
   } else {
     if (minVal <= 5000) cap = 1200;
     else cap = 1500;
   }
 
+  // Poor condition and complex jobs need a wider tail so the cap does not
+  // erase the upper-risk signal entirely.
+  const isPoorCondition = input.paintCondition === 'Poor';
+  const difficultyCount = Array.isArray(input.jobDifficulty) ? input.jobDifficulty.length : 0;
+  const isComplexInterior = context !== 'exterior' && difficultyCount >= 2;
+  // Total combines independent scopes. Preserve a deck tail so the combined
+  // quote does not flatten an already-priced accessory range.
+  const deckRange =
+    context === 'total'
+      ? calcDeckCost({
+          deckArea: input.deckArea,
+          deckServiceType: input.deckServiceType,
+          deckProductType: input.deckProductType,
+          deckCondition: input.deckCondition,
+        })
+      : null;
+  const deckTail = deckRange ? deckRange.max - deckRange.min : 0;
+
+  if (isPoorCondition) cap *= 1.5;
+  if (isComplexInterior) cap *= 1.4;
+  if (deckTail > 0) cap = Math.max(cap, deckTail);
+  cap = Math.round(cap);
+
   if (gap <= cap) return { min: minVal, max: maxVal };
   return { min: minVal, max: Math.round(minVal + cap) };
+}
+
+function hasFullExteriorScope(exteriorAreas?: string[]): boolean {
+  const areas = exteriorAreas ?? [];
+  return (
+    areas.includes('Wall') &&
+    areas.includes('Eaves') &&
+    areas.includes('Gutter') &&
+    areas.includes('Fascia') &&
+    areas.includes('Exterior Trim')
+  );
+}
+
+export function getExteriorProjectCap(input: {
+  houseStories?: string;
+  exteriorAreas?: string[];
+}): number {
+  const story = normalizeStoryKey(input.houseStories);
+  return story === '3 storey' && hasFullExteriorScope(input.exteriorAreas)
+    ? EXTERIOR_FULL_PROJECT_CEILING
+    : MAX_PRICE_CAP;
 }
 
 export function interpolateBySqm(

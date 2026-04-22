@@ -2,8 +2,10 @@ import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-paintin
 import { calculateExteriorEstimate } from '@/ai/flows/generate-painting-estimate.exterior';
 import {
   HOUSE_INTERIOR_ANCHORS,
+  ENTIRE_APT_BAND,
+  ENTIRE_HOUSE_BAND,
   MAX_PRICE_CAP,
-  STORY_MODIFIER,
+  getStoryModifier,
   capRangeWidthSmart,
   clamp,
   getRawMedianFromSqm,
@@ -19,19 +21,7 @@ const INTERIOR_AREAS = {
   trimPaint: false,
   ensuitePaint: false,
 } as const;
-
-const ENTIRE_HOUSE_BAND = {
-  Excellent: { min: 0.96, max: 1.04 },
-  Fair: { min: 0.97, max: 1.06 },
-  Poor: { min: 0.97, max: 1.1 },
-} as const;
-
-const ENTIRE_APT_BAND = {
-  Excellent: { min: 0.95, max: 1.05 },
-  Fair: { min: 0.92, max: 1.08 },
-  Poor: { min: 0.9, max: 1.25 },
-} as const;
-const ENTIRE_APT_POOR_PREP_UPLIFT = { min: 1.06, max: 1.12 } as const;
+const ENTIRE_APT_POOR_PREP_UPLIFT = { min: 1.04, max: 1.08 } as const;
 
 const DEFAULT_EXTERIOR_AREAS = ['Wall', 'Eaves', 'Gutter', 'Fascia', 'Exterior Trim'];
 
@@ -94,7 +84,7 @@ function calculateLiteInterior(
   });
   const anchor = HOUSE_INTERIOR_ANCHORS[houseKey];
   const band = ENTIRE_HOUSE_BAND[condition];
-  const storyMult = STORY_MODIFIER[input.houseStories ?? '1 storey'] ?? 1;
+  const storyMult = getStoryModifier(input.houseStories);
 
   let min = Math.round(anchor.median * areaFactor * band.min);
   let max = Math.round(anchor.median * areaFactor * band.max);

@@ -53,6 +53,28 @@ describe('estimateRequestSchema', () => {
     );
   });
 
+  test('requires a wallType when exterior Wall scope is selected', () => {
+    const result = estimateRequestSchema.safeParse({
+      ...basePayload,
+      typeOfWork: ['Exterior Painting'],
+      propertyType: 'House / Townhouse',
+      exteriorAreas: ['Wall'],
+      wallFinishes: ['brick'],
+      houseStories: '1 storey',
+      paintAreas: {
+        ceilingPaint: false,
+        wallPaint: false,
+        trimPaint: false,
+        ensuitePaint: false,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.success ? '' : result.error.flatten().fieldErrors.wallType?.[0]).toBe(
+      'Please select the main exterior wall finish.'
+    );
+  });
+
   test('requires approxSize for exterior specific-area wall jobs', () => {
     const result = estimateRequestSchema.safeParse({
       ...basePayload,

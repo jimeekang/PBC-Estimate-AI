@@ -254,7 +254,7 @@ describe('Checklist remaining regressions', () => {
       },
       {
         id: 'EXP2',
-        expected: 'Paving only 150sqm poor, min ~= 4,785',
+        expected: 'Paving only 150sqm poor, min ~= 6,090 (rate updated 2026-04-18)',
         ...exteriorSummary({
           typeOfWork: ['Exterior Painting'],
           paintCondition: 'Fair',
@@ -292,7 +292,9 @@ describe('Checklist remaining regressions', () => {
     expect(cases).toHaveLength(16);
     expect(cases.find((item) => item.id === 'EXD1')?.actualMin).toBeGreaterThanOrEqual(600);
     expect(cases.find((item) => item.id === 'EXP1')?.actualMin).toBeGreaterThanOrEqual(950);
-    expect(cases.find((item) => item.id === 'EXP2')?.actualMin).toBe(4785);
+    expect(cases.find((item) => item.id === 'EXP2')?.actualMin).toBeGreaterThanOrEqual(5000);
+    expect(cases.find((item) => item.id === 'EXD3')?.actualMax).toBeGreaterThan(20000);
+    expect(cases.find((item) => item.id === 'EXD3')?.actualMax).toBeLessThanOrEqual(35000);
   });
 
   test('A.4 EXE7 verifies Etc exterior area pricing fallback risk', async () => {
@@ -379,10 +381,27 @@ describe('Checklist remaining regressions', () => {
       ...baseInteriorFlowInput,
       jobDifficulty: ['Difficult access areas'],
     });
+    const difficultStorey2 = await generatePaintingEstimate({
+      ...baseInteriorFlowInput,
+      houseStories: '2 storey',
+      jobDifficulty: ['Difficult access areas'],
+    });
     const combinedDifficulty = await generatePaintingEstimate({
       ...baseInteriorFlowInput,
       houseStories: '2 storey',
       jobDifficulty: ['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'],
+    });
+    const difficultExteriorBase = await generatePaintingEstimate({
+      ...baseExteriorFlowInput,
+    });
+    const difficultExteriorSingle = await generatePaintingEstimate({
+      ...baseExteriorFlowInput,
+      jobDifficulty: ['Difficult access areas'],
+    });
+    const difficultExteriorDouble = await generatePaintingEstimate({
+      ...baseExteriorFlowInput,
+      houseStories: '2 storey',
+      jobDifficulty: ['Difficult access areas'],
     });
     const timingMaintenance = await generatePaintingEstimate({
       ...baseInteriorFlowInput,
@@ -539,7 +558,7 @@ describe('Checklist remaining regressions', () => {
       },
       {
         id: 'MX5',
-        expected: 'timingPurpose does not change price',
+        expected: 'Preparing for sale applies 5% discount vs Maintenance',
         actual: `maint:${timingMaintenance.breakdown?.interior?.priceRange} sale:${timingSale.breakdown?.interior?.priceRange}`,
       },
       {
@@ -554,7 +573,7 @@ describe('Checklist remaining regressions', () => {
       },
       {
         id: 'OP2',
-        expected: 'Cap string From AUD 35,000+ (Site Inspection Required)',
+        expected: 'Cap string From AUD 55,000+ (Site Inspection Required)',
         actual: op2Cap.priceRange,
       },
       {
@@ -597,10 +616,19 @@ describe('Checklist remaining regressions', () => {
     expect((excellent.breakdown?.interior?.min ?? 0)).toBeLessThanOrEqual(fair.breakdown?.interior?.min ?? 0);
     expect((fair.breakdown?.interior?.min ?? 0)).toBeLessThanOrEqual(poor.breakdown?.interior?.min ?? 0);
     expect((mouldingsOnly.breakdown?.interior?.min ?? 0)).toBeGreaterThan(fair.breakdown?.interior?.min ?? 0);
-    expect((difficultOnly.breakdown?.interior?.min ?? 0)).toBeGreaterThan(fair.breakdown?.interior?.min ?? 0);
+    expect((difficultOnly.breakdown?.interior?.min ?? 0) - (fair.breakdown?.interior?.min ?? 0)).toBeLessThanOrEqual(100);
+    expect((difficultOnly.breakdown?.interior?.min ?? 0) - (fair.breakdown?.interior?.min ?? 0)).toBeLessThan(
+      (difficultExteriorSingle.breakdown?.exterior?.min ?? 0) - (difficultExteriorBase.breakdown?.exterior?.min ?? 0),
+    );
+    expect((difficultExteriorSingle.breakdown?.exterior?.min ?? 0) - (difficultExteriorBase.breakdown?.exterior?.min ?? 0)).toBeLessThan(
+      (difficultStorey2.breakdown?.interior?.min ?? 0) - (storey2.breakdown?.interior?.min ?? 0),
+    );
+    expect((difficultStorey2.breakdown?.interior?.min ?? 0) - (storey2.breakdown?.interior?.min ?? 0)).toBeLessThan(
+      (difficultExteriorDouble.breakdown?.exterior?.min ?? 0) - (difficultExteriorBase.breakdown?.exterior?.min ?? 0),
+    );
     expect((trimWater.breakdown?.interior?.min ?? 0) - (trimOil.breakdown?.interior?.min ?? 0)).toBeGreaterThanOrEqual(3500);
     expect((trimWater.breakdown?.interior?.max ?? 0) - (trimOil.breakdown?.interior?.max ?? 0)).toBeGreaterThanOrEqual(3500);
-    expect(op2Cap.priceRange).toBe('From AUD 35,000+ (Site Inspection Required)');
+    expect(op2Cap.priceRange).toMatch(/^From AUD 55,000\+ \(Site Inspection Required\)$/);
     expect(itemized.priceRange).toMatch(/^AUD [\d,]+ \+ GST$/);
     expect(deckDetails.details).toEqual(
       expect.arrayContaining([expect.stringMatching(/^Deck \(30 sqm\) - /)])

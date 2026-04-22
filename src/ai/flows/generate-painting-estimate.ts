@@ -19,7 +19,8 @@
  *   brick = 3-coat masonry system with the highest prep intensity.
  * - houseStories: '1 storey' / '2 storey' / '3 storey' (3 tiers).
  * - Scope floors still protect wall-only / wall+eaves / full-exterior jobs from underpricing.
- * - Avoids double-counting "Difficult access areas" on double-storey jobs
+ * - Interior difficult access stays near-zero on 1 storey and steps up with
+ *   storey count; exterior remains the strongest access signal
  * - Uses area uplifts as % of base (more stable than fixed sums)
  * - Enforces wall-type-aware floor prices for scope categories
  *
@@ -32,7 +33,7 @@
  * - Exterior:       $0~10k→cap 800 / $10k~20k→1,500 / $20k+→2,500
  *
  * SPECIAL CALIBRATION:
- * - House 3B2B + Fair + Single story uses a sqm-based curve (with 135sqm smoothing point)
+ * - House 3B2B + Fair + 1 storey uses a sqm-based curve (with 135sqm smoothing point)
  * - House 3B2B + Fair + Double story applies extra uplift with overlap controls:
  *   - If Stairwell not selected: +1%
  *   - If High ceilings selected: reduce extra uplift (avoid double counting)
@@ -43,8 +44,8 @@
  *
  * SQM CURVE (Apartment, Entire property):
  * - Continuous interpolation across sqm range — no class boundary cliffs
- * - rawMedian values: 90sqm → $4,300 (key point). Water-based / complexity uplift on top.
- * - ENTIRE_APT_BAND: Excellent {0.95, 1.05}, Fair {0.92, 1.08}, Poor {0.90, 1.25}
+ * - rawMedian values: 90sqm → $4,400 (key point). Water-based / complexity uplift on top.
+ * - ENTIRE_APT_BAND: Excellent {0.95, 1.05}, Fair {0.92, 1.08}, Poor {0.90, 1.18}
  */
 
 import { ai } from '@/ai/genkit';
@@ -58,6 +59,8 @@ import {
 } from '@/schemas/estimate';
 import {
   APARTMENT_ANCHORS_OIL,
+  ENTIRE_APT_BAND,
+  ENTIRE_HOUSE_BAND,
   HOUSE_INTERIOR_ANCHORS,
   MAX_PRICE_CAP,
   AREA_SHARE,
@@ -78,9 +81,12 @@ import {
   getInteriorHandrailWidthMultiplier,
   inferHouseKey,
   capRangeWidthSmart,
+  getExteriorProjectCap,
   interpolateBySqm,
   sumAreaFactor,
   sumAreaFactorWholeApartment,
+  assertKnownStory,
+  resolveInteriorSpecificRoomName,
 } from '@/lib/pricing-engine';
 
 // -----------------------------
@@ -113,25 +119,12 @@ const ROOM_WEIGHT: Record<string, number> = {
   Etc: 0.6,
 };
 
+const ROOM_WEIGHT_FALLBACK = 0.85;
+
 const BASE_FULL_APT_SCORE = 6.3;
 const BASE_FULL_HOUSE_SCORE = 8.8;
 
-const ENTIRE_HOUSE_BAND = {
-  Excellent: { min: 0.96, max: 1.04 },
-  Fair: { min: 0.97, max: 1.06 },
-  Poor: { min: 0.97, max: 1.1 },
-} as const;
-
-// UPDATED: tighter bands calibrated for sqm-curve approach
-// Excellent: narrower range (high confidence)
-// Fair: moderate range
-// Poor: wider range (more uncertainty)
-const ENTIRE_APT_BAND = {
-  Excellent: { min: 0.95, max: 1.05 },
-  Fair:      { min: 0.92, max: 1.08 },
-  Poor:      { min: 0.90, max: 1.25 },
-} as const;
-const ENTIRE_APT_POOR_PREP_UPLIFT = { min: 1.06, max: 1.12 } as const;
+const ENTIRE_APT_POOR_PREP_UPLIFT = { min: 1.04, max: 1.08 } as const;
 
 const WATER_BASED_UPLIFT = { minPct: 0.04, maxPct: 0.06 } as const;
 const TRIM_PREMIUM_ENTIRE_WATER_WHOLE_JOB = {
@@ -400,18 +393,16 @@ function trimPaintTypeToSystem(paintType: 'Oil-based' | 'Water-based') {
 }
 
 function getSpecificInteriorRoomBaseAnchor(roomName: string) {
-  return (
-    INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL[
-      roomName as keyof typeof INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL
-    ] ?? INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL.Etc
-  );
+  const resolved = resolveInteriorSpecificRoomName(roomName);
+  return INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL[resolved];
 }
 
 function getInteriorSkirtingRoomAnchor(roomName: string, paintType: 'Oil-based' | 'Water-based') {
   const system = trimPaintTypeToSystem(paintType);
+  const resolved = resolveInteriorSpecificRoomName(roomName);
   const anchor =
     INTERIOR_SKIRTING_ROOM_ANCHOR[
-      roomName as keyof typeof INTERIOR_SKIRTING_ROOM_ANCHOR
+      resolved as keyof typeof INTERIOR_SKIRTING_ROOM_ANCHOR
     ] ?? INTERIOR_SKIRTING_ROOM_ANCHOR.Etc;
   return anchor[system];
 }
@@ -421,7 +412,8 @@ function estimateInteriorRoomPerimeter(sqm: number) {
 }
 
 function getInteriorSpecificRoomMultiplier(roomName: string) {
-  return INTERIOR_SPECIFIC_ROOM_TYPE_MULTIPLIER[roomName] ?? 1.0;
+  const resolved = resolveInteriorSpecificRoomName(roomName);
+  return INTERIOR_SPECIFIC_ROOM_TYPE_MULTIPLIER[resolved] ?? 1.0;
 }
 
 function getMeasuredInteriorSkirtingRange(
@@ -561,23 +553,27 @@ function isApartmentLike(propertyType?: string) {
 }
 
 function roomScore(roomName: string) {
-  return ROOM_WEIGHT[roomName] ?? 0.6;
+  const normalized = resolveInteriorSpecificRoomName(roomName);
+  return ROOM_WEIGHT[normalized] ?? ROOM_WEIGHT_FALLBACK;
 }
 
 function pseudoSqmFromRooms(selectedRooms: string[]) {
+  const normalizedRooms = selectedRooms.map((room) => resolveInteriorSpecificRoomName(room));
   const base = selectedRooms.length * 8;
   const bonus =
-    (selectedRooms.includes('Bathroom') ? 2 : 0) +
-    (selectedRooms.includes('Kitchen') ? 3 : 0) +
-    (selectedRooms.includes('Living Room') ? 3 : 0);
+    (normalizedRooms.includes('Bathroom') ? 2 : 0) +
+    (normalizedRooms.includes('Kitchen') ? 3 : 0) +
+    (normalizedRooms.includes('Living Room') ? 3 : 0);
   return base + bonus;
 }
 
 function getSingleRoomSpecificHardFloor(roomName: string, aptLike: boolean) {
+  const normalizedRoomName = resolveInteriorSpecificRoomName(roomName);
   const floors = aptLike
     ? {
         Bathroom: 1050,
         'Study / Office': 900,
+        'Living Room': 1450,
         Laundry: 780,
         Stairwell: 1100,
         default: 950,
@@ -585,12 +581,13 @@ function getSingleRoomSpecificHardFloor(roomName: string, aptLike: boolean) {
     : {
         Bathroom: 1200,
         'Study / Office': 1000,
+        'Living Room': 1700,
         Laundry: 850,
         Stairwell: 1200,
         default: 1150,
       };
 
-  return floors[roomName as keyof typeof floors] ?? floors.default;
+  return floors[normalizedRoomName as keyof typeof floors] ?? floors.default;
 }
 
 function getSpecificInteriorHardFloor(selectedRooms: string[], aptLike: boolean) {
@@ -711,12 +708,12 @@ function shouldApply3B2BSingleHouseCalibration(
   houseKey?: keyof typeof HOUSE_INTERIOR_ANCHORS
 ) {
   const isHouse = input.propertyType === 'House / Townhouse';
-  const story = input.houseStories ?? '1 storey';
+  const story = assertKnownStory(input.houseStories ?? '1 storey');
   return (
     input.scopeOfPainting === 'Entire property' &&
     isHouse &&
     houseKey === '3B2B' &&
-    (story === 'Single story' || story === '1 storey')
+    story === '1 storey'
   );
 }
 
@@ -740,8 +737,11 @@ function calibrate3B2BFairSingleHouse(
   if (condition === 'Fair') {
     return { min: Math.round(fairMin), max: Math.round(fairMax) };
   }
-  // HOUSE_CONDITION_MULTIPLIER midpoints: Excellent=1.04, Fair=1.17, Poor=1.31
-  const condScale = condition === 'Excellent' ? (1.04 / 1.17) : (1.31 / 1.17);
+  const fairBand = HOUSE_CONDITION_MULTIPLIER.Fair;
+  const conditionBand = HOUSE_CONDITION_MULTIPLIER[condition as keyof typeof HOUSE_CONDITION_MULTIPLIER];
+  const fairMid = (fairBand.min + fairBand.max) / 2;
+  const conditionMid = (conditionBand.min + conditionBand.max) / 2;
+  const condScale = conditionMid / fairMid;
   const min = clamp(Math.round(fairMin * condScale), 7000, 30000);
   let max = clamp(Math.round(fairMax * condScale), 9000, 35000);
   if (max < min) max = min + 800;
@@ -760,14 +760,14 @@ function applyDoubleStorey3B2BUplift(
 ) {
   const isHouse = input.propertyType === 'House / Townhouse';
   const condition = input.paintCondition ?? 'Fair';
-  const story = input.houseStories ?? '1 storey';
+  const story = assertKnownStory(input.houseStories ?? '1 storey');
 
   if (
     input.scopeOfPainting !== 'Entire property' ||
     !isHouse ||
     houseKey !== '3B2B' ||
     condition !== 'Fair' ||
-    (story !== 'Double story or more' && story !== '2 storey')
+    story !== '2 storey'
   ) {
     return { min: minVal, max: maxVal };
   }
@@ -797,6 +797,30 @@ function applyDoubleStorey3B2BUplift(
   };
 }
 
+function getInteriorDifficultAccessUpliftPct(input: GeneratePaintingEstimateInput) {
+  const story = assertKnownStory(input.houseStories ?? '1 storey');
+  const hasExterior = input.typeOfWork.includes('Exterior Painting');
+  const isInteriorOnly = input.typeOfWork.includes('Interior Painting') && !hasExterior;
+
+  // Interior-only jobs should still reflect access effort, but 1-storey jobs
+  // stay near zero and multi-storey jobs step up materially.
+  if (story === '3 storey') {
+    return isInteriorOnly
+      ? { min: 0.06, max: 0.12 }
+      : { min: 0.03, max: 0.06 };
+  }
+
+  if (story === '2 storey') {
+    return isInteriorOnly
+      ? { min: 0.04, max: 0.08 }
+      : { min: 0.02, max: 0.04 };
+  }
+
+  return isInteriorOnly
+    ? { min: 0.0, max: 0.005 }
+    : { min: 0.0, max: 0.0025 };
+}
+
 // -----------------------------
 // Complexity uplift (%)
 // -----------------------------
@@ -806,21 +830,15 @@ function applyInteriorComplexityUpliftPct(
   maxVal: number
 ) {
   const factors = input.jobDifficulty ?? [];
-  const story = input.houseStories ?? '1 storey';
-  const isDouble = story === 'Double story or more' || story === '2 storey' || story === '3 storey';
 
   let minPct = 0;
   let maxPct = 0;
 
   for (const f of factors) {
     if (f === 'Difficult access areas') {
-      if (isDouble) {
-        minPct += 0.005;
-        maxPct += 0.01;
-      } else {
-        minPct += 0.01;
-        maxPct += 0.03;
-      }
+      const difficultAccessPct = getInteriorDifficultAccessUpliftPct(input);
+      minPct += difficultAccessPct.min;
+      maxPct += difficultAccessPct.max;
       continue;
     }
     if (f === 'Stairs') {
@@ -1292,8 +1310,8 @@ export const generatePaintingEstimate = ai.defineFlow(
     const condMult = CONDITION_MULTIPLIER[condition];
     const houseCondMult = HOUSE_CONDITION_MULTIPLIER[condition];
 
-    const story = input.houseStories ?? '1 storey';
-    const storyMult = STORY_MODIFIER[story] || 1.0;
+    const story = assertKnownStory(input.houseStories ?? '1 storey');
+    const storyMult = STORY_MODIFIER[story];
 
     // -----------------------------
     // Interior door item-level pricing (early return — bypasses room-based model)
@@ -1368,7 +1386,9 @@ export const generatePaintingEstimate = ai.defineFlow(
       let areaFactor = 1.0;
 
       if (isWhole) {
-        selectedRooms = (input.roomsToPaint ?? []).filter((room) => room !== 'Handrail');
+        selectedRooms = (input.roomsToPaint ?? [])
+          .filter((room) => room !== 'Handrail')
+          .map((room) => resolveInteriorSpecificRoomName(room));
         const globalAreas = input.paintAreas ?? {
           ceilingPaint: true,
           wallPaint: true,
@@ -1383,7 +1403,9 @@ export const generatePaintingEstimate = ai.defineFlow(
           : sumAreaFactor(globalAreas);
       } else {
         const rooms = input.interiorRooms ?? [];
-        selectedRooms = rooms.filter((r) => r.roomName !== 'Handrail').map((r) => r.roomName);
+        selectedRooms = rooms
+          .filter((r) => r.roomName !== 'Handrail')
+          .map((r) => resolveInteriorSpecificRoomName(r.roomName));
         areaFactor = 1.0;
       }
 
@@ -1763,6 +1785,12 @@ export const generatePaintingEstimate = ai.defineFlow(
         intMin = capped.min;
         intMax = capped.max;
       }
+
+      // Preparing for sale: 5% discount on interior (faster, lighter scope)
+      if (input.timingPurpose === 'Preparing for sale or rental') {
+        intMin = Math.round(intMin * 0.95);
+        intMax = Math.round(intMax * 0.95);
+      }
     }
 
     // -----------------------------
@@ -1774,6 +1802,8 @@ export const generatePaintingEstimate = ai.defineFlow(
       deckCost: deckCostForPrompt,
       pavingCost: pavingCostForPrompt,
     } = calculateExteriorEstimate(input);
+    const exteriorProjectCap = getExteriorProjectCap(input);
+    const totalProjectCap = Math.max(MAX_PRICE_CAP, exteriorProjectCap);
 
     // -----------------------------
     // 3) Combine
@@ -1784,8 +1814,8 @@ export const generatePaintingEstimate = ai.defineFlow(
     totalMin = Math.round(totalMin);
     totalMax = Math.round(totalMax);
 
-    if (totalMax > MAX_PRICE_CAP) totalMax = MAX_PRICE_CAP;
-    if (totalMin > MAX_PRICE_CAP) totalMin = MAX_PRICE_CAP;
+    if (totalMax > totalProjectCap) totalMax = totalProjectCap;
+    if (totalMin > totalProjectCap) totalMin = totalProjectCap;
 
     if (!isBoth) {
       const capped = capRangeWidthSmart(totalMin, totalMax, input, 'total');
@@ -1802,12 +1832,12 @@ export const generatePaintingEstimate = ai.defineFlow(
         : `AUD ${formatMoney(intMin)} - ${formatMoney(intMax)}`;
 
     const exteriorPriceRange =
-      extMax >= MAX_PRICE_CAP
+      extMax >= exteriorProjectCap
         ? `From AUD ${formatMoney(extMin)}+ (Site Inspection Required)`
         : `AUD ${formatMoney(extMin)} - ${formatMoney(extMax)}`;
 
     const totalPriceRange =
-      totalMax >= MAX_PRICE_CAP
+      totalMax >= totalProjectCap
         ? `From AUD ${formatMoney(totalMin)}+ (Site Inspection Required)`
         : `AUD ${formatMoney(totalMin)} - ${formatMoney(totalMax)}`;
 

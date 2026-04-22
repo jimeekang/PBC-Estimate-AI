@@ -350,6 +350,54 @@ describe('Checklist A.1 regression guards', () => {
     expect(poor.max).toBeGreaterThan(fair.max);
   });
 
+  test('L6b: House poor condition should widen more than apartment poor condition', () => {
+    const apartmentFair = summary(
+      calculateLiteEstimate({
+        workType: 'Interior Painting',
+        propertyType: 'Apartment',
+        approxSize: 110,
+        apartmentStructure: '3Bed2Bath',
+        paintCondition: 'Fair',
+      } as any)
+    );
+    const apartmentPoor = summary(
+      calculateLiteEstimate({
+        workType: 'Interior Painting',
+        propertyType: 'Apartment',
+        approxSize: 110,
+        apartmentStructure: '3Bed2Bath',
+        paintCondition: 'Poor',
+      } as any)
+    );
+    const houseFair = summary(
+      calculateLiteEstimate({
+        workType: 'Interior Painting',
+        propertyType: 'House / Townhouse',
+        approxSize: 110,
+        bedroomCount: 3,
+        bathroomCount: 2,
+        houseStories: '1 storey',
+        paintCondition: 'Fair',
+      } as any)
+    );
+    const housePoor = summary(
+      calculateLiteEstimate({
+        workType: 'Interior Painting',
+        propertyType: 'House / Townhouse',
+        approxSize: 110,
+        bedroomCount: 3,
+        bathroomCount: 2,
+        houseStories: '1 storey',
+        paintCondition: 'Poor',
+      } as any)
+    );
+
+    const apartmentDelta = apartmentPoor.max - apartmentFair.max;
+    const houseDelta = housePoor.max - houseFair.max;
+
+    expect(houseDelta).toBeGreaterThan(apartmentDelta);
+  });
+
   test('L15: 2-storey cladding full exterior should stay within checklist ceiling', () => {
     const res = summary(
       calculateLiteEstimate({
@@ -558,6 +606,24 @@ describe('Checklist PART A.4 — Exterior subsystem direct calls', () => {
     expect(r.extMin).toBeGreaterThanOrEqual(10600 * 0.9);
   });
 
+  test('EX8: Wall+Eaves 3 storey cladding partial scope', () => {
+    const r = calculateExteriorEstimate({
+      typeOfWork: ['Exterior Painting'],
+      paintCondition: 'Fair',
+      houseStories: '3 storey',
+      exteriorAreas: ['Wall', 'Eaves'],
+      wallType: 'cladding',
+      approxSize: 140,
+    });
+    out.push({
+      id: 'EX8',
+      actualMin: r.extMin,
+      actualMax: r.extMax,
+      note: 'B.4 fix: partial exterior should use a 3-storey floor uplift',
+    });
+    expect(r.extMin).toBeGreaterThan(0);
+  });
+
   test('EX10 (B.3 risk): Wall+Gutter+Fascia only · cladding (no Eaves)', () => {
     const r = calculateExteriorEstimate({
       typeOfWork: ['Exterior Painting'],
@@ -571,8 +637,10 @@ describe('Checklist PART A.4 — Exterior subsystem direct calls', () => {
       id: 'EX10',
       actualMin: r.extMin,
       actualMax: r.extMax,
-      note: 'floor should be wallOnly 2600 — under-valuation risk',
+      floorExpected: 3600,
+      note: 'floor should be wallPlusEaves 3600 — under-valuation risk removed',
     });
+    expect(r.extMin).toBeGreaterThanOrEqual(3600);
   });
 
   test('EXR1: Roof only · 140sqm · 1 storey', () => {
@@ -624,6 +692,21 @@ describe('Checklist PART B — Known bug reproducers', () => {
     // eslint-disable-next-line no-console
     console.log('[B.1] clampedMin', clampedMin, 'clampedMax', clampedMax, 'width', clampedMax - clampedMin);
     expect(clampedMin).toBeGreaterThan(0);
+    expect(clampedMax - clampedMin).toBeGreaterThan(0);
+  });
+
+  test('B.1b Roof: small roof + single storey also preserves width with ceiling buffer', () => {
+    const pitch = EXTERIOR_ROOF_RATE.pitchFactor;
+    const roofArea = 50 * pitch;
+    const singleRate = EXTERIOR_ROOF_RATE.single;
+    const rawMin = roofArea * singleRate.min;
+    const rawMax = roofArea * singleRate.max;
+    const floor = singleRate.floor;
+    const clampedMin = Math.max(rawMin, floor);
+    const clampedMax = Math.max(rawMax, floor * 1.25);
+
+    expect(clampedMin).toBe(3500);
+    expect(clampedMax).toBe(4375);
     expect(clampedMax - clampedMin).toBeGreaterThan(0);
   });
 

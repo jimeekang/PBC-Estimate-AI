@@ -174,7 +174,7 @@ This means two things:
 - How it appears to have been created:
   - Class-based market anchor table from an older or parallel pricing model.
   - "OIL" naming indicates oil-based trim/base default assumptions.
-  - Checklist B.8 notes this system does not align perfectly with APARTMENT_SQM_CURVE, which implies these two anchor families were calibrated separately.
+  - Checklist B.8 treats this as an intentional calibration split between APARTMENT_SQM_CURVE and APARTMENT_ANCHORS_OIL.
 
 3.3 ENTIRE_APT_BAND and ENTIRE_APT_POOR_PREP_UPLIFT
 - ENTIRE_APT_BAND:
@@ -707,7 +707,7 @@ These are important if someone wants to trust or extend the anchor list.
 9.1 Apartment has two baseline systems
 - Entire property uses APARTMENT_SQM_CURVE.
 - Specific areas uses APARTMENT_ANCHORS_OIL.
-- Checklist B.8 flags this mismatch.
+- Checklist B.8 documents this intentional split.
 
 9.2 Some important pricing bands live outside pricing-engine.ts
 - ENTIRE_HOUSE_BAND and ENTIRE_APT_BAND are in generate-painting-estimate.ts.

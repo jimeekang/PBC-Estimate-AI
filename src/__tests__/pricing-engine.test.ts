@@ -25,11 +25,16 @@ import {
   INTERIOR_HANDRAIL_ITEM_PRICING,
   CONDITION_MULTIPLIER,
   HOUSE_CONDITION_MULTIPLIER,
+  EXTERIOR_CONDITION_MULTIPLIER,
   STORY_MODIFIER,
   DEFAULT_WALL_HEIGHT,
   CAL_3B2B_FAIR_SINGLE_POINTS,
   DOUBLE_STOREY_3B2B_UPLIFT,
   MAX_PRICE_CAP,
+  EXTERIOR_FULL_PROJECT_CEILING,
+  assertKnownStory,
+  getExteriorProjectCap,
+  resolveInteriorSpecificRoomName,
   // Functions
   clamp,
   getRawMedianFromSqm,
@@ -40,6 +45,7 @@ import {
   calculateInteriorHandrailItemRange,
   getQtyScaleFactor,
   calcTrimItemCost,
+  calcDeckCost,
   inferHouseKey,
   capRangeWidthSmart,
   interpolateBySqm,
@@ -239,6 +245,15 @@ describe('C: Interior Specific Areas', () => {
     );
   });
 
+  test('C4c: Lounge resolves to the Living Room anchor through the canonical alias map', () => {
+    const loungeAnchor = INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL[
+      resolveInteriorSpecificRoomName('Lounge')
+    ];
+    const livingAnchor = INTERIOR_SPECIFIC_ROOM_BASE_ANCHOR_OIL['Living Room'];
+
+    expect(loungeAnchor).toEqual(livingAnchor);
+  });
+
   test('C5: Oil 2coat Door & Frame anchor = $220', () => {
     expect(INTERIOR_DOOR_ITEM_ANCHOR.oil_2coat['Door & Frame']).toBe(220);
   });
@@ -285,27 +300,50 @@ describe('C: Interior Specific Areas', () => {
     expect(INTERIOR_WINDOW_ITEM_ANCHOR.water_3coat_white_finish.French['Window & Frame']).toBe(475);
   });
 
-  test('C10: calcTrimItemCost — each group gets independent scale factor (no cross-group stacking)', () => {
+  test('C10: calcTrimItemCost normalizes aliases and keeps each group independent', () => {
     // 5 doors + 3 windows → doors scale 0.92, windows scale 1.00 (independent)
     const doorAnchor = { 'Door & Frame': { min: 200, max: 300 } };
     const windowAnchor = { Normal: { min: 100, max: 200 } };
 
-    const doors = calcTrimItemCost([{ style: 'Door & Frame', quantity: 5 }], doorAnchor);
-    const windows = calcTrimItemCost([{ type: 'Normal', quantity: 3 }], windowAnchor);
+    const doors = calcTrimItemCost([{ style: 'door and frame', quantity: 5 }], doorAnchor);
+    const windows = calcTrimItemCost([{ type: 'window and frame', quantity: 3 }], windowAnchor);
 
     // Doors: 5 × $200 × 0.92 = $920 min; 5 × $300 × 0.92 = $1380 max
     expect(doors.min).toBe(920);
     expect(doors.max).toBe(1380);
 
-    // Windows: 3 × $100 × 1.00 = $300 min; 3 × $200 × 1.00 = $600 max
+    // Windows normalize to the canonical Normal anchor and stay at 1.00 scale.
     expect(windows.min).toBe(300);
     expect(windows.max).toBe(600);
   });
 
-  test('C10: calcTrimItemCost throws on unknown anchor key instead of silently using a fallback', () => {
-    expect(() =>
-      calcTrimItemCost([{ style: 'Unknown Style', quantity: 2 }], EXTERIOR_DOOR_ANCHOR)
-    ).toThrow('Unknown trim anchor key');
+  test('C10: calcTrimItemCost falls back to the standard anchor instead of throwing on unknown keys', () => {
+    const result = calcTrimItemCost([{ style: 'Unknown Style', quantity: 2 }], EXTERIOR_DOOR_ANCHOR);
+
+    // Unknown trim styles should not crash the pricing flow; they should price
+    // against the standard anchor to preserve quote generation.
+    expect(result).toEqual({ min: 500, max: 840 });
+  });
+
+  test('C10b: exterior project cap lifts for 3 storey full exterior jobs', () => {
+    const cap = getExteriorProjectCap({
+      houseStories: '3 storey',
+      exteriorAreas: ['Wall', 'Eaves', 'Gutter', 'Fascia', 'Exterior Trim'],
+    });
+
+    expect(cap).toBe(EXTERIOR_FULL_PROJECT_CEILING);
+  });
+
+  test('C10c: calcTrimItemCost keeps valid items while normalizing unknown ones', () => {
+    const result = calcTrimItemCost(
+      [
+        { style: 'Unknown Style', quantity: 2 },
+        { style: 'Complex', quantity: 1 },
+      ],
+      EXTERIOR_DOOR_ANCHOR
+    );
+
+    expect(result).toEqual({ min: 900, max: 1520 });
   });
 
   test('C11: Handrail oil 2coat anchor — $155/m min, $180/m max', () => {
@@ -572,6 +610,73 @@ describe('E: Range Cap Policy', () => {
     expect(result.min).toBe(4000);
     expect(result.max).toBe(5200);
   });
+
+  test('E9: interior Poor condition widens the cap', () => {
+    const result = capRangeWidthSmart(7000, 10000, { paintCondition: 'Poor' }, 'interior');
+    expect(result.min).toBe(7000);
+    expect(result.max).toBe(9250); // 7000 + (1500 * 1.5)
+  });
+
+  test('E10: interior complex difficulty widens the cap further', () => {
+    const result = capRangeWidthSmart(
+      12000,
+      19000,
+      { jobDifficulty: ['Stairs', 'High ceilings'] },
+      'interior',
+    );
+    expect(result.min).toBe(12000);
+    expect(result.max).toBe(14100); // 12000 + (1500 * 1.4)
+  });
+
+  test('E11: interior Poor + complex difficulty stacks cap expansion', () => {
+    const result = capRangeWidthSmart(
+      12000,
+      19000,
+      { paintCondition: 'Poor', jobDifficulty: ['Stairs', 'High ceilings'] },
+      'interior',
+    );
+    expect(result.min).toBe(12000);
+    expect(result.max).toBe(15150); // 12000 + (1500 * 1.5 * 1.4)
+  });
+
+  test('E12: total context keeps a wider tail than interior on large combined jobs', () => {
+    const interior = capRangeWidthSmart(18000, 25000, {}, 'interior');
+    const total = capRangeWidthSmart(18000, 25000, {}, 'total');
+
+    expect(total.max - total.min).toBeGreaterThan(interior.max - interior.min);
+    expect(total.max).toBe(20200); // 18000 + 2200
+  });
+
+  test('E13: total context preserves the full weathered deck tail instead of re-capping it', () => {
+    const deckInput = {
+      deckArea: 200,
+      deckServiceType: 'paint-conversion',
+      deckProductType: 'oil',
+      deckCondition: 'weathered',
+    };
+    const deck = calcDeckCost(deckInput);
+    const total = capRangeWidthSmart(deck?.min ?? 0, deck?.max ?? 0, deckInput, 'total');
+
+    expect(total).toEqual(deck);
+  });
+
+  test('D17: assertKnownStory normalizes legacy aliases and rejects unknown values', () => {
+    expect(assertKnownStory('Single story')).toBe('1 storey');
+    expect(assertKnownStory('Double story or more')).toBe('2 storey');
+    expect(() => assertKnownStory('penthouse')).toThrow('Unknown house story');
+  });
+
+  test('D2-13: Deck project ceiling no longer cuts off before the global max cap', () => {
+    const deck = calcDeckCost({
+      deckArea: 200,
+      deckServiceType: 'paint-conversion',
+      deckProductType: 'oil',
+      deckCondition: 'weathered',
+    });
+
+    expect(deck?.max).toBeGreaterThan(22000);
+    expect(deck?.max).toBeLessThanOrEqual(MAX_PRICE_CAP);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -699,6 +804,19 @@ describe('G: Market Realism Sanity Check', () => {
       .toBeGreaterThan(CONDITION_MULTIPLIER.Excellent.min);
   });
 
+  test('G4: Apartment < House < Exterior on Poor ceiling', () => {
+    expect(CONDITION_MULTIPLIER.Excellent.min)
+      .toBeLessThan(HOUSE_CONDITION_MULTIPLIER.Excellent.min);
+    expect(CONDITION_MULTIPLIER.Fair.min)
+      .toBeLessThan(HOUSE_CONDITION_MULTIPLIER.Fair.min);
+    expect(CONDITION_MULTIPLIER.Poor.min)
+      .toBeLessThan(HOUSE_CONDITION_MULTIPLIER.Poor.min);
+    expect(CONDITION_MULTIPLIER.Poor.max)
+      .toBeLessThan(HOUSE_CONDITION_MULTIPLIER.Poor.max);
+    expect(HOUSE_CONDITION_MULTIPLIER.Poor.max)
+      .toBeLessThan(EXTERIOR_CONDITION_MULTIPLIER.Poor.max);
+  });
+
   test('G5: 200sqm apartment rawMedian is at least 3× the 35sqm rawMedian', () => {
     const small = getRawMedianFromSqm(35);
     const large = getRawMedianFromSqm(200);
@@ -707,6 +825,18 @@ describe('G: Market Realism Sanity Check', () => {
 
   test('G6: MAX_PRICE_CAP === 35000', () => {
     expect(MAX_PRICE_CAP).toBe(35000);
+  });
+
+  test('G6b: Large deck ranges cap cleanly without min/max inversion', () => {
+    const deck = calcDeckCost({
+      deckArea: 900,
+      deckServiceType: 'paint-conversion',
+      deckProductType: 'oil',
+      deckCondition: 'damaged',
+    });
+
+    expect(deck?.min).toBe(MAX_PRICE_CAP);
+    expect(deck?.max).toBe(MAX_PRICE_CAP);
   });
 
   test('G7: House anchors scale upward — 2B1B < 3B2B < 4B2B < 5B3B (median)', () => {
@@ -718,13 +848,10 @@ describe('G: Market Realism Sanity Check', () => {
       .toBeLessThan(HOUSE_INTERIOR_ANCHORS['5B3B'].median);
   });
 
-  test('G8: SQM curve is monotonically increasing up to 85sqm', () => {
-    // 35→45→55→65→80→85: each rawMedian should be greater than or equal to previous
+  test('G8: SQM curve is monotonically non-decreasing', () => {
     for (let i = 0; i < APARTMENT_SQM_CURVE.length - 1; i++) {
       const curr = APARTMENT_SQM_CURVE[i];
       const next = APARTMENT_SQM_CURVE[i + 1];
-      // Note: 85→90 is a slight decrease (4350→4300) — this is intentional calibration
-      if (curr.sqm === 85) continue;
       expect(next.rawMedian).toBeGreaterThanOrEqual(curr.rawMedian);
     }
   });
