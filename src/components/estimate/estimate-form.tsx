@@ -646,6 +646,7 @@ export function EstimateForm() {
       otherInteriorArea: '',
       apartmentStructure: undefined,
 
+      wallType: undefined,
       wallFinishes: [],
       wallHeight: undefined,
       interiorWallHeight: undefined,
@@ -2619,7 +2620,10 @@ const showCeilingOptions =
                                       form.setValue('exteriorAreas', next);
 
                                       if (isEtc && !checked) form.setValue('otherExteriorArea', '');
-                                      if (isWall && !checked) form.setValue('wallFinishes', []);
+                                      if (isWall && !checked) {
+                                        form.setValue('wallFinishes', []);
+                                        form.setValue('wallType', undefined, { shouldDirty: true, shouldValidate: true });
+                                      }
                                       if (isExtTrim && !checked) {
                                         form.setValue('exteriorTrimItems', []);
                                         form.setValue('exteriorFrontDoor', false);
@@ -2707,6 +2711,10 @@ const showCeilingOptions =
                                                       ? [opt.id]
                                                       : current.filter((v) => v !== opt.id);
                                                     field.onChange(next);
+                                                    form.setValue('wallType', c ? opt.id : undefined, {
+                                                      shouldDirty: true,
+                                                      shouldValidate: true,
+                                                    });
                                                   }}
                                                 />
                                                 {WALL_FINISH_TOOLTIPS[opt.id] ? (

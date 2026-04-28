@@ -49,10 +49,10 @@ export const ENTIRE_APT_BAND = {
 } as const;
 
 export const HOUSE_INTERIOR_ANCHORS = {
-  '2B1B': { min: 7500, max: 11000, median: 9000 },
-  '3B2B': { min: 9500, max: 14000, median: 11500 },
-  '4B2B': { min: 13000, max: 18500, median: 15500 },
-  '5B3B': { min: 17000, max: 25000, median: 20000 },
+  '2B1B': { min: 6700, max: 9800, median: 8000 },
+  '3B2B': { min: 8500, max: 12450, median: 10250 },
+  '4B2B': { min: 11600, max: 16450, median: 13800 },
+  '5B3B': { min: 15100, max: 22250, median: 17800 },
 } as const;
 
 export const ENTIRE_HOUSE_BAND = {
@@ -585,10 +585,10 @@ export const INTERIOR_HANDRAIL_ITEM_PRICING = {
 } as const;
 
 export const CAL_3B2B_FAIR_SINGLE_POINTS = [
-  { sqm: 120, min: 8500, max: 11000 },
-  { sqm: 135, min: 10000, max: 13500 },
-  { sqm: 150, min: 12000, max: 15500 },
-  { sqm: 180, min: 14500, max: 19000 },
+  { sqm: 120, min: 7600, max: 9800 },
+  { sqm: 135, min: 8900, max: 12000 },
+  { sqm: 150, min: 10700, max: 13800 },
+  { sqm: 180, min: 12900, max: 16900 },
 ] as const;
 
 export const DOUBLE_STOREY_3B2B_UPLIFT = {
