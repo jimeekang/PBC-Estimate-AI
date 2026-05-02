@@ -13,6 +13,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 const BOOKING_URL = 'https://clienthub.getjobber.com/booking/3a242065-0473-4039-ac49-e0a471328f15/';
+const BOOKING_QR_CODE_SRC = '/PBC-Booking%20QR%20Code.png';
 
 export interface EstimatePdfMeta {
   generatedAt?: string;
@@ -176,7 +177,7 @@ function EstimateCard({
             </div>
             <div className="flex flex-col items-center gap-1 rounded-lg bg-white p-2">
               <Image
-                src="/PBC-Booking QR Code.png"
+                src={BOOKING_QR_CODE_SRC}
                 alt="PBC booking QR code"
                 width={80}
                 height={80}
@@ -497,7 +498,7 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
             <div className="hidden shrink-0 sm:block">
               <div className="rounded-xl bg-white p-3 shadow-inner">
                 <Image
-                  src="/PBC-Booking QR Code.png"
+                  src={BOOKING_QR_CODE_SRC}
                   alt="Scan to book a free on-site quote"
                   width={120}
                   height={120}
