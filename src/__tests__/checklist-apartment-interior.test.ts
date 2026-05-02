@@ -29,6 +29,7 @@ import {
   INTERIOR_DOOR_ITEM_ANCHOR,
   INTERIOR_DOOR_TYPE_PREMIUM,
   INTERIOR_WINDOW_ITEM_ANCHOR,
+  getQtyScaleFactor,
 } from '@/lib/pricing-engine';
 
 type Row = {
@@ -336,22 +337,26 @@ describe('A.2.1 Apartment · Entire property', () => {
     expect(ceiling.max / wall.max).toBeLessThanOrEqual(0.63);
   });
 
-  test('AE10: ensuite-only edge case — throws because no priced surface selected', async () => {
-    await expect(
-      generatePaintingEstimate({
-        ...base(),
-        approxSize: 85,
-        apartmentStructure: '2Bed2Bath',
-        paintAreas: { ceilingPaint: false, wallPaint: false, trimPaint: false, ensuitePaint: true },
-      })
-    ).rejects.toThrow(/priced interior surface/i);
+  test('AE10: ensuite-only edge case - returns a single-surface ensuite quote', async () => {
+    const r = await generatePaintingEstimate({
+      ...base(),
+      approxSize: 85,
+      apartmentStructure: '2Bed2Bath',
+      paintAreas: { ceilingPaint: false, wallPaint: false, trimPaint: false, ensuitePaint: true },
+    });
+    const i = interior(r);
     aeRows.push({
       id: 'AE10',
-      label: 'ensuite-only → throws',
-      actualMin: 0,
-      actualMax: 0,
-      note: 'Flow rejects no priced surface (ensuite alone not enough)',
+      label: 'ensuite-only',
+      actualMin: i.min,
+      actualMax: i.max,
+      expectedMin: 300,
+      expectedMax: 500,
+      priceRange: i.priceRange,
+      note: 'Ensuite is treated as a priced single-surface selection',
     });
+    expect(i.min).toBe(320);
+    expect(i.max).toBe(376);
   });
 
   test('AE11: approxSize missing → apartmentStructure fallback', async () => {
@@ -752,7 +757,8 @@ describe('A.2.2 Apartment · Specific areas only', () => {
     const expected =
       (INTERIOR_DOOR_ITEM_ANCHOR.oil_2coat['Door & Frame'] +
         INTERIOR_DOOR_TYPE_PREMIUM.flush) *
-      5;
+      5 *
+      getQtyScaleFactor(5);
     asRows.push({
       id: 'AS14',
       label: 'flush D&F oil ×5',
@@ -761,8 +767,8 @@ describe('A.2.2 Apartment · Specific areas only', () => {
       expectedMin: expected,
       expectedMax: expected,
     });
-    expect(sub).toBe(1100);
-    expect(expected).toBe(1100);
+    expect(sub).toBe(1012);
+    expect(expected).toBe(1012);
   });
 
   test('AS15: Door bi_folding / Door&Frame / water / 2 → subtotal 2×($295+$25) = $640', async () => {
@@ -810,7 +816,9 @@ describe('A.2.2 Apartment · Specific areas only', () => {
     });
     const sub = r.pricingMeta?.subtotalExGst ?? -1;
     const expected =
-      INTERIOR_WINDOW_ITEM_ANCHOR.water_3coat_white_finish.French['Window & Frame'] * 4;
+      INTERIOR_WINDOW_ITEM_ANCHOR.water_3coat_white_finish.French['Window & Frame'] *
+      4 *
+      getQtyScaleFactor(4);
     asRows.push({
       id: 'AS16',
       label: 'French W&F water ×4',
@@ -819,8 +827,8 @@ describe('A.2.2 Apartment · Specific areas only', () => {
       expectedMin: expected,
       expectedMax: expected,
     });
-    expect(sub).toBe(1900);
-    expect(expected).toBe(1900);
+    expect(sub).toBe(1748);
+    expect(expected).toBe(1748);
   });
 
   test('AS17: Door+Window items only (no rooms) → interior_itemized mode', async () => {

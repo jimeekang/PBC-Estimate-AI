@@ -37,6 +37,10 @@ studio-*-*.json
 !.env.example
 .claude/
 
+# Codex project skill links
+.codex/skills/pbc-*/
+.codex/skills/gstack/
+
 # Build
 tsconfig.tsbuildinfo
 

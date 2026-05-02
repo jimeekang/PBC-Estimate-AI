@@ -72,6 +72,10 @@ function hasExteriorWork(typeOfWork: readonly z.infer<typeof EstimateWorkTypeSch
   return typeOfWork.includes('Exterior Painting');
 }
 
+function hasPositiveQuantity<T extends { quantity?: number }>(items?: T[]) {
+  return (items ?? []).some((item) => typeof item.quantity === 'number' && item.quantity > 0);
+}
+
 export const estimateRequestSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required.').max(100),
@@ -200,6 +204,19 @@ export const estimateRequestSchema = z
   )
   .refine(
     (data) => {
+      const isApartmentSpecificInterior =
+        hasInteriorWork(data.typeOfWork) &&
+        data.propertyType === 'Apartment' &&
+        data.scopeOfPainting === 'Specific areas only';
+      return !isApartmentSpecificInterior;
+    },
+    {
+      path: ['scopeOfPainting'],
+      message: 'Apartment specific-area interior estimates are not available yet. Please choose Entire property.',
+    }
+  )
+  .refine(
+    (data) => {
       const needsCustomInteriorArea =
         hasInteriorWork(data.typeOfWork) &&
         data.scopeOfPainting === 'Entire property' &&
@@ -256,7 +273,8 @@ export const estimateRequestSchema = z
       return !!(
         data.paintAreas?.ceilingPaint ||
         data.paintAreas?.wallPaint ||
-        data.paintAreas?.trimPaint
+        data.paintAreas?.trimPaint ||
+        data.paintAreas?.ensuitePaint
       );
     },
     { path: ['paintAreas'], message: 'Please select at least one interior surface.' }
@@ -392,7 +410,7 @@ export const estimateRequestSchema = z
         data.scopeOfPainting === 'Specific areas only' &&
         (data.trimPaintOptions?.trimItems ?? []).includes('Doors');
       if (!needsDoorItems) return true;
-      return (data.interiorDoorItems ?? []).length > 0;
+      return hasPositiveQuantity(data.interiorDoorItems);
     },
     { path: ['interiorDoorItems'], message: 'Please add at least one door quantity.' }
   )
@@ -403,7 +421,7 @@ export const estimateRequestSchema = z
         data.scopeOfPainting === 'Specific areas only' &&
         (data.trimPaintOptions?.trimItems ?? []).includes('Window Frames');
       if (!needsWindowItems) return true;
-      return (data.interiorWindowItems ?? []).length > 0;
+      return hasPositiveQuantity(data.interiorWindowItems);
     },
     { path: ['interiorWindowItems'], message: 'Please add at least one window quantity.' }
   )

@@ -121,7 +121,7 @@ describe('estimateRequestSchema', () => {
     );
   });
 
-  test('rejects entire-property interior jobs when only ensuitePaint is true', () => {
+  test('accepts entire-property interior jobs when only ensuitePaint is true', () => {
     const result = estimateRequestSchema.safeParse({
       ...basePayload,
       paintAreas: {
@@ -132,9 +132,62 @@ describe('estimateRequestSchema', () => {
       },
     });
 
+    expect(result.success).toBe(true);
+  });
+
+  test('rejects interior door details with zero quantity', () => {
+    const result = estimateRequestSchema.safeParse({
+      ...basePayload,
+      scopeOfPainting: 'Specific areas only',
+      specificInteriorTrimOnly: true,
+      paintAreas: {
+        ceilingPaint: false,
+        wallPaint: false,
+        trimPaint: false,
+        ensuitePaint: false,
+      },
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors'],
+      },
+      interiorDoorItems: [
+        { doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 0 },
+      ],
+      interiorRooms: [],
+    });
+
     expect(result.success).toBe(false);
-    expect(result.success ? '' : result.error.flatten().fieldErrors.paintAreas?.[0]).toBe(
-      'Please select at least one interior surface.'
+    expect(result.success ? [] : result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['interiorDoorItems', 0, 'quantity'],
+        }),
+      ])
+    );
+  });
+
+  test('rejects apartment specific-area interior jobs until apartment room policy is defined', () => {
+    const result = estimateRequestSchema.safeParse({
+      ...basePayload,
+      scopeOfPainting: 'Specific areas only',
+      interiorWallHeight: 2.7,
+      interiorRooms: [
+        {
+          roomName: 'Bedroom 1',
+          approxRoomSize: 12,
+          paintAreas: {
+            ceilingPaint: true,
+            wallPaint: true,
+            trimPaint: false,
+            ensuitePaint: false,
+          },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.success ? '' : result.error.flatten().fieldErrors.scopeOfPainting?.[0]).toBe(
+      'Apartment specific-area interior estimates are not available yet. Please choose Entire property.'
     );
   });
 

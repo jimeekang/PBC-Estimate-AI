@@ -52,6 +52,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { calculateExteriorEstimate } from '@/ai/flows/generate-painting-estimate.exterior';
 import { isInteriorTrimItemOnly } from '@/lib/estimate-flow-logic';
+import { clampInteriorRangeForOutput } from '@/lib/estimate-output-range';
 import { EXTERIOR_RESTRICTED_PROPERTY_TYPES } from '@/lib/estimate-constants';
 import {
   InteriorRoomItemSchema,
@@ -87,6 +88,7 @@ import {
   sumAreaFactorWholeApartment,
   assertKnownStory,
   resolveInteriorSpecificRoomName,
+  getQtyScaleFactor,
 } from '@/lib/pricing-engine';
 
 // -----------------------------
@@ -337,7 +339,7 @@ function hasPricedInteriorSurfaceSelection(flags?: {
   trimPaint?: boolean;
   ensuitePaint?: boolean;
 }) {
-  return !!(flags?.ceilingPaint || flags?.wallPaint || flags?.trimPaint);
+  return !!(flags?.ceilingPaint || flags?.wallPaint || flags?.trimPaint || flags?.ensuitePaint);
 }
 
 function countPricedInteriorSurfaces(flags?: {
@@ -346,7 +348,12 @@ function countPricedInteriorSurfaces(flags?: {
   trimPaint?: boolean;
   ensuitePaint?: boolean;
 }) {
-  return Number(!!flags?.ceilingPaint) + Number(!!flags?.wallPaint) + Number(!!flags?.trimPaint);
+  return (
+    Number(!!flags?.ceilingPaint) +
+    Number(!!flags?.wallPaint) +
+    Number(!!flags?.trimPaint) +
+    Number(!!flags?.ensuitePaint)
+  );
 }
 
 function getWholeApartmentSingleSurfaceShare(flags?: {
@@ -358,6 +365,7 @@ function getWholeApartmentSingleSurfaceShare(flags?: {
   if (flags?.wallPaint) return WHOLE_APARTMENT_SINGLE_SURFACE_SHARE.wallPaint;
   if (flags?.ceilingPaint) return WHOLE_APARTMENT_SINGLE_SURFACE_SHARE.ceilingPaint;
   if (flags?.trimPaint) return WHOLE_APARTMENT_SINGLE_SURFACE_SHARE.trimPaint;
+  if (flags?.ensuitePaint) return AREA_SHARE.ensuitePaint;
   return 1.0;
 }
 
@@ -387,6 +395,13 @@ function getInteriorWindowUnitPrice(system: string, type: string, scope: string)
   }
   return unitPrice;
 }
+
+function getScaledTrimItemLineTotal(unitPrice: number, quantity: number): number {
+  const qty = Math.max(0, quantity);
+  return Math.round(unitPrice * qty * getQtyScaleFactor(qty));
+}
+
+const WHOLE_PROPERTY_DOOR_PREMIUM_CAP_PCT = 0.1;
 
 function trimPaintTypeToSystem(paintType: 'Oil-based' | 'Water-based') {
   return paintType === 'Water-based' ? 'water_3coat_white_finish' as const : 'oil_2coat' as const;
@@ -703,30 +718,30 @@ function getWholeJobWaterTrimPremium(itemCount: number) {
 // 3B2B FAIR (House) curve — CAL_3B2B_FAIR_SINGLE_POINTS imported from '@/lib/pricing-engine'.
 // -----------------------------
 
-function shouldApply3B2BSingleHouseCalibration(
+function shouldApply3B2BFairHouseCalibration(
   input: GeneratePaintingEstimateInput,
   houseKey?: keyof typeof HOUSE_INTERIOR_ANCHORS
 ) {
   const isHouse = input.propertyType === 'House / Townhouse';
-  const story = assertKnownStory(input.houseStories ?? '1 storey');
   return (
     input.scopeOfPainting === 'Entire property' &&
     isHouse &&
-    houseKey === '3B2B' &&
-    story === '1 storey'
+    houseKey === '3B2B'
   );
 }
 
-function calibrate3B2BFairSingleHouse(
+function calibrate3B2BFairHouse(
   input: GeneratePaintingEstimateInput,
   houseKey: keyof typeof HOUSE_INTERIOR_ANCHORS,
   currentMin: number,
   currentMax: number
 ) {
-  if (!shouldApply3B2BSingleHouseCalibration(input, houseKey)) {
+  if (!shouldApply3B2BFairHouseCalibration(input, houseKey)) {
     return { min: currentMin, max: currentMax };
   }
   const sqm = input.approxSize ?? 135;
+  const story = assertKnownStory(input.houseStories ?? '1 storey');
+  const storyMult = STORY_MODIFIER[story];
   const fairTarget = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, sqm);
   const fairMin = clamp(fairTarget.min, 7000, 30000);
   let fairMax = clamp(fairTarget.max, 9000, 35000);
@@ -735,15 +750,18 @@ function calibrate3B2BFairSingleHouse(
   // Scale by condition relative to Fair baseline
   const condition = input.paintCondition ?? 'Fair';
   if (condition === 'Fair') {
-    return { min: Math.round(fairMin), max: Math.round(fairMax) };
+    return {
+      min: Math.round(fairMin * storyMult),
+      max: Math.round(fairMax * storyMult),
+    };
   }
   const fairBand = HOUSE_CONDITION_MULTIPLIER.Fair;
   const conditionBand = HOUSE_CONDITION_MULTIPLIER[condition as keyof typeof HOUSE_CONDITION_MULTIPLIER];
   const fairMid = (fairBand.min + fairBand.max) / 2;
   const conditionMid = (conditionBand.min + conditionBand.max) / 2;
   const condScale = conditionMid / fairMid;
-  const min = clamp(Math.round(fairMin * condScale), 7000, 30000);
-  let max = clamp(Math.round(fairMax * condScale), 9000, 35000);
+  const min = clamp(Math.round(fairMin * condScale * storyMult), 7000, 30000);
+  let max = clamp(Math.round(fairMax * condScale * storyMult), 9000, 35000);
   if (max < min) max = min + 800;
   return { min, max };
 }
@@ -900,6 +918,7 @@ const GeneratePaintingEstimateInputSchema = z.object({
   exteriorTrimItems: z.array(z.enum(['Doors', 'Window Frames', 'Architraves', 'Front Door'])).optional(),
   exteriorFrontDoor: z.boolean().optional(),
   wallType: z.enum(['cladding', 'rendered', 'brick']).optional(),
+  wallFinishes: z.array(z.enum(['cladding', 'rendered', 'brick'])).max(1).optional(),
   wallHeight: z.number().optional(),
 
   /** Exterior trim item-level inputs (optional — additive to base exterior estimate) */
@@ -1323,7 +1342,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       for (const item of input.interiorDoorItems ?? []) {
         const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope, item.doorType);
-        const lineTotal = unitPrice * item.quantity;
+        const lineTotal = getScaledTrimItemLineTotal(unitPrice, item.quantity);
         subtotalExGst += lineTotal;
         const systemLabel =
           item.system === 'oil_2coat'
@@ -1336,7 +1355,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       for (const item of input.interiorWindowItems ?? []) {
         const unitPrice = getInteriorWindowUnitPrice(item.system, item.type, item.scope);
-        const lineTotal = unitPrice * item.quantity;
+        const lineTotal = getScaledTrimItemLineTotal(unitPrice, item.quantity);
         subtotalExGst += lineTotal;
         const systemLabel =
           item.system === 'oil_2coat'
@@ -1650,9 +1669,13 @@ export const generatePaintingEstimate = ai.defineFlow(
           }
 
           if (globalTrimOn && interiorDoorTypes.length > 0) {
-            wholePropertyDoorPremiumPct = [...new Set(interiorDoorTypes)].reduce((sum, type) => {
+            const uncappedDoorPremiumPct = [...new Set(interiorDoorTypes)].reduce((sum, type) => {
               return sum + INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT[type];
             }, 0);
+            wholePropertyDoorPremiumPct = Math.min(
+              WHOLE_PROPERTY_DOOR_PREMIUM_CAP_PCT,
+              uncappedDoorPremiumPct
+            );
           }
         } else {
           const rooms = input.interiorRooms ?? [];
@@ -1701,7 +1724,7 @@ export const generatePaintingEstimate = ai.defineFlow(
           if (interiorDoorItems.length > 0) {
             for (const item of interiorDoorItems) {
               const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope, item.doorType);
-              const lineTotal = unitPrice * item.quantity;
+              const lineTotal = getScaledTrimItemLineTotal(unitPrice, item.quantity);
               intMin += lineTotal;
               intMax += lineTotal;
             }
@@ -1710,7 +1733,7 @@ export const generatePaintingEstimate = ai.defineFlow(
           if (interiorWindowItems.length > 0) {
             for (const item of interiorWindowItems) {
               const unitPrice = getInteriorWindowUnitPrice(item.system, item.type, item.scope);
-              const lineTotal = unitPrice * item.quantity;
+              const lineTotal = getScaledTrimItemLineTotal(unitPrice, item.quantity);
               intMin += lineTotal;
               intMax += lineTotal;
             }
@@ -1741,7 +1764,7 @@ export const generatePaintingEstimate = ai.defineFlow(
       if (!isApartmentLike(input.propertyType) && isWhole && finalHouseKey) {
         const preservedModifierDeltaMin = Math.max(0, intMin - baseBeforeWholePropertyModifiersMin);
         const preservedModifierDeltaMax = Math.max(0, intMax - baseBeforeWholePropertyModifiersMax);
-        const calibrated = calibrate3B2BFairSingleHouse(input, finalHouseKey, intMin, intMax);
+        const calibrated = calibrate3B2BFairHouse(input, finalHouseKey, intMin, intMax);
         intMin = calibrated.min;
         intMax = calibrated.max;
 
@@ -1770,14 +1793,15 @@ export const generatePaintingEstimate = ai.defineFlow(
         handrailCost.min > 0 &&
         (input.interiorRooms ?? []).every((room) => room.roomName === 'Handrail');
 
-      if (isSkirtingOnlySpecific || hasHandrailOnlySpecific || hasSingleSurfaceWholeApartment) {
-        intMin = clamp(intMin, 0, MAX_PRICE_CAP);
-        intMax = clamp(intMax, intMin, MAX_PRICE_CAP);
-      } else {
-        intMin = clamp(intMin, 800, MAX_PRICE_CAP);
-        intMax = clamp(intMax, 1200, MAX_PRICE_CAP);
+      {
+        const clamped = clampInteriorRangeForOutput(
+          intMin,
+          intMax,
+          isSkirtingOnlySpecific || hasHandrailOnlySpecific || hasSingleSurfaceWholeApartment
+        );
+        intMin = clamped.min;
+        intMax = clamped.max;
       }
-      if (intMax < intMin) intMax = Math.round(intMin * 1.18);
 
       // Range cap (dynamic)
       if (!isSkirtingOnlySpecific) {

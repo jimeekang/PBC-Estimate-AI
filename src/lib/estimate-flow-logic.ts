@@ -11,6 +11,49 @@ export type InteriorTrimItemOnlyInput = {
   interiorRooms?: unknown[];
 };
 
+export type InteriorPaintAreas = {
+  ceilingPaint?: boolean;
+  wallPaint?: boolean;
+  trimPaint?: boolean;
+  ensuitePaint?: boolean;
+};
+
+export type InteriorRoomWithPaintAreas = {
+  roomName?: string;
+  paintAreas?: InteriorPaintAreas;
+};
+
+export const EMPTY_INTERIOR_PAINT_AREAS: Required<InteriorPaintAreas> = {
+  ceilingPaint: false,
+  wallPaint: false,
+  trimPaint: false,
+  ensuitePaint: false,
+};
+
+function hasPositiveQuantity(items?: unknown[]): boolean {
+  return (items ?? []).some((item) => {
+    if (!item || typeof item !== 'object') return false;
+    const quantity = (item as { quantity?: unknown }).quantity;
+    return typeof quantity === 'number' && quantity > 0;
+  });
+}
+
+export function clearGlobalPaintAreasForSpecificScope(
+  _paintAreas?: InteriorPaintAreas
+): Required<InteriorPaintAreas> {
+  return { ...EMPTY_INTERIOR_PAINT_AREAS };
+}
+
+export function canSelectSpecificRoomTrimItem(input: {
+  specificInteriorTrimOnly?: boolean;
+  interiorRooms?: InteriorRoomWithPaintAreas[];
+}): boolean {
+  if (input.specificInteriorTrimOnly) return true;
+
+  const rooms = input.interiorRooms ?? [];
+  return rooms.some((room) => room.roomName !== 'Handrail' && !!room.paintAreas?.trimPaint);
+}
+
 // Door/window-only trim quotes can bypass room-based estimation.
 // As soon as skirting or any room-linked selection exists, the range model must stay active.
 export function isInteriorTrimItemOnly(input: InteriorTrimItemOnlyInput): boolean {
@@ -21,7 +64,7 @@ export function isInteriorTrimItemOnly(input: InteriorTrimItemOnlyInput): boolea
 
   const trimItems = input.trimPaintOptions?.trimItems ?? [];
   if (trimItems.includes('Skirting Boards')) return false;
-  if (!input.interiorDoorItems?.length && !input.interiorWindowItems?.length) return false;
+  if (!hasPositiveQuantity(input.interiorDoorItems) && !hasPositiveQuantity(input.interiorWindowItems)) return false;
 
   const rooms = input.interiorRooms ?? [];
   return rooms.length === 0;

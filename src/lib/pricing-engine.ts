@@ -585,10 +585,10 @@ export const INTERIOR_HANDRAIL_ITEM_PRICING = {
 } as const;
 
 export const CAL_3B2B_FAIR_SINGLE_POINTS = [
-  { sqm: 120, min: 7600, max: 9800 },
-  { sqm: 135, min: 8900, max: 12000 },
-  { sqm: 150, min: 10700, max: 13800 },
-  { sqm: 180, min: 12900, max: 16900 },
+  { sqm: 120, min: 8500, max: 11000 },
+  { sqm: 135, min: 10000, max: 13500 },
+  { sqm: 150, min: 12000, max: 15500 },
+  { sqm: 180, min: 14500, max: 19000 },
 ] as const;
 
 export const DOUBLE_STOREY_3B2B_UPLIFT = {
@@ -904,7 +904,8 @@ export function sumAreaFactor(flags: {
   if (flags.ceilingPaint) f += AREA_SHARE.ceilingPaint;
   if (flags.wallPaint) f += AREA_SHARE.wallPaint;
   if (flags.trimPaint) f += AREA_SHARE.trimPaint;
-  return f;
+  if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
+  return Math.min(1, f);
 }
 
 export function sumAreaFactorWholeApartment(flags: {
@@ -917,5 +918,6 @@ export function sumAreaFactorWholeApartment(flags: {
   if (flags.ceilingPaint) f += AREA_SHARE.ceilingPaint;
   if (flags.wallPaint) f += AREA_SHARE.wallPaint;
   if (flags.trimPaint) f += AREA_SHARE.trimPaint;
-  return f > 0 ? f : 1.0;
+  if (flags.ensuitePaint) f += AREA_SHARE.ensuitePaint;
+  return f > 0 ? Math.min(1, f) : 1.0;
 }

@@ -66,6 +66,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { getEstimateQuotaStatus, submitEstimate } from '@/app/estimate/actions';
 import { uploadEstimatePhotos } from '@/lib/firebase';
 import { HANDRAIL_SYSTEM_OPTIONS } from '@/lib/estimate-constants';
+import {
+  canSelectSpecificRoomTrimItem,
+  clearGlobalPaintAreasForSpecificScope,
+} from '@/lib/estimate-flow-logic';
 import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { EstimateResult } from './estimate-result';
 import type { EstimatePdfMeta } from './estimate-result';
@@ -199,7 +203,7 @@ const WIZARD_STEPS = [
 
 const STEP_FIELDS: Record<number, string[]> = {
   0: ['propertyType', 'typeOfWork', 'scopeOfPainting', 'houseStories', 'bedroomCount', 'bathroomCount', 'apartmentStructure', 'approxSize'],
-  1: ['paintAreas', 'interiorWallHeight', 'interiorRooms', 'roomsToPaint', 'trimPaintOptions', 'skirtingLinearMetres', 'skirtingPricingMode', 'skirtingCalculatorRooms', 'otherInteriorArea'],
+  1: ['paintAreas', 'interiorWallHeight', 'interiorRooms', 'roomsToPaint', 'specificInteriorTrimOnly', 'trimPaintOptions', 'interiorDoorItems', 'interiorWindowItems', 'skirtingLinearMetres', 'skirtingPricingMode', 'skirtingCalculatorRooms', 'otherInteriorArea'],
   2: ['exteriorAreas', 'wallFinishes', 'wallHeight', 'exteriorTrimItems', 'exteriorDoors', 'exteriorWindows', 'exteriorArchitraves', 'deckArea', 'deckServiceType', 'deckProductType', 'deckCondition', 'pavingArea', 'pavingCondition', 'otherExteriorArea'],
   3: ['name', 'email', 'phone', 'location', 'timingPurpose', 'paintCondition', 'jobDifficulty'],
 };
@@ -791,6 +795,11 @@ const showCeilingOptions =
     (watchScope === 'Specific areas only' && hasAnyRoomCeiling));
 
   useEffect(() => {
+    if (!isInterior || !isApartmentType || watchScope !== 'Specific areas only') return;
+    form.setValue('scopeOfPainting', 'Entire property', { shouldDirty: true, shouldValidate: true });
+  }, [isInterior, isApartmentType, watchScope, form]);
+
+  useEffect(() => {
     if (!isInterior || !isApartmentType || watchScope !== 'Entire property' || !watchApartmentStructure) return;
     const option = APARTMENT_STRUCTURE_OPTIONS.find((o) => o.id === watchApartmentStructure);
     if (!option) return;
@@ -859,6 +868,12 @@ const showCeilingOptions =
 
   useEffect(() => {
     if (watchScope !== 'Specific areas only') return;
+
+    form.setValue('paintAreas', clearGlobalPaintAreasForSpecificScope(), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+
     const legacyWindowTypes = form.getValues('trimPaintOptions.interiorWindowFrameTypes') ?? [];
     if (legacyWindowTypes.length > 0) {
       form.setValue('trimPaintOptions.interiorWindowFrameTypes', [], { shouldDirty: true });
@@ -917,19 +932,10 @@ const showCeilingOptions =
   };
 
   const ensureTrimEnabledForSpecificRoom = () => {
-    if (form.getValues('specificInteriorTrimOnly')) return true;
-
-    const rooms = form.getValues('interiorRooms') ?? [];
-    const eligibleRoomIndex = rooms.findIndex((room) => room.roomName !== 'Handrail');
-
-    if (eligibleRoomIndex === -1) return false;
-    if (rooms.some((room) => room.roomName !== 'Handrail' && room.paintAreas?.trimPaint)) return true;
-
-    form.setValue(`interiorRooms.${eligibleRoomIndex}.paintAreas.trimPaint`, true, {
-      shouldDirty: true,
-      shouldValidate: true,
+    return canSelectSpecificRoomTrimItem({
+      specificInteriorTrimOnly: form.getValues('specificInteriorTrimOnly'),
+      interiorRooms: form.getValues('interiorRooms') ?? [],
     });
-    return true;
   };
 
   const getRoomSurfaceError = (roomIndex: number) => {
@@ -968,7 +974,15 @@ const showCeilingOptions =
         return;
       }
     }
-    const result = await submitEstimate({ formData: values, idToken, photoPaths });
+    const submissionValues =
+      values.scopeOfPainting === 'Entire property'
+        ? values
+        : {
+            ...values,
+            paintAreas: clearGlobalPaintAreasForSpecificScope(values.paintAreas),
+          };
+
+    const result = await submitEstimate({ formData: submissionValues, idToken, photoPaths });
 
     if (result.error) {
       if (result.limitReached) {
@@ -1367,9 +1381,19 @@ const showCeilingOptions =
                         </FormItem>
                         <FormItem className="flex items-center space-x-3 space-y-0">
                           <FormControl>
-                            <RadioGroupItem value="Specific areas only" />
+                            <RadioGroupItem value="Specific areas only" disabled={isInterior && isApartmentType} />
                           </FormControl>
-                          <FormLabel className="font-normal cursor-pointer">Specific areas only</FormLabel>
+                          <FormLabel
+                            className={cn(
+                              'font-normal',
+                              isInterior && isApartmentType
+                                ? 'cursor-not-allowed text-muted-foreground'
+                                : 'cursor-pointer'
+                            )}
+                          >
+                            Specific areas only
+                            {isInterior && isApartmentType ? ' (house/townhouse only)' : ''}
+                          </FormLabel>
                         </FormItem>
                       </RadioGroup>
                     </FormControl>
@@ -2248,9 +2272,9 @@ const showCeilingOptions =
                                 ) {
                                   toast({
                                     variant: 'destructive',
-                                    title: 'Select a room first',
+                                    title: 'Select trim for a room first',
                                     description:
-                                      `Choose a normal room in Specific areas only before adding ${item.label}.`,
+                                      `Turn on trim for the room(s) where ${item.label} applies, or use Trim-only mode.`,
                                   });
                                   return;
                                 }

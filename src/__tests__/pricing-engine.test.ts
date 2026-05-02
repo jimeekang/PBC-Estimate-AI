@@ -755,6 +755,7 @@ describe('F: Helper Functions', () => {
   });
 
   test('F10: sumAreaFactor — no flags = 0 (filtered out in scoring)', () => {
+    expect(sumAreaFactor({ ensuitePaint: true })).toBeCloseTo(0.08, 10);
     expect(sumAreaFactor({})).toBe(0);
   });
 
@@ -877,41 +878,41 @@ describe('G: Market Realism Sanity Check', () => {
 describe('H: interpolateBySqm for 3B2B Fair calibration', () => {
   test('H1: at exact first point (120sqm) — returns point values', () => {
     const result = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, 120);
-    expect(result.min).toBe(7600);
-    expect(result.max).toBe(9800);
+    expect(result.min).toBe(8500);
+    expect(result.max).toBe(11000);
   });
 
   test('H2: at exact last point (180sqm) — returns point values', () => {
     const result = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, 180);
-    expect(result.min).toBe(12900);
-    expect(result.max).toBe(16900);
+    expect(result.min).toBe(14500);
+    expect(result.max).toBe(19000);
   });
 
   test('H3: at 135sqm (known calibration point) — returns exact values', () => {
     const result = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, 135);
-    expect(result.min).toBe(8900);
-    expect(result.max).toBe(12000);
+    expect(result.min).toBe(10000);
+    expect(result.max).toBe(13500);
   });
 
   test('H4: at midpoint between 120–135sqm (127.5sqm) — interpolated values', () => {
     const result = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, 127.5);
-    expect(result.min).toBeGreaterThan(7600);
-    expect(result.min).toBeLessThan(8900);
-    expect(result.max).toBeGreaterThan(9800);
-    expect(result.max).toBeLessThan(12000);
+    expect(result.min).toBeGreaterThan(8500);
+    expect(result.min).toBeLessThan(10000);
+    expect(result.max).toBeGreaterThan(11000);
+    expect(result.max).toBeLessThan(13500);
   });
 
   test('H5: below first point — scales proportionally', () => {
     const result = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, 60);
     // 60/120 = 0.5 → min = 8500 × 0.5 = 4250, max = 11000 × 0.5 = 5500
-    expect(result.min).toBeCloseTo(3800, 0);
-    expect(result.max).toBeCloseTo(4900, 0);
+    expect(result.min).toBeCloseTo(4250, 0);
+    expect(result.max).toBeCloseTo(5500, 0);
   });
 
   test('H6: above last point — scales proportionally', () => {
     const result = interpolateBySqm(CAL_3B2B_FAIR_SINGLE_POINTS, 360);
     // 360/180 = 2.0 → min = 14500×2 = 29000, max = 19000×2 = 38000
-    expect(result.min).toBeCloseTo(25800, 0);
-    expect(result.max).toBeCloseTo(33800, 0);
+    expect(result.min).toBeCloseTo(29000, 0);
+    expect(result.max).toBeCloseTo(38000, 0);
   });
 });

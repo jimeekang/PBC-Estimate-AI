@@ -9,6 +9,7 @@ import {
   generatePaintingEstimate,
   type GeneratePaintingEstimateInput,
 } from '@/ai/flows/generate-painting-estimate';
+import { clampInteriorRangeForOutput } from '@/lib/estimate-output-range';
 
 const baseWholeHousePayload: GeneratePaintingEstimateInput = {
   name: 'Test User',
@@ -57,6 +58,31 @@ describe('generatePaintingEstimate', () => {
     expect(result.breakdown?.total?.max).toBe(11500);
   });
 
+  test('entire-apartment ensuite-only interior selection produces a priced range', async () => {
+    const result = await generatePaintingEstimate({
+      name: 'Ensuite Only Test',
+      email: 'test@example.com',
+      typeOfWork: ['Interior Painting'],
+      scopeOfPainting: 'Entire property',
+      propertyType: 'Apartment',
+      apartmentStructure: '2Bed2Bath',
+      approxSize: 85,
+      timingPurpose: 'Maintenance or refresh',
+      paintCondition: 'Fair',
+      paintAreas: {
+        ceilingPaint: false,
+        wallPaint: false,
+        trimPaint: false,
+        ensuitePaint: true,
+      },
+    });
+
+    expect(result.breakdown?.interior?.min).toBeGreaterThan(0);
+    expect(result.breakdown?.interior?.max).toBeGreaterThanOrEqual(
+      result.breakdown?.interior?.min ?? 0
+    );
+  });
+
   test('whole-house door type premiums apply on top of the trim share for entire-property pricing', async () => {
     const baseline = await generatePaintingEstimate({
       ...baseWholeHousePayload,
@@ -84,6 +110,90 @@ describe('generatePaintingEstimate', () => {
     expect((premium.breakdown?.interior?.max ?? 0)).toBeGreaterThan(
       baseline.breakdown?.interior?.max ?? 0
     );
+  });
+
+  test('whole-house door type premiums are capped at 10% for entire-property pricing', async () => {
+    const baseline = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      roomsToPaint: [],
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors'],
+        interiorDoorTypes: ['flush'],
+      },
+    });
+
+    const capped = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      roomsToPaint: [],
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors'],
+        interiorDoorTypes: ['sliding', 'panelled', 'french', 'bi_folding'],
+      },
+    });
+
+    expect(capped.breakdown?.interior?.min).toBeLessThanOrEqual(
+      Math.ceil((baseline.breakdown?.interior?.min ?? 0) * 1.1)
+    );
+    expect(capped.breakdown?.interior?.max).toBeLessThanOrEqual(
+      Math.ceil((baseline.breakdown?.interior?.max ?? 0) * 1.1)
+    );
+  });
+
+  test('trim-only interior door quantities use the volume discount scale', async () => {
+    const result = await generatePaintingEstimate({
+      name: 'Trim Only Test',
+      email: 'test@example.com',
+      typeOfWork: ['Interior Painting'],
+      scopeOfPainting: 'Specific areas only',
+      propertyType: 'House / Townhouse',
+      specificInteriorTrimOnly: true,
+      timingPurpose: 'Maintenance or refresh',
+      paintCondition: 'Fair',
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors'],
+      },
+      interiorRooms: [],
+      interiorDoorItems: [
+        { doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 13 },
+      ],
+    });
+
+    expect(result.pricingMeta?.subtotalExGst).toBe(2288);
+    expect(result.breakdown?.interior?.min).toBe(2288);
+  });
+
+  test('trim-only interior window quantities use the volume discount scale', async () => {
+    const result = await generatePaintingEstimate({
+      name: 'Trim Only Test',
+      email: 'test@example.com',
+      typeOfWork: ['Interior Painting'],
+      scopeOfPainting: 'Specific areas only',
+      propertyType: 'House / Townhouse',
+      specificInteriorTrimOnly: true,
+      timingPurpose: 'Maintenance or refresh',
+      paintCondition: 'Fair',
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Window Frames'],
+      },
+      interiorRooms: [],
+      interiorWindowItems: [
+        { type: 'Normal', scope: 'Window & Frame', system: 'oil_2coat', quantity: 13 },
+      ],
+    });
+
+    expect(result.pricingMeta?.subtotalExGst).toBe(2080);
+    expect(result.breakdown?.interior?.min).toBe(2080);
+  });
+
+  test('interior output clamp never lets fallback exceed MAX_PRICE_CAP', () => {
+    expect(clampInteriorRangeForOutput(50000, 30000, false)).toEqual({
+      min: 35000,
+      max: 35000,
+    });
   });
 
   test('whole-house water-based trim carries at least AUD 3,500 more than oil-based trim', async () => {
