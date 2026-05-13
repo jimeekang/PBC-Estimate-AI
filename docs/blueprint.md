@@ -114,3 +114,15 @@ This app is a **painting lead generator**, not a SaaS product.
 Funnel: Free AI estimate -> On-site quote booking -> Actual contract
 
 Key metrics: estimate generation count, booking conversion rate, contract close rate
+
+## Booking Conversion Strategy
+
+The app should make the site visit feel like the obvious next step after the AI estimate, not a separate sales ask.
+
+Primary trigger: the estimate result screen explains that the free site visit turns the indicative AI range into a fixed written quote, with the estimate details already attached for Connor.
+
+Operational promise: booking submissions should receive a fast human response, ideally within 15 minutes during business hours or by 10:00 the next business morning.
+
+Measurement: booking metrics must include attribution and segment fields, not only aggregate counters.
+
+See [`docs/booking-conversion-upgrade.md`](./booking-conversion-upgrade.md) for the conversion trigger, process policy, measurement plan, and open decisions.

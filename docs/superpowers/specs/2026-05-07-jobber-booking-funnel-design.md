@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-07
 **Author:** Connor / Paint Buddy & Co
-**Status:** Approved (brainstorming complete) → ready for implementation plan
+**Status:** Approved (brainstorming complete) → ready for implementation plan. Conversion trigger upgrade added 2026-05-13.
 **Subdomain:** `quote.paintbuddyco.com`
 
 ---
@@ -75,7 +75,7 @@ Reference: [`src/components/estimate/estimate-result.tsx`](../../../src/componen
 |---|---|---|
 | Price card, breakdown, explanation, key factors | Already polished | **Keep as-is** |
 | Download PDF button | Present | **Keep** |
-| Bottom booking CTA | "Book Online Now" → external Jobber URL | **Replace**: "Get Your Free Site Visit" → triggers inline form (Option A) |
+| Bottom booking CTA | "Book Online Now" → external Jobber URL | **Replace**: "Get Your Free Site Visit" → triggers inline form (Option A). Support copy explains that Connor receives the estimate details and the site visit turns the range into a fixed written quote. |
 | QR code on result screen | Desktop only | **Remove from screen** (PDF version retains it) |
 | External Jobber link on result screen | Present | **Remove** — confined to landing page only |
 
@@ -98,9 +98,9 @@ Reference: [`src/components/estimate/estimate-result.tsx`](../../../src/componen
 ### Confirmation block
 
 ```
-✓ Sent! Connor will contact you within 24 hours.
-Your reference: PBC-2026-00123
-Confirmation sent to john@example.com
+Sent. Your reference is PBC-2026-00123.
+Connor will contact you within 15 minutes during business hours, or by 10:00 the next business morning.
+Your AI estimate and project details were attached to the request.
 [Back to Home]   [Generate Another Estimate]
 ```
 
@@ -165,7 +165,7 @@ match /system_integrations/{doc} {
 7. **Call Jobber:**
    - Look up existing client by email (`clients(filter: { email: ... })`). Reuse `clientId` if found.
    - Otherwise `clientCreate`.
-   - `requestCreate` with title `"AI Estimate Booking — {scope} — {referenceId}"`. Description embeds the full AI estimate snapshot, user notes, preferred time, and a link back to the booking record.
+   - `requestCreate` with title `"AI Estimate Booking — {scope} — {referenceId}"`. Description embeds the full AI estimate snapshot, user notes, preferred time, attribution, high-value flags, and a link back to the booking record.
 8. **Update Firestore booking** to `status: 'submitted'` with `jobberClientId` and `jobberRequestId`.
 9. **Send emails** via Resend:
    - User: confirmation with `referenceId`.
@@ -205,6 +205,21 @@ If any Jobber call fails (network, 429, 500):
     address: string;
     preferredTime?: string;
     notes?: string;
+  };
+  attribution?: {
+    source?: string;
+    medium?: string;
+    campaign?: string;
+    referrer?: string;
+    entryPath?: string;
+    deviceType?: 'mobile' | 'desktop' | 'tablet';
+  };
+  leadSignals?: {
+    serviceCategory: 'interior' | 'exterior' | 'combined';
+    priceBand: string;
+    suburb?: string;
+    highValueFlags: string[];
+    bookingFormOpenedAt?: Timestamp;
   };
   status: 'pending' | 'submitted' | 'failed';
   jobberClientId?: string;
@@ -312,6 +327,7 @@ Lightweight, Firestore-based for Phase 1 — no extra SaaS.
 ```
 metrics_daily/{YYYY-MM-DD}
 ├── estimateGenerated: number
+├── resultBookingCtaViewed: number
 ├── bookingFormOpened: number       (CTA click)
 ├── bookingSubmitted: number
 ├── bookingJobberSyncFailed: number
@@ -319,6 +335,8 @@ metrics_daily/{YYYY-MM-DD}
 ```
 
 Counters are incremented atomically from server-side API routes using `FieldValue.increment(1)`. The `bookingFormOpened` event is recorded by a thin `POST /api/metrics/booking-form-opened` route fired when the user expands the inline form (auth-gated, deduped per `(userId, estimateId)` per day).
+
+Every booking and metric event should preserve attribution and segment fields where available: UTM source/medium/campaign, entry source, service category, suburb, estimate price band, device type, and new vs returning user.
 
 KPIs visible on `/admin`:
 - Estimate → booking conversion (target ≥ 15%).
@@ -358,3 +376,13 @@ Documented here so they are remembered, not built now.
 1. Whether to encrypt Jobber tokens at the application layer (in addition to Firestore at-rest encryption). Decide during implementation review.
 2. Whether to allow Connor multiple `system_integrations/jobber` token entries for staging vs prod, or whether environment separation is sufficient.
 3. Long-term: can Jobber's Online Booking time-slot API be used for full automation (Option 2C)? Investigate before Phase 2 booking enhancements.
+4. Confirm the real response SLA before launch. The conversion upgrade recommends 15 minutes during business hours or by 10:00 the next business morning.
+5. Confirm whether one booking-form abandonment reminder is allowed under the current consent and privacy policy.
+
+---
+
+## 10. Conversion Upgrade Reference
+
+The implementation plan should read [`docs/booking-conversion-upgrade.md`](../../booking-conversion-upgrade.md) before build work begins.
+
+That document defines the conversion trigger copy, speed-to-lead policy, follow-up policy, attribution fields, admin lead queue priority, and pre-build customer test assignment.
