@@ -7,9 +7,12 @@ import {
   ArrowRight,
   CalendarCheck,
   CheckCircle,
+  ClipboardCheck,
   Home,
   ExternalLink,
+  FileText,
   Sparkles,
+  Users,
 } from 'lucide-react';
 
 const BOOKING_URL =
@@ -108,7 +111,28 @@ const googleReviews = [
 const sampleFactors = [
   '3-bedroom, 2-storey home interior',
   'Walls + ceilings, standard height',
-  'Good condition — minimal prep required',
+  'Fair condition, calibrated to Northern Beaches pricing',
+];
+
+const marketingUseCases = [
+  {
+    title: 'Check the budget before you call',
+    description:
+      'Use the AI guide to see whether your project sits in a small refresh, full repaint, or site-inspection range.',
+    icon: ClipboardCheck,
+  },
+  {
+    title: 'Share one clear brief',
+    description:
+      'Send the generated estimate with your scope, suburb, property size, and condition notes before the on-site visit.',
+    icon: FileText,
+  },
+  {
+    title: 'Move quickly to a firm quote',
+    description:
+      'Book online when the guide looks right so Paint Buddy & Co can measure, confirm prep, and provide the written price.',
+    icon: Users,
+  },
 ];
 
 export default function HomePage() {
@@ -193,11 +217,12 @@ export default function HomePage() {
                 Estimated Price Range
               </p>
               <p className="mt-2 text-4xl font-extrabold text-gray-900 sm:text-5xl">
-                $7,800 <span className="text-2xl font-semibold text-gray-400">–</span> $11,500
-                <span className="ml-2 text-xl font-semibold text-gray-500">+GST</span>
+                AUD 9,500 <span className="text-2xl font-semibold text-gray-400">–</span>{' '}
+                10,700
+                <span className="ml-2 text-xl font-semibold text-gray-500">(+GST)</span>
               </p>
               <p className="mt-2 text-sm text-gray-500">
-                Range reflects paint quality, prep requirements, and finish level.
+                Range reflects the current estimate engine for a fair-condition 2-storey guide.
               </p>
             </div>
 
@@ -235,6 +260,33 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Marketing use cases */}
+      <section className="px-4 pb-20">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-8 text-center">
+            <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+              Use the Estimate as a Better Brief
+            </h2>
+            <p className="mx-auto mt-2 max-w-2xl text-gray-500">
+              The AI price guide is built for early planning. The final price still comes from a
+              free on-site quote, where measurements, access, prep, and finish are confirmed.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            {marketingUseCases.map(({ title, description, icon: Icon }) => (
+              <div key={title} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+                  <Icon className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="text-base font-bold text-gray-900">{title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-gray-500">{description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
