@@ -7,7 +7,10 @@ import { Loader2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const EstimateForm = dynamic(
-  () => import('@/components/estimate/estimate-form').then((mod) => mod.EstimateForm),
+  () =>
+    import('@/domains/estimate/presentation/components/estimate-form').then(
+      (mod) => mod.EstimateForm
+    ),
   {
     ssr: false,
     loading: () => (

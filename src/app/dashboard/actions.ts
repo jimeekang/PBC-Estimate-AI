@@ -5,7 +5,7 @@ import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import {
   formatEstimatePriceRangeForDisplay,
   type EstimatePriceDisplayMeta,
-} from '@/lib/estimate-price-display';
+} from '@/domains/estimate/application/estimate-price-display';
 
 const getDashboardDataSchema = z.object({
   idToken: z.string().min(1, 'Authentication is required.'),

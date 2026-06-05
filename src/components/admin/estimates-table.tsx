@@ -14,7 +14,7 @@ import { getEstimates } from '@/lib/firebase';
 import {
   formatEstimatePriceRangeForDisplay,
   type EstimatePriceDisplayMeta,
-} from '@/lib/estimate-price-display';
+} from '@/domains/estimate/application/estimate-price-display';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';

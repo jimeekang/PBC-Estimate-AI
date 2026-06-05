@@ -43,7 +43,8 @@ Stack: Next.js + Firebase + GenKit AI. Market: Sydney Northern Beaches (2026).
 
 ## Responsibility Boundaries
 
-- `src/lib/pricing-engine.ts` → `estimate-rule-designer` 소유. 순수 함수만. 앵커 변경 전 사용자 확인 필수.
-- `src/ai/flows/` → 가격 로직은 `estimate-rule-designer`, 플로우 실행 방식은 `firebase-backend-dev`.
-- `src/components/estimate/` → `frontend-senior-dev`. 스키마 변경 시 `firebase-backend-dev` 리뷰 필요.
+- `src/domains/estimate/domain/pricing/pricing-engine.ts` → `estimate-rule-designer` 소유. 순수 함수만. 앵커 변경 전 사용자 확인 필수.
+- `src/domains/estimate/application/generation/` → 가격 로직은 `estimate-rule-designer`, 플로우 실행 방식은 `firebase-backend-dev`.
+- `src/domains/estimate/presentation/components/` → `frontend-senior-dev`. 스키마 변경 시 `firebase-backend-dev` 리뷰 필요.
 - `src/app/estimate/actions.ts` → `firebase-backend-dev`. 비율 제한, Firestore 쓰기, 인증 포함.
+- `src/lib`, `src/schemas`, `src/ai/flows`, `src/components/estimate`의 estimate 관련 파일은 호환 wrapper만 둔다. 새 estimate 코드는 `src/domains/estimate`를 직접 import한다.

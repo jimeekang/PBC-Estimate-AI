@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
 > PBC Estimate AI — System Architecture
-> Last updated: 2026-03-30
+> Last updated: 2026-06-05
 
 ---
 
@@ -24,14 +24,47 @@
 
 ## Directory Structure
 
+Estimate-specific code now uses a DDD-style bounded context under `src/domains/estimate`.
+The old estimate paths under `src/lib`, `src/schemas`, `src/ai/flows`, and `src/components/estimate` remain as compatibility wrappers only.
+
+```
+src/
+├── domains/
+│   └── estimate/
+│       ├── domain/
+│       │   ├── pricing/
+│       │   │   ├── pricing-engine.ts          — Pure deterministic pricing anchors/helpers
+│       │   │   └── output-range.ts            — Estimate range clamping
+│       │   ├── flow/
+│       │   │   └── estimate-flow-logic.ts     — Form/scope decision rules
+│       │   ├── schemas/
+│       │   │   ├── estimate.ts                — Shared item schemas
+│       │   │   ├── estimate-request.ts        — Full estimate request validation
+│       │   │   └── estimate-lite.ts           — Public quick-guide validation
+│       │   └── estimate-constants.ts          — Domain option constants
+│       ├── application/
+│       │   ├── generation/
+│       │   │   ├── generate-painting-estimate.ts
+│       │   │   └── generate-painting-estimate.exterior.ts
+│       │   ├── lifecycle/estimate-lifecycle.ts
+│       │   ├── lite/lite-estimate.ts
+│       │   ├── normalization/normalize-estimate-request.ts
+│       │   └── estimate-price-display.ts
+│       └── presentation/
+│           └── components/
+│               ├── estimate-form.tsx
+│               ├── estimate-result.tsx
+│               └── lite-estimate-form.tsx
+```
+
 ```
 src/
 ├── ai/                          — AI layer
 │   ├── genkit.ts                — Genkit instance config
 │   ├── dev.ts                   — Genkit dev server entry
 │   └── flows/
-│       ├── generate-painting-estimate.ts          — Interior + combined flow
-│       └── generate-painting-estimate.exterior.ts — Exterior pricing logic
+│       ├── generate-painting-estimate.ts          — Compatibility wrapper to estimate generation
+│       └── generate-painting-estimate.exterior.ts — Compatibility wrapper to exterior generation
 │
 ├── app/                         — Next.js App Router
 │   ├── layout.tsx               — Root layout
@@ -67,8 +100,8 @@ src/
 │
 ├── components/
 │   ├── estimate/
-│   │   ├── estimate-form.tsx    — Multi-step estimate wizard
-│   │   └── estimate-result.tsx  — Price range result display
+│   │   ├── estimate-form.tsx    — Compatibility wrapper to estimate presentation
+│   │   └── estimate-result.tsx  — Compatibility wrapper to estimate presentation
 │   ├── admin/
 │   │   └── estimates-table.tsx  — Admin data table
 │   ├── auth/
@@ -88,8 +121,8 @@ src/
 │   └── use-toast.ts
 │
 ├── lib/
-│   ├── pricing-engine.ts        — Pure pricing functions + constants (CORE)
-│   ├── estimate-constants.ts    — Shared constants (form + schema + UI)
+│   ├── pricing-engine.ts        — Compatibility wrapper to estimate pricing domain
+│   ├── estimate-constants.ts    — Compatibility wrapper to estimate domain constants
 │   ├── firebase.ts              — Client-side Firebase init + helpers
 │   ├── firebase-admin.ts        — Server-side Firebase Admin SDK
 │   ├── utils.ts                 — General utilities
@@ -99,8 +132,8 @@ src/
 │   └── auth-provider.tsx        — Firebase Auth context (user, loading, isAdmin)
 │
 ├── schemas/
-│   ├── estimate.ts              — Interior room/handrail/skirting Zod schemas
-│   └── estimate-request.ts      — Full estimate submission schema + validation
+│   ├── estimate.ts              — Compatibility wrapper to estimate schemas
+│   └── estimate-request.ts      — Compatibility wrapper to estimate request schema
 │
 └── __tests__/
     └── pricing-engine.test.ts   — Pricing engine unit tests
@@ -128,7 +161,7 @@ Server Action (src/app/estimate/actions.ts)
   ├─ 3. Validate form data (Zod: estimateSubmissionSchema)
   ├─ 4. Call AI flow (generate-painting-estimate)
   │     │
-  │     ├─ pricing-engine.ts (pure deterministic pricing)
+  │     ├─ src/domains/estimate/domain/pricing/pricing-engine.ts
   │     └─ Genkit + Gemini (natural language explanation)
   │
   ├─ 5. Save to Firestore (estimates collection)
@@ -146,7 +179,7 @@ Server Action (src/app/estimate/actions.ts)
 ## Key Design Decisions
 
 ### 1. Pricing Engine Isolation
-`pricing-engine.ts` is a **pure function module** — no 'use server', no genkit, no Next.js dependencies. This allows:
+`src/domains/estimate/domain/pricing/pricing-engine.ts` is a **pure function module**: no `use server`, no Genkit, no Next.js dependencies. This allows:
 - Unit testing without server environment
 - Reuse across AI flows and tests
 - Clear separation: pricing = deterministic, AI = narrative

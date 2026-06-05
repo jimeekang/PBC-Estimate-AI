@@ -1,7 +1,7 @@
 'use server';
 
-import { generatePaintingEstimate } from '@/ai/flows/generate-painting-estimate';
-import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
+import { generatePaintingEstimate } from '@/domains/estimate/application/generation/generate-painting-estimate';
+import type { GeneratePaintingEstimateOutput } from '@/domains/estimate/application/generation/generate-painting-estimate';
 import {
   buildEstimateCreatePayload,
   buildEstimateDraftPayload,
@@ -11,14 +11,14 @@ import {
   isEstimateRateLimitReservation,
   type EstimateRateLimitReservation,
   type ExistingEstimateSnapshot,
-} from '@/lib/estimate-lifecycle';
+} from '@/domains/estimate/application/lifecycle/estimate-lifecycle';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
-import { normalizeEstimateRequest } from '@/lib/normalize-estimate-request';
+import { normalizeEstimateRequest } from '@/domains/estimate/application/normalization/normalize-estimate-request';
 import {
   estimateRequestSchema,
   estimateSubmissionSchema,
   type EstimateRequest,
-} from '@/schemas/estimate-request';
+} from '@/domains/estimate/domain/schemas/estimate-request';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 
 const MIN_SUBMIT_INTERVAL_MS = 30 * 1000;

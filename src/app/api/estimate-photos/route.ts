@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { canMutateEstimate, type ExistingEstimateSnapshot } from '@/lib/estimate-lifecycle';
+import {
+  canMutateEstimate,
+  type ExistingEstimateSnapshot,
+} from '@/domains/estimate/application/lifecycle/estimate-lifecycle';
 import { getAdminAuth, getAdminBucket, getAdminDb } from '@/lib/firebase-admin';
 
 const MAX_PHOTO_COUNT = 10;

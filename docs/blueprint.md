@@ -21,7 +21,7 @@ It generates instant indicative price ranges based on real historical quote data
 - **Scope modes**: "Entire property" (anchor/SQM-based) or "Specific areas only" (per-room/item-based)
 
 ### Pricing Engine
-- Pure function pricing engine (`pricing-engine.ts`) with no server dependencies
+- Pure function pricing engine (`src/domains/estimate/domain/pricing/pricing-engine.ts`) with no server dependencies
 - Sydney Northern Beaches 2026 calibrated anchors
 - Apartment: continuous SQM curve (entire) or class-based anchors (specific)
 - House: bedroom/bathroom-based anchors + SQM interpolation
@@ -53,7 +53,7 @@ The current implementation direction supersedes the legacy trim note above where
 ### AI Integration
 - Genkit + Google Generative AI (Gemini 2.5 Flash)
 - AI generates a natural-language explanation of the estimate
-- Pricing logic stays deterministic in `pricing-engine.ts`; AI provides the narrative wrapper
+- Pricing logic stays deterministic in `src/domains/estimate/domain/pricing/pricing-engine.ts`; AI provides the narrative wrapper
 
 ### User Authentication
 - Firebase Auth (Google Login + Email/Password with email verification)

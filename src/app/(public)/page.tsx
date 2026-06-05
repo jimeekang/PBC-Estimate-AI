@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { LiteEstimateForm } from '@/components/estimate/lite-estimate-form';
+import { LiteEstimateForm } from '@/domains/estimate/presentation/components/lite-estimate-form';
 import { PublicAuthRedirect } from '@/components/public-auth-redirect';
 import {
   ArrowRight,

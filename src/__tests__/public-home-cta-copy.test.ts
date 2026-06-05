@@ -37,8 +37,12 @@ describe('public home CTA and example estimate copy', () => {
   });
 
   it('marks quick price guide screen and PDF output as an example', () => {
-    const liteFormSource = readProjectFile('src/components/estimate/lite-estimate-form.tsx');
-    const estimateResultSource = readProjectFile('src/components/estimate/estimate-result.tsx');
+    const liteFormSource = readProjectFile(
+      'src/domains/estimate/presentation/components/lite-estimate-form.tsx'
+    );
+    const estimateResultSource = readProjectFile(
+      'src/domains/estimate/presentation/components/estimate-result.tsx'
+    );
 
     expect(liteFormSource).toContain('<EstimateResult result={result} isExample');
     expect(estimateResultSource).toContain('EXAMPLE PRICE GUIDE');

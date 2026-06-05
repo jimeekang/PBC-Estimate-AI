@@ -1,4 +1,4 @@
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/generate-painting-estimate.ts';
+import '@/domains/estimate/application/generation/generate-painting-estimate';

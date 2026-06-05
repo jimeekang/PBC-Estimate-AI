@@ -20,6 +20,17 @@ Professional painting estimate service using AI, "PBC Estimate AI".
 - **UI/UX**: Tailwind CSS, Shadcn UI, Framer Motion
 - **Language**: Fully localized in English
 
+## Code Organization
+
+Estimate-specific code is organized as a DDD bounded context in `src/domains/estimate`:
+
+- `domain/pricing`: deterministic pricing anchors, modifiers, range caps, and pure helpers.
+- `domain/schemas`: Zod validation for full and lite estimate requests.
+- `application`: estimate generation, lifecycle payloads, request normalization, quick-guide calculation, and price display formatting.
+- `presentation/components`: estimate form, result view, and public quick-guide form.
+
+Legacy paths such as `src/lib/pricing-engine.ts`, `src/schemas/estimate-request.ts`, `src/ai/flows/generate-painting-estimate.ts`, and `src/components/estimate/estimate-form.tsx` are compatibility wrappers.
+
 ## Getting Started
 
 ### 1. Environment Configuration

@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import {
   formatEstimatePriceRangeForDisplay,
   type EstimatePriceDisplayMeta,
-} from '@/lib/estimate-price-display';
+} from '@/domains/estimate/application/estimate-price-display';
 import {
   ChevronLeft,
   ChevronRight,
