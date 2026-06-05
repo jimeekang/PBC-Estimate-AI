@@ -4,11 +4,12 @@ import Image from 'next/image';
 import type { GeneratePaintingEstimateOutput } from '@/ai/flows/generate-painting-estimate';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { motion } from 'framer-motion';
-import { CheckCircle, DollarSign, Download, Home, Loader2, TreePine, Info, CalendarCheck, ArrowRight } from 'lucide-react';
+import { CheckCircle, DollarSign, Download, Home, Loader2, TreePine, Info, CalendarCheck, ArrowRight, Pencil, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { useRef, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { formatEstimatePriceRangeForDisplay } from '@/lib/estimate-price-display';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -28,6 +29,11 @@ export interface EstimatePdfMeta {
 interface EstimateResultProps {
   result: GeneratePaintingEstimateOutput;
   pdfMeta?: EstimatePdfMeta;
+  revision?: number;
+  onEdit?: () => void;
+  onRegenerate?: () => void;
+  isRegenerating?: boolean;
+  isExample?: boolean;
 }
 
 function PriceBar({
@@ -38,6 +44,7 @@ function PriceBar({
   icon: Icon,
   color,
   mode,
+  pricingMeta,
 }: {
   label: string;
   min: number;
@@ -46,9 +53,14 @@ function PriceBar({
   icon: React.ComponentType<{ className?: string }>;
   color: string;
   mode: 'screen' | 'pdf';
+  pricingMeta?: GeneratePaintingEstimateOutput['pricingMeta'];
 }) {
   const barWidthPct = Math.min(100, Math.round((max / (totalMax || 1)) * 100));
   const bgColor = color.replace('text-', 'bg-');
+  const displayPriceRange = formatEstimatePriceRangeForDisplay({
+    priceRange: `AUD ${min.toLocaleString('en-AU')} - ${max.toLocaleString('en-AU')}`,
+    pricingMeta,
+  });
 
   return (
     <div className="space-y-1">
@@ -58,7 +70,7 @@ function PriceBar({
           {label}
         </span>
         <span className="font-semibold text-foreground">
-          AUD {min.toLocaleString('en-AU')} - {max.toLocaleString('en-AU')}
+          {displayPriceRange}
         </span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -106,10 +118,12 @@ function EstimateCard({
   result,
   mode,
   pdfMeta,
+  isExample = false,
 }: {
   result: GeneratePaintingEstimateOutput;
   mode: 'screen' | 'pdf';
   pdfMeta?: EstimatePdfMeta;
+  isExample?: boolean;
 }) {
   const bd = result.breakdown;
   const hasBoth = !!bd?.interior && !!bd?.exterior;
@@ -120,7 +134,10 @@ function EstimateCard({
       !detail.startsWith('Total:')
   );
   const isPdf = mode === 'pdf';
-  const isItemizedTrimQuote = result.pricingMeta?.mode === 'interior_itemized';
+  const displayPriceRange = formatEstimatePriceRangeForDisplay({
+    priceRange: result.priceRange,
+    pricingMeta: result.pricingMeta,
+  });
   const generatedAt = formatGeneratedAt(pdfMeta?.generatedAt);
 
   return (
@@ -168,13 +185,23 @@ function EstimateCard({
               />
               <div>
                 <p className="text-xs font-bold tracking-wide" style={{ color: '#f8fafc' }}>
-                  AI Painting Estimate
+                  {isExample ? 'Example AI Painting Estimate' : 'AI Painting Estimate'}
                 </p>
                 <p className="text-[11px]" style={{ color: '#94a3b8' }}>
-                  Indicative estimate prepared for the recipient below
+                  {isExample
+                    ? 'EXAMPLE PRICE GUIDE prepared from public quick-estimate inputs'
+                    : 'Indicative estimate prepared for the recipient below'}
                 </p>
               </div>
             </div>
+            {isExample && (
+              <div
+                className="rounded-lg px-3 py-2 text-center text-[10px] font-extrabold tracking-[0.16em]"
+                style={{ background: '#fef3c7', color: '#92400e' }}
+              >
+                EXAMPLE
+              </div>
+            )}
             <div className="flex flex-col items-center gap-1 rounded-lg bg-white p-2">
               <Image
                 src={BOOKING_QR_CODE_SRC}
@@ -197,10 +224,17 @@ function EstimateCard({
         <CardHeader className={isPdf ? 'pb-2 pt-3 px-4' : undefined}>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <CardTitle className={cn('flex items-center gap-2 font-bold', isPdf ? 'text-lg' : 'text-2xl')}>
-                <CheckCircle className={cn('text-primary', isPdf ? 'h-5 w-5' : 'h-6 w-6')} />
-                Your Estimate is Ready!
-              </CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle className={cn('flex items-center gap-2 font-bold', isPdf ? 'text-lg' : 'text-2xl')}>
+                  <CheckCircle className={cn('text-primary', isPdf ? 'h-5 w-5' : 'h-6 w-6')} />
+                  {isExample ? 'Example Price Guide is Ready!' : 'Your Estimate is Ready!'}
+                </CardTitle>
+                {isExample && (
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-extrabold tracking-wide text-amber-800 ring-1 ring-amber-200">
+                    EXAMPLE PRICE GUIDE
+                  </span>
+                )}
+              </div>
               {isPdf && pdfMeta?.referenceId && (
                 <p className="mt-2 text-xs font-medium tracking-[0.18em] text-muted-foreground">
                   REF {pdfMeta.referenceId}
@@ -249,13 +283,7 @@ function EstimateCard({
                   : 'Estimated Price Range'}
             </p>
             <p className={cn('mt-1 font-bold text-primary', isPdf ? 'text-2xl' : 'text-3xl')}>
-              {result.priceRange}
-              {!isItemizedTrimQuote && (
-                <>
-                  {' '}
-                  <span className={cn('font-normal text-muted-foreground', isPdf ? 'text-base' : 'text-lg')}>(+GST)</span>
-                </>
-              )}
+              {displayPriceRange}
             </p>
             {isPdf && pdfMeta?.typeOfWork?.length ? (
               <p className="mt-2 text-sm font-medium text-muted-foreground">
@@ -275,6 +303,7 @@ function EstimateCard({
                 icon={Home}
                 color="text-primary"
                 mode={mode}
+                pricingMeta={result.pricingMeta}
               />
               <PriceBar
                 label="Exterior Painting"
@@ -284,6 +313,7 @@ function EstimateCard({
                 icon={TreePine}
                 color="text-primary"
                 mode={mode}
+                pricingMeta={result.pricingMeta}
               />
             </div>
           )}
@@ -294,7 +324,13 @@ function EstimateCard({
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Home className="h-4 w-4 text-primary" />
                   <span>
-                    Interior: <span className="font-semibold text-foreground">{bd.interior.priceRange}</span>
+                    Interior:{' '}
+                    <span className="font-semibold text-foreground">
+                      {formatEstimatePriceRangeForDisplay({
+                        priceRange: bd.interior.priceRange,
+                        pricingMeta: result.pricingMeta,
+                      })}
+                    </span>
                   </span>
                 </div>
               )}
@@ -302,7 +338,13 @@ function EstimateCard({
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <TreePine className="h-4 w-4 text-primary" />
                   <span>
-                    Exterior: <span className="font-semibold text-foreground">{bd.exterior.priceRange}</span>
+                    Exterior:{' '}
+                    <span className="font-semibold text-foreground">
+                      {formatEstimatePriceRangeForDisplay({
+                        priceRange: bd.exterior.priceRange,
+                        pricingMeta: result.pricingMeta,
+                      })}
+                    </span>
                   </span>
                 </div>
               )}
@@ -333,10 +375,13 @@ function EstimateCard({
 
           {isPdf && (
             <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              <p className="font-semibold">Restricted use notice</p>
+              <p className="font-semibold">
+                {isExample ? 'EXAMPLE PRICE GUIDE - restricted use notice' : 'Restricted use notice'}
+              </p>
               <p className="mt-1 leading-relaxed">
-                This document is an indicative AI estimate only for the named recipient and reference.
-                It is not a final quote, invoice, or transferable approval document.
+                {isExample
+                  ? 'This document is an example AI price guide only. It is not a final quote, invoice, or transferable approval document.'
+                  : 'This document is an indicative AI estimate only for the named recipient and reference. It is not a final quote, invoice, or transferable approval document.'}
               </p>
               {pdfMeta?.verificationUrl ? (
                 <p className="mt-1 text-xs text-destructive/80">Verification: {pdfMeta.verificationUrl}</p>
@@ -347,8 +392,10 @@ function EstimateCard({
       </Card>
 
       <p className="relative z-10 px-4 text-center text-xs text-muted-foreground">
-        This is an indicative estimate only. Final price is subject to site inspection. Prices are
-        calibrated for the Northern Beaches / Sydney premium market.
+        {isExample
+          ? 'This EXAMPLE PRICE GUIDE is for early planning only. Final price is subject to site inspection.'
+          : 'This is an indicative estimate only. Final price is subject to site inspection.'}{' '}
+        Prices are calibrated for the Northern Beaches / Sydney premium market.
       </p>
 
       {/* PDF Footer: small logo + ref ID + date */}
@@ -373,7 +420,15 @@ function EstimateCard({
   );
 }
 
-export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
+export function EstimateResult({
+  result,
+  pdfMeta,
+  revision,
+  onEdit,
+  onRegenerate,
+  isRegenerating = false,
+  isExample = false,
+}: EstimateResultProps) {
   const exportRef = useRef<HTMLDivElement>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const { toast } = useToast();
@@ -413,7 +468,8 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
       }
 
       const dateSuffix = (pdfMeta?.generatedAt ?? new Date().toISOString()).slice(0, 10);
-      const fileReference = (pdfMeta?.referenceId ?? 'estimate').toLowerCase();
+      const baseReference = pdfMeta?.referenceId ?? 'estimate';
+      const fileReference = (isExample ? `example-${baseReference}` : baseReference).toLowerCase();
       pdfDoc.save(`pbc-${fileReference}-${dateSuffix}.pdf`);
     } catch (error) {
       console.error('Failed to export estimate PDF:', error);
@@ -435,9 +491,38 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
         transition={{ duration: 0.5, ease: 'easeOut' }}
         className="mt-8 space-y-4"
       >
-        <EstimateCard result={result} mode="screen" pdfMeta={pdfMeta} />
+        <EstimateCard result={result} mode="screen" pdfMeta={pdfMeta} isExample={isExample} />
 
-        <div className="flex justify-center">
+        <div className="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
+          {onEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onEdit}
+              className="w-full sm:w-auto"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit Details
+            </Button>
+          )}
+          {onRegenerate && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRegenerate}
+              disabled={isRegenerating}
+              className="w-full sm:w-auto"
+            >
+              {isRegenerating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              {revision && revision > 1 ? `Regenerate v${revision + 1}` : 'Regenerate'}
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -451,7 +536,7 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
-            Download PDF
+            {isExample ? 'Download Example PDF' : 'Download PDF'}
           </Button>
         </div>
 
@@ -515,7 +600,7 @@ export function EstimateResult({ result, pdfMeta }: EstimateResultProps) {
 
       <div className="pointer-events-none fixed left-[-99999px] top-0">
         <div ref={exportRef}>
-          <EstimateCard result={result} mode="pdf" pdfMeta={pdfMeta} />
+          <EstimateCard result={result} mode="pdf" pdfMeta={pdfMeta} isExample={isExample} />
         </div>
       </div>
     </>

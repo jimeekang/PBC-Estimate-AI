@@ -76,6 +76,57 @@ function hasPositiveQuantity<T extends { quantity?: number }>(items?: T[]) {
   return (items ?? []).some((item) => typeof item.quantity === 'number' && item.quantity > 0);
 }
 
+function hasBillableSpecificInteriorScope(data: {
+  interiorRooms?: z.infer<typeof InteriorRoomItemSchema>[];
+  interiorDoorItems?: { quantity?: number }[];
+  interiorWindowItems?: { quantity?: number }[];
+  skirtingPricingMode?: 'linear_metres' | 'room_calculator';
+  skirtingLinearMetres?: number | null;
+  skirtingCalculatorRooms?: z.infer<typeof SkirtingCalculatorRoomSchema>[];
+  specificInteriorTrimOnly?: boolean;
+  trimPaintOptions?: { trimItems?: string[] };
+}) {
+  const hasBillableRoom = (data.interiorRooms ?? []).some((room) => {
+    if (room.roomName === 'Handrail') {
+      return !!(
+        room.handrailDetails?.system &&
+        typeof room.handrailDetails.lengthLm === 'number' &&
+        room.handrailDetails.lengthLm > 0 &&
+        typeof room.handrailDetails.widthMm === 'number' &&
+        room.handrailDetails.widthMm > 0
+      );
+    }
+
+    return !!(
+      room.paintAreas?.ceilingPaint ||
+      room.paintAreas?.wallPaint ||
+      room.paintAreas?.trimPaint ||
+      room.paintAreas?.ensuitePaint
+    );
+  });
+
+  if (hasBillableRoom) return true;
+  if (hasPositiveQuantity(data.interiorDoorItems)) return true;
+  if (hasPositiveQuantity(data.interiorWindowItems)) return true;
+
+  const hasTrimOnlySkirting =
+    !!data.specificInteriorTrimOnly &&
+    (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
+  if (!hasTrimOnlySkirting) return false;
+
+  if ((data.skirtingPricingMode ?? 'linear_metres') === 'linear_metres') {
+    return typeof data.skirtingLinearMetres === 'number' && data.skirtingLinearMetres > 0;
+  }
+
+  return (data.skirtingCalculatorRooms ?? []).some(
+    (room) =>
+      typeof room.length === 'number' &&
+      room.length > 0 &&
+      typeof room.width === 'number' &&
+      room.width > 0
+  );
+}
+
 export const estimateRequestSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required.').max(100),
@@ -281,6 +332,19 @@ export const estimateRequestSchema = z
   )
   .refine(
     (data) => {
+      if (!hasInteriorWork(data.typeOfWork) || data.scopeOfPainting !== 'Specific areas only') {
+        return true;
+      }
+
+      return hasBillableSpecificInteriorScope(data);
+    },
+    {
+      path: ['interiorRooms'],
+      message: 'Select at least one interior room, handrail, door, window, or skirting item.',
+    }
+  )
+  .refine(
+    (data) => {
       const selectedMeasuredRooms =
         data.scopeOfPainting === 'Specific areas only'
           ? (data.interiorRooms ?? []).filter((room) => room.roomName !== 'Handrail')
@@ -384,8 +448,10 @@ export const estimateRequestSchema = z
     (data) => {
       const needsTrimOnlySkirting =
         hasInteriorWork(data.typeOfWork) &&
-        data.scopeOfPainting === 'Specific areas only' &&
-        !!data.specificInteriorTrimOnly &&
+        (
+          (data.scopeOfPainting === 'Entire property' && !!data.paintAreas?.trimPaint) ||
+          (data.scopeOfPainting === 'Specific areas only' && !!data.specificInteriorTrimOnly)
+        ) &&
         (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
       if (!needsTrimOnlySkirting) return true;
 
@@ -407,7 +473,10 @@ export const estimateRequestSchema = z
     (data) => {
       const needsDoorItems =
         hasInteriorWork(data.typeOfWork) &&
-        data.scopeOfPainting === 'Specific areas only' &&
+        (
+          data.scopeOfPainting === 'Specific areas only' ||
+          (data.scopeOfPainting === 'Entire property' && !!data.paintAreas?.trimPaint)
+        ) &&
         (data.trimPaintOptions?.trimItems ?? []).includes('Doors');
       if (!needsDoorItems) return true;
       return hasPositiveQuantity(data.interiorDoorItems);
@@ -418,7 +487,10 @@ export const estimateRequestSchema = z
     (data) => {
       const needsWindowItems =
         hasInteriorWork(data.typeOfWork) &&
-        data.scopeOfPainting === 'Specific areas only' &&
+        (
+          data.scopeOfPainting === 'Specific areas only' ||
+          (data.scopeOfPainting === 'Entire property' && !!data.paintAreas?.trimPaint)
+        ) &&
         (data.trimPaintOptions?.trimItems ?? []).includes('Window Frames');
       if (!needsWindowItems) return true;
       return hasPositiveQuantity(data.interiorWindowItems);
@@ -443,6 +515,7 @@ export const estimateRequestSchema = z
 
 export const estimateSubmissionSchema = z.object({
   idToken: z.string().min(1, 'Authentication is required.'),
+  estimateId: z.string().trim().min(1, 'Estimate ID is required when provided.').optional(),
   formData: estimateRequestSchema,
   photoPaths: z.array(z.string().trim().min(1)).max(10).optional(),
 });

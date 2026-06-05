@@ -9,6 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import {
+  formatEstimatePriceRangeForDisplay,
+  type EstimatePriceDisplayMeta,
+} from '@/lib/estimate-price-display';
+import {
   ChevronLeft,
   ChevronRight,
   User,
@@ -136,6 +140,7 @@ interface EstimateDocument {
   };
   estimate?: {
     priceRange?: string;
+    pricingMeta?: EstimatePriceDisplayMeta;
     explanation?: string;
     details?: string[];
     breakdown?: {
@@ -329,6 +334,13 @@ export default function EstimateDetailsPage() {
       : options.wallType
       ? [options.wallType]
       : [];
+  const mainPriceRange = est?.priceRange || est?.breakdown?.total?.priceRange;
+  const displayMainPriceRange = mainPriceRange
+    ? formatEstimatePriceRangeForDisplay({
+        priceRange: mainPriceRange,
+        pricingMeta: est?.pricingMeta,
+      })
+    : 'Calculating...';
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -764,7 +776,7 @@ export default function EstimateDetailsPage() {
                         Estimated Range
                       </p>
                       <p className="text-2xl font-black text-primary">
-                        {est.priceRange || est.breakdown?.total?.priceRange || 'Calculating...'}
+                        {displayMainPriceRange}
                       </p>
                     </div>
 
@@ -777,7 +789,10 @@ export default function EstimateDetailsPage() {
                             <div className="flex items-center justify-between px-3 py-2">
                               <span className="text-muted-foreground">Interior</span>
                               <span className="font-medium text-blue-700">
-                                {est.breakdown.interior.priceRange}
+                                {formatEstimatePriceRangeForDisplay({
+                                  priceRange: est.breakdown.interior.priceRange,
+                                  pricingMeta: est.pricingMeta,
+                                })}
                               </span>
                             </div>
                           )}
@@ -785,14 +800,20 @@ export default function EstimateDetailsPage() {
                             <div className="flex items-center justify-between px-3 py-2">
                               <span className="text-muted-foreground">Exterior</span>
                               <span className="font-medium text-green-700">
-                                {est.breakdown.exterior.priceRange}
+                                {formatEstimatePriceRangeForDisplay({
+                                  priceRange: est.breakdown.exterior.priceRange,
+                                  pricingMeta: est.pricingMeta,
+                                })}
                               </span>
                             </div>
                           )}
                           <div className="flex items-center justify-between bg-muted/30 px-3 py-2">
                             <span className="font-semibold">Total</span>
                             <span className="font-bold text-primary">
-                              {est.breakdown.total.priceRange}
+                              {formatEstimatePriceRangeForDisplay({
+                                priceRange: est.breakdown.total.priceRange,
+                                pricingMeta: est.pricingMeta,
+                              })}
                             </span>
                           </div>
                         </div>

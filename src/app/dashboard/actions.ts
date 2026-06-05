@@ -2,6 +2,10 @@
 
 import { z } from 'zod';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
+import {
+  formatEstimatePriceRangeForDisplay,
+  type EstimatePriceDisplayMeta,
+} from '@/lib/estimate-price-display';
 
 const getDashboardDataSchema = z.object({
   idToken: z.string().min(1, 'Authentication is required.'),
@@ -55,13 +59,17 @@ export async function getDashboardData(payload: unknown) {
           };
           estimate?: {
             priceRange?: string;
+            pricingMeta?: EstimatePriceDisplayMeta;
           };
           createdAt?: unknown;
         };
 
         return {
           id: doc.id,
-          priceRange: data.estimate?.priceRange ?? 'N/A',
+          priceRange: formatEstimatePriceRangeForDisplay({
+            priceRange: data.estimate?.priceRange,
+            pricingMeta: data.estimate?.pricingMeta,
+          }),
           typeOfWork: data.options?.typeOfWork ?? [],
           location: data.options?.location ?? '',
           createdAtMs: getTimestampMillis(data.createdAt),

@@ -1,18 +1,18 @@
 # Booking Conversion Upgrade
 
 > Date: 2026-05-13
-> Status: Product upgrade proposal
+> Status: Active direction - external Jobber booking URL retained for Phase 1
 > Goal: Make PBC Estimate AI trigger more company quotation bookings, not just generate price ranges.
 
 ---
 
 ## Verdict
 
-The current plan is technically strong. The Jobber booking funnel, Firestore audit trail, ownership checks, fallback email, and admin view are the right bones.
+The current direction is to keep Jobber's hosted booking URL as the Phase 1 booking path. This avoids building and maintaining a second scheduling system while still letting customers choose a time in Jobber.
 
 The weak spot is not the integration. It is the moment after the user sees the estimate.
 
-Right now the product gives a useful price range, then asks for a booking. To increase quotations, the app needs to make the site visit feel like the natural next step, with clear timing, trust, reduced effort, and a recovery path for users who hesitate.
+Right now the product gives a useful price range, then asks for a booking. To increase quotations without adding API/OAuth/schedule complexity, the result screen needs to make the Jobber booking step feel like the natural next action.
 
 ---
 
@@ -21,8 +21,8 @@ Right now the product gives a useful price range, then asks for a booking. To in
 - The app is positioned as a lead generator, not SaaS.
 - The pricing engine has local 2026 Sydney Northern Beaches anchors.
 - The AI estimate result is the strongest conversion point.
-- The Jobber API design avoids external redirects for AI estimate users.
-- Firestore is the source of truth, so Jobber downtime does not lose leads.
+- The external Jobber booking flow already handles customer date/time selection, confirmation, and schedule placement.
+- Keeping booking in Jobber reduces operational and engineering risk.
 - The 2-free-estimate policy protects pricing data without turning the product into a paid tool.
 
 Keep these.
@@ -33,10 +33,10 @@ Keep these.
 
 ### 1. The result screen needs a stronger "why book now"
 
-The result should not only say "Get Your Free Site Visit." It should explain why the site visit is useful:
+The result should not only say "Book Online Now." It should explain why the site visit is useful:
 
 - "Turn this estimate into a fixed written quote."
-- "Connor already has your estimate details, so you do not need to explain it again."
+- "Choose a time in Jobber."
 - "Most site visits take 10-15 minutes."
 - "Photos and access details help confirm the final price."
 
@@ -55,33 +55,31 @@ Recommended policy:
 
 This should become a real operating rule, not just copy.
 
-### 3. Booking form abandonment needs recovery
+### 3. Booking click tracking needs to be lightweight
 
-The Phase 1 spec intentionally keeps abandoned recapture in Phase 2. That is understandable, but it is one of the highest-leverage booking upgrades.
+Because Phase 1 uses the hosted Jobber booking URL, the app should not attempt booking-form abandonment recovery yet.
 
 Minimum version:
 
-- Track `booking_form_opened`.
-- If the user does not submit within 2 hours, send one reminder email.
-- The reminder links back to the estimate result, not the landing page.
-- Do not send reminders without consent or a legitimate transactional basis.
+- Track `jobber_booking_clicked` when a result-screen CTA sends the user to Jobber.
+- Store enough estimate context to see which project types and price bands create booking intent.
+- Treat final booking completion as Jobber-owned until a later integration or export confirms it.
 
-This turns generated estimates into recoverable leads.
+This gives a useful conversion signal without building an in-app booking system.
 
-### 4. The estimate should create a qualified sales handoff
+### 4. The estimate should support a qualified Jobber handoff
 
-Connor should not receive a generic booking. He should receive a lead brief.
+With the external Jobber URL, estimate details are not automatically attached to the Jobber request. Do not claim that Connor already has the AI estimate unless that integration is later built.
 
-Include:
+Phase 1 should instead encourage the customer to use the AI estimate as a guide when booking:
 
 - Price range and scope.
 - Suburb/address.
 - Project type: interior, exterior, combined.
 - High-value flags: roof, exterior full repaint, multi-storey, difficult access.
-- Urgency: preferred time or timeline.
-- Customer hesitation signals: downloaded PDF but did not book, opened booking form but abandoned.
+- Any notes or photos they want Connor to check.
 
-This lets Connor call with context, which increases trust.
+If Jobber custom fields are available, add a simple field such as "Anything Connor should know before the visit?" so customers can paste or summarize their AI estimate.
 
 ### 5. Funnel analytics need attribution, not just counts
 
@@ -115,24 +113,29 @@ Avoid making the user feel rationed before they trust the product.
 
 ### A. Result Screen CTA Stack
 
-Primary CTA:
+Headline:
 
 ```text
-Get Your Free Site Visit
+Ready for a firm written quote?
 ```
 
 Support copy:
 
 ```text
-Connor will review this estimate before the visit, so you do not need to repeat the project details.
+Your AI estimate is a price guide. Book a free site visit in Jobber so Connor can inspect the property, confirm access and prep, and provide a final written quote.
+```
+
+Primary CTA:
+
+```text
+Book Your Free Site Visit
 ```
 
 Trust strip near CTA:
 
-- Local Northern Beaches painter.
-- Fixed written quote after site visit.
-- No obligation.
-- Response within the stated SLA.
+- Your AI estimate gives the price guide.
+- The site visit confirms the final written quote.
+- Booking opens Connor's live Jobber calendar.
 
 Secondary CTA:
 
@@ -142,12 +145,12 @@ Download Estimate PDF
 
 Do not make PDF equal weight with booking. PDF is useful, but booking is the business outcome.
 
-### B. Booking Form Copy
+### B. Jobber Booking Form Copy
 
-Use the form to reduce effort:
+The app should link to the hosted Jobber form. Configure that Jobber form to reduce friction:
 
 ```text
-Your estimate details will be attached automatically.
+Choose a time for your free site visit.
 ```
 
 Keep fields tight:
@@ -156,32 +159,35 @@ Keep fields tight:
 - Email.
 - Mobile.
 - Property address.
-- Preferred contact time.
+- Preferred date/time or Jobber availability slot.
+- Painting type.
 - Notes.
-- Consent checkbox.
 
-Do not ask for project details again unless the estimate is missing them.
+Recommended notes field label:
+
+```text
+Anything Connor should know before the visit?
+```
+
+Do not ask customers to fully re-enter the estimate. Let them provide only what Jobber needs to book the visit.
 
 ### C. Confirmation Copy
 
-Replace generic confirmation with an expectation-setting block:
+Because confirmation is Jobber-owned in Phase 1, set expectations before the redirect:
 
 ```text
-Sent. Your reference is PBC-2026-XXXXX.
-Connor will contact you within 15 minutes during business hours, or by 10:00 the next business morning.
-Your AI estimate and project details were attached to the request.
+Choose your time in Jobber. Your AI estimate gives the price guide, and the site visit turns it into a firm written quote.
 ```
 
-### D. Admin Lead Queue
+### D. Admin Lead Signals
 
-The admin view should prioritize:
+The admin view should not claim full booking conversion unless Jobber data is imported. Phase 1 should prioritize:
 
-1. Pending Jobber sync failures.
-2. New booking submissions.
-3. High-value estimates with no booking.
-4. Booking form opened but not submitted.
+1. New generated estimates.
+2. High-value estimates.
+3. Estimates where the user clicked the Jobber booking CTA, if click tracking is implemented.
 
-This makes the admin page an operating dashboard, not just a database viewer.
+This keeps the app honest about what it knows while still surfacing useful lead intent.
 
 ---
 
@@ -191,18 +197,17 @@ This makes the admin page an operating dashboard, not just a database viewer.
 
 | Situation | Response target |
 |---|---|
-| Booking submitted during business hours | 15 minutes |
-| Booking submitted after hours | Next business day by 10:00 |
-| Jobber sync fails | Connor backup email immediately |
-| Booking pending for more than 24 hours | Admin digest and dashboard alert |
+| Jobber booking submitted during business hours | Follow the Jobber/PBC operating policy |
+| Jobber booking submitted after hours | Follow the Jobber/PBC operating policy |
+| App user clicks Jobber booking CTA | No app-side outreach unless marketing consent exists |
 
 ### Follow-Up Policy
 
 | Lead state | Action |
 |---|---|
 | Estimate generated, no booking | No immediate outreach unless marketing consent exists |
-| Booking form opened, no submit | One reminder email after 2 hours if allowed |
-| Booking submitted | Confirmation email immediately |
+| Jobber booking CTA clicked | No automatic reminder in Phase 1 |
+| Booking submitted | Jobber manages confirmation |
 | Site visit completed | Jobber manages quote follow-up |
 
 ### Claims And Boundaries
@@ -225,20 +230,15 @@ This makes the admin page an operating dashboard, not just a database viewer.
 | `estimate_started` | User began estimate |
 | `estimate_generated` | User saw price range |
 | `result_booking_cta_viewed` | Booking CTA was visible |
-| `booking_form_opened` | User expressed booking intent |
-| `booking_submitted` | User requested site visit |
-| `jobber_sync_succeeded` | Jobber request created |
-| `jobber_sync_failed` | Backup path triggered |
+| `jobber_booking_clicked` | User clicked through to hosted Jobber booking |
 
 ### Conversion Targets
 
 | Metric | Target |
 |---|---|
-| Estimate generated -> booking form opened | 30%+ |
-| Booking form opened -> submitted | 50%+ |
-| Estimate generated -> booking submitted | 15%+ |
-| Booking submitted -> first response within SLA | 90%+ |
-| Jobber sync success | 99%+ |
+| Estimate generated -> Jobber booking click | 25%+ |
+| Jobber booking click -> submitted | Track in Jobber, not app, until integration exists |
+| Booking submitted -> first response within SLA | Track in Jobber/operations |
 
 ### Segment Every Event By
 
@@ -256,21 +256,20 @@ This makes the admin page an operating dashboard, not just a database viewer.
 ### P0 - Must Add To Phase 1
 
 - Strong result-screen CTA copy and trust strip.
-- Speed-to-lead SLA in confirmation copy and operations.
-- Lead brief attached to Jobber request and Connor backup email.
-- Attribution fields on booking and metric events.
-- Admin queue sorted by action priority.
+- External Jobber booking URL retained as the booking path.
+- Jobber form configured for date/time selection and minimal fields.
+- Optional `jobber_booking_clicked` metric with estimate context.
 
 ### P1 - Add Immediately After Phase 1
 
-- Booking form abandonment reminder.
-- Estimate result return link from email.
-- High-value unbooked estimate queue.
-- Daily conversion summary for Connor.
+- High-value estimate queue.
+- Daily estimate and Jobber-click summary.
+- Manual reconciliation with Jobber booking data if needed.
 
 ### P2 - Later
 
-- Time-slot selection.
+- In-app booking form only if external Jobber conversion data proves it is needed.
+- Jobber API/OAuth/schedule automation.
 - Shareable estimate page.
 - SEO suburb pages.
 - Jobber webhook progression tracking.
@@ -280,11 +279,10 @@ This makes the admin page an operating dashboard, not just a database viewer.
 
 ## Open Decisions
 
-1. What are PBC's real business hours for the 15-minute response SLA?
-2. Can Connor reliably call within 15 minutes, or should the app promise "same business day" until ops are proven?
-3. Should the result screen show "free site visit" or "free quote visit"? The latter may be clearer for high-intent users.
-4. Is one reminder email acceptable under the current consent/privacy policy?
-5. Which traffic sources will be used first: main site only, Google Ads, Meta, local SEO, or referral links?
+1. What copy should the hosted Jobber form use for the site-visit notes field?
+2. Does the current Jobber form expose available date/time slots clearly enough?
+3. Should the result screen button say "Book Your Free Site Visit" or "Book Your Free Quote Visit"?
+4. Which traffic sources will be used first: main site only, Google Ads, Meta, local SEO, or referral links?
 
 ---
 
@@ -298,4 +296,4 @@ Show them an estimate result and ask:
 2. "What would stop you from booking the site visit?"
 3. "What would make this feel trustworthy enough to submit your phone number?"
 
-If fewer than three of five say they would book or seriously consider booking, improve the result screen copy before building the Jobber integration.
+If fewer than three of five say they would book or seriously consider booking, improve the result screen copy before considering any Jobber API integration.

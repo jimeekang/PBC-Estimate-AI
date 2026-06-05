@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { LiteEstimateForm } from '@/components/estimate/lite-estimate-form';
@@ -6,7 +5,6 @@ import { PublicAuthRedirect } from '@/components/public-auth-redirect';
 import {
   ArrowRight,
   CalendarCheck,
-  CheckCircle,
   ClipboardCheck,
   Home,
   ExternalLink,
@@ -108,12 +106,6 @@ const googleReviews = [
   },
 ];
 
-const sampleFactors = [
-  '3-bedroom, 2-storey home interior',
-  'Walls + ceilings, standard height',
-  'Fair condition, calibrated to Northern Beaches pricing',
-];
-
 const marketingUseCases = [
   {
     title: 'Check the budget before you call',
@@ -137,8 +129,22 @@ const marketingUseCases = [
 
 export default function HomePage() {
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-gray-50 pb-28 sm:pb-24">
       <PublicAuthRedirect />
+      <div className="fixed bottom-4 right-4 z-50 flex w-[calc(100%-2rem)] flex-col gap-2 sm:w-auto sm:flex-row">
+        <Button asChild size="sm" className="shadow-xl">
+          <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer">
+            Book Online for a Firm Quote
+            <ExternalLink className="ml-2 h-4 w-4" />
+          </a>
+        </Button>
+        <Button asChild size="sm" variant="secondary" className="border bg-white shadow-xl">
+          <a href="/estimate">
+            Start With Free AI Estimate
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </a>
+        </Button>
+      </div>
 
       {/* Hero */}
       <section className="flex flex-col items-center justify-center px-4 py-16 text-center sm:py-24">
@@ -165,10 +171,10 @@ export default function HomePage() {
             </a>
           </Button>
           <Button asChild size="lg" variant="outline" className="w-full max-w-xs sm:w-auto">
-            <Link href="/login">
+            <a href="/estimate">
               Start With Free AI Estimate
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
+            </a>
           </Button>
         </div>
         <p className="mt-3 text-sm font-medium text-primary/80">
@@ -176,91 +182,9 @@ export default function HomePage() {
         </p>
       </section>
 
-      <section className="px-4 pb-20">
+      <section id="quick-price-guide" className="scroll-mt-8 px-4 pb-20">
         <div className="mx-auto max-w-4xl">
           <LiteEstimateForm />
-        </div>
-      </section>
-
-      {/* Sample Estimate Preview */}
-      <section className="px-4 pb-20">
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-6 text-center">
-            <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-              See What an AI Estimate Looks Like
-            </h2>
-            <p className="mt-2 text-gray-500">
-              Here&apos;s a real-format sample — your estimate will look just like this.
-            </p>
-          </div>
-
-          <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-            <div className="absolute right-3 top-3 z-10">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200">
-                <Sparkles className="h-3 w-3" />
-                Sample Preview — Login to generate yours
-              </span>
-            </div>
-
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-5 pr-32 sm:px-8 sm:pr-36">
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                AI Estimate — Interior
-              </p>
-              <h3 className="mt-1 text-xl font-bold text-gray-900 sm:text-2xl">
-                3-Bedroom House Interior
-              </h3>
-              <p className="mt-0.5 text-sm text-gray-500">Sydney Northern Beaches</p>
-            </div>
-
-            <div className="border-b border-gray-100 px-6 py-6 sm:px-8">
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
-                Estimated Price Range
-              </p>
-              <p className="mt-2 text-4xl font-extrabold text-gray-900 sm:text-5xl">
-                AUD 9,500 <span className="text-2xl font-semibold text-gray-400">–</span>{' '}
-                10,700
-                <span className="ml-2 text-xl font-semibold text-gray-500">(+GST)</span>
-              </p>
-              <p className="mt-2 text-sm text-gray-500">
-                Range reflects the current estimate engine for a fair-condition 2-storey guide.
-              </p>
-            </div>
-
-            <div className="px-6 py-5 sm:px-8">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                Based on
-              </p>
-              <ul className="space-y-2">
-                {sampleFactors.map((factor) => (
-                  <li key={factor} className="flex items-center gap-2 text-sm text-gray-700">
-                    <CheckCircle className="h-4 w-4 shrink-0 text-primary" />
-                    {factor}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="border-t border-gray-100 bg-gray-50 px-6 py-4 sm:px-8">
-              <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-                <p className="text-sm text-gray-500">
-                  Want a faster path? Book online for a firm written quote, or generate your own
-                  AI price guide first.
-                </p>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                  <Button asChild size="sm">
-                    <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer">
-                      Book Online <ExternalLink className="ml-1.5 h-4 w-4" />
-                    </a>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href="/login">
-                      Generate Mine <ArrowRight className="ml-1.5 h-4 w-4" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -455,10 +379,10 @@ export default function HomePage() {
               variant="outline"
               className="w-full max-w-xs border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white sm:w-auto"
             >
-              <Link href="/login">
+              <a href="/estimate">
                 Start Free AI Estimate
                 <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
+              </a>
             </Button>
           </div>
         </div>

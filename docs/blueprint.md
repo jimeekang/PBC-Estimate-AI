@@ -1,6 +1,6 @@
 # PBC Estimate AI - Product Blueprint
 
-> Last updated: 2026-03-30
+> Last updated: 2026-06-05
 > Status: **Active** - reflects the current production direction
 
 ---
@@ -39,6 +39,16 @@ Trim은 scope (specific / entire) 와 context (interior / exterior) 에 관계�
 - **Specific Trim**: item-based 앵커 사용 (window/door 개수 × 단가)
 - **Entire Trim**: property-level 앵커 사용 (window/door 수량 범위에 따른 밴드 가격)
 - 어느 경우든 window/door 종류·수량 미입력 시 폼 제출 불가 (validation error)
+
+#### Current Trim Pricing Direction
+
+The current implementation direction supersedes the legacy trim note above where they conflict.
+
+- **Interior / Entire property**: when trim is selected, collect trim quantities and price them with a new whole-property trim quantity anchor. The new anchor is 50% of the existing specific-area trim item unit prices, so quantity affects the estimate without double-counting the whole-property base anchor.
+- **Interior / Specific areas only**: keep the existing specific trim prices unchanged. This remains a direct item quote using the current door, window, and skirting anchors.
+- **Exterior / Entire or full exterior scope**: keep exterior trim item quantities because exterior door, window, architrave, and front door counts materially affect labour. If no detailed quantities are supplied, the engine can use the standard exterior trim allowance.
+- **Exterior / Specific areas only**: keep the current exterior item-based trim pricing.
+- Result and PDF copy should indicate whether detailed trim quantity pricing or a standard trim allowance was used.
 
 ### AI Integration
 - Genkit + Google Generative AI (Gemini 2.5 Flash)
@@ -119,10 +129,10 @@ Key metrics: estimate generation count, booking conversion rate, contract close 
 
 The app should make the site visit feel like the obvious next step after the AI estimate, not a separate sales ask.
 
-Primary trigger: the estimate result screen explains that the free site visit turns the indicative AI range into a fixed written quote, with the estimate details already attached for Connor.
+Primary trigger: the estimate result screen explains that the free site visit turns the indicative AI range into a fixed written quote. Phase 1 keeps the hosted Jobber booking URL so customers can choose a time in Jobber without the app owning scheduling.
 
-Operational promise: booking submissions should receive a fast human response, ideally within 15 minutes during business hours or by 10:00 the next business morning.
+Operational promise: Jobber owns booking confirmation and schedule placement in Phase 1. PBC should keep the Jobber form short and make the response policy clear inside Jobber/operations.
 
-Measurement: booking metrics must include attribution and segment fields, not only aggregate counters.
+Measurement: the app can track `jobber_booking_clicked` with estimate context. Final booking completion remains Jobber-owned until a later API integration or manual reconciliation is added.
 
 See [`docs/booking-conversion-upgrade.md`](./booking-conversion-upgrade.md) for the conversion trigger, process policy, measurement plan, and open decisions.

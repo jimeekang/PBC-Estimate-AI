@@ -63,8 +63,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { AnimatePresence, motion } from 'framer-motion';
-import { getEstimateQuotaStatus, submitEstimate } from '@/app/estimate/actions';
-import { uploadEstimatePhotos } from '@/lib/firebase';
+import {
+  cleanupEstimateDraft,
+  createEstimateDraft,
+  getEstimateQuotaStatus,
+  submitEstimate,
+} from '@/app/estimate/actions';
+import { deleteEstimatePhotos, uploadEstimatePhotos } from '@/lib/firebase';
 import { HANDRAIL_SYSTEM_OPTIONS } from '@/lib/estimate-constants';
 import {
   canSelectSpecificRoomTrimItem,
@@ -324,7 +329,7 @@ function ExteriorTrimDetail({ title, icon, styles, max, fieldName, styleKey, for
   );
 }
 // ── InteriorDoorDetail ───────────────────────────────────────────────────────
-// Fixed-price item picker for interior doors (Specific areas only).
+// Fixed-price item picker for interior doors.
 // Scope × System matrix — each cell has a +/- quantity counter.
 
 type InteriorDoorScope = 'Door & Frame' | 'Door only' | 'Frame only';
@@ -605,9 +610,12 @@ export function EstimateForm() {
   const [estimateCount, setEstimateCount] = useState(0);
   const [isCountLoading, setIsCountLoading] = useState(true);
   const [isLimitReached, setIsLimitReached] = useState(false);
+  const [activeEstimateId, setActiveEstimateId] = useState<string | undefined>();
+  const [activeRevision, setActiveRevision] = useState<number | undefined>();
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const apartmentAutoApproxSizeRef = useRef<number | null>(null);
   const { toast } = useToast();
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -759,6 +767,7 @@ export function EstimateForm() {
   const watchGlobalTrimPaint = useWatch({ control: form.control, name: 'paintAreas.trimPaint' });
   const watchGlobalCeilingPaint = useWatch({ control: form.control, name: 'paintAreas.ceilingPaint' });
   const watchPropertyType = useWatch({ control: form.control, name: 'propertyType' });
+  const watchApproxSize = useWatch({ control: form.control, name: 'approxSize' });
   const watchExteriorAreas = useWatch({ control: form.control, name: 'exteriorAreas' }) || [];
   const watchExteriorTrimItems = useWatch({ control: form.control, name: 'exteriorTrimItems' }) || [];
   const watchDeckServiceType = useWatch({ control: form.control, name: 'deckServiceType' });
@@ -809,14 +818,30 @@ const showCeilingOptions =
     form.setValue('bathroomCount', option.bathroomCount);
     if (currentApproxSize == null || currentApproxSize <= 0 || Number.isNaN(currentApproxSize)) {
       form.setValue('approxSize', option.avgSqm);
+      apartmentAutoApproxSizeRef.current = option.avgSqm;
     }
     form.setValue('roomsToPaint', option.hasMaster ? ['Master Bedroom'] : []);
   }, [watchApartmentStructure, isInterior, isApartmentType, watchScope, form]);
 
   useEffect(() => {
+    if (
+      apartmentAutoApproxSizeRef.current != null &&
+      typeof watchApproxSize === 'number' &&
+      watchApproxSize > 0 &&
+      watchApproxSize !== apartmentAutoApproxSizeRef.current
+    ) {
+      apartmentAutoApproxSizeRef.current = null;
+    }
+  }, [watchApproxSize]);
+
+  useEffect(() => {
     if (watchPropertyType === 'Apartment') return;
     if (!form.getValues('apartmentStructure')) return;
 
+    if (form.getValues('approxSize') === apartmentAutoApproxSizeRef.current) {
+      form.setValue('approxSize', undefined, { shouldDirty: true });
+      apartmentAutoApproxSizeRef.current = null;
+    }
     form.setValue('apartmentStructure', undefined, { shouldDirty: true });
     form.setValue('bedroomCount', undefined, { shouldDirty: true });
     form.setValue('bathroomCount', undefined, { shouldDirty: true });
@@ -950,7 +975,7 @@ const showCeilingOptions =
 
     const idToken = await user.getIdToken();
 
-    if (!isAdmin && estimateCount >= 2) {
+    if (!activeEstimateId && !isAdmin && estimateCount >= 2) {
       setIsLimitReached(true);
       toast({
         variant: 'destructive',
@@ -963,11 +988,50 @@ const showCeilingOptions =
     setState({});
     setIsPending(true);
     let photoPaths: string[] = [];
+    let createdDraftId: string | undefined;
+    let estimateIdForSubmission = activeEstimateId;
+    let reservedEstimateCount: number | undefined;
+    let reservedLimitReached: boolean | undefined;
+
+    const cleanupDraftAttempt = async () => {
+      if (!createdDraftId) return;
+      const cleanupResult = await cleanupEstimateDraft({ idToken, estimateId: createdDraftId });
+      if (cleanupResult.error) {
+        console.error('Estimate draft cleanup failed:', cleanupResult.error);
+      }
+    };
+
     if (photos.length > 0) {
       try {
-        photoPaths = await uploadEstimatePhotos(idToken, photos);
+        if (!estimateIdForSubmission) {
+          const draft = await createEstimateDraft({ idToken });
+          if (draft.error) {
+            if (draft.limitReached) {
+              setIsLimitReached(true);
+            }
+            throw new Error(draft.error);
+          }
+
+          createdDraftId = draft.estimateId;
+          estimateIdForSubmission = draft.estimateId;
+          reservedEstimateCount = draft.estimateCount;
+          reservedLimitReached = draft.limitReached;
+        }
+
+        photoPaths = await uploadEstimatePhotos(idToken, photos, estimateIdForSubmission);
       } catch (err) {
         console.error('Photo upload failed:', err);
+        if (photoPaths.length > 0) {
+          try {
+            await deleteEstimatePhotos(idToken, photoPaths);
+          } catch (cleanupError) {
+            console.error('Photo cleanup failed after upload error:', cleanupError);
+          }
+        }
+        await cleanupDraftAttempt();
+        if (createdDraftId && !isAdmin) {
+          await fetchEstimateCount(user.uid);
+        }
         setState({ error: 'Could not upload photos. Please try again.' });
         toast({ variant: 'destructive', title: 'Photo Upload Failed', description: 'Could not upload photos. Please try again.' });
         setIsPending(false);
@@ -982,26 +1046,51 @@ const showCeilingOptions =
             paintAreas: clearGlobalPaintAreasForSpecificScope(values.paintAreas),
           };
 
-    const result = await submitEstimate({ formData: submissionValues, idToken, photoPaths });
+    const result = await submitEstimate({
+      formData: submissionValues,
+      idToken,
+      photoPaths,
+      estimateId: estimateIdForSubmission,
+    });
 
     if (result.error) {
       if (result.limitReached) {
         setIsLimitReached(true);
+      }
+      if (photoPaths.length > 0) {
+        try {
+          await deleteEstimatePhotos(idToken, photoPaths);
+        } catch (cleanupError) {
+          console.error('Photo cleanup failed after estimate submission error:', cleanupError);
+        }
+      }
+      await cleanupDraftAttempt();
+      if (createdDraftId && !isAdmin) {
+        await fetchEstimateCount(user.uid);
       }
       setState({ error: result.error });
       toast({ variant: 'destructive', title: 'Error', description: result.error });
     } else if (result.data) {
       if (!isAdmin) {
         const nextCount =
-          typeof result.estimateCount === 'number' ? result.estimateCount : await fetchEstimateCount(user.uid);
+          typeof result.estimateCount === 'number'
+            ? result.estimateCount
+            : typeof reservedEstimateCount === 'number'
+              ? reservedEstimateCount
+              : await fetchEstimateCount(user.uid);
         setEstimateCount(nextCount);
-        setIsLimitReached(result.limitReached ?? nextCount >= 2);
+        setIsLimitReached(result.limitReached ?? reservedLimitReached ?? nextCount >= 2);
       }
       const generatedAt = new Date().toISOString();
-      const referenceId = `PBC-${generatedAt.slice(2, 10).replace(/-/g, '')}-${values.name
-        .replace(/[^a-zA-Z0-9]/g, '')
-        .slice(0, 4)
-        .toUpperCase() || 'USER'}`;
+      const referenceId = result.estimateId
+        ? `PBC-${result.estimateId.slice(0, 8).toUpperCase()}`
+        : `PBC-${generatedAt.slice(2, 10).replace(/-/g, '')}-${values.name
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .slice(0, 4)
+            .toUpperCase() || 'USER'}`;
+
+      setActiveEstimateId(result.estimateId);
+      setActiveRevision(result.revision);
 
       setState({
         data: result.data,
@@ -1019,6 +1108,16 @@ const showCeilingOptions =
     }
     setIsPending(false);
   }
+
+  const handleEditGeneratedEstimate = () => {
+    setState((prev) => ({ ...prev, data: undefined, error: undefined }));
+    setCurrentStep(0);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRegenerateEstimate = () => {
+    void form.handleSubmit(onSubmit, onInvalid)();
+  };
 
   function onInvalid(errors: FieldErrors<EstimateFormValues>) {
     // Find the first step that has an error and navigate there
@@ -1084,7 +1183,7 @@ const showCeilingOptions =
     <APIProvider apiKey={googleMapsApiKey!}>
     <TooltipProvider>
       <AnimatePresence>
-        {isLimitReached && !isCountLoading && !isAdmin && (
+        {!activeEstimateId && isLimitReached && !isCountLoading && !isAdmin && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <div className="mb-6 rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-6 shadow-sm">
               <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
@@ -2227,6 +2326,11 @@ const showCeilingOptions =
               <FormLabel className="text-primary font-bold flex items-center gap-2">
                 <Sparkles className="h-4 w-4" /> Trim Options
               </FormLabel>
+              {watchScope === 'Entire property' && (
+                <p className="text-xs text-muted-foreground">
+                  Entire-property trim uses quantity pricing. Enter counts for selected doors, window frames, and skirting boards.
+                </p>
+              )}
               <FormField
                 control={form.control}
                 name="trimPaintOptions.paintType"
@@ -2308,11 +2412,11 @@ const showCeilingOptions =
                  control={form.control}
                  name="trimPaintOptions.trimItems"
                  render={() => <FormMessage />}
-               />
+              />
 
               {form.watch('trimPaintOptions.trimItems')?.includes('Skirting Boards') &&
-                watchScope === 'Specific areas only' &&
-                watchSpecificTrimOnly && (
+                (watchScope === 'Entire property' ||
+                  (watchScope === 'Specific areas only' && watchSpecificTrimOnly)) && (
                   <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-4 space-y-4">
                     <div className="space-y-1">
                       <div className="text-xs font-semibold text-primary">Skirting Boards</div>
@@ -2500,9 +2604,9 @@ const showCeilingOptions =
                   </div>
                 )}
 
-              {/* Interior door item pricing (Specific areas only) */}
+              {/* Interior door item pricing */}
               {form.watch('trimPaintOptions.trimItems')?.includes('Doors') &&
-                (watchScope === 'Specific areas only' ? (
+                (watchScope === 'Entire property' || watchScope === 'Specific areas only' ? (
                   <InteriorDoorDetail form={form} />
                 ) : (
                   <InteriorDoorTypeSelector form={form} />
@@ -2514,7 +2618,7 @@ const showCeilingOptions =
               />
 
               {form.watch('trimPaintOptions.trimItems')?.includes('Window Frames') &&
-                (watchScope === 'Specific areas only' ? (
+                (watchScope === 'Entire property' || watchScope === 'Specific areas only' ? (
                   <InteriorWindowDetail form={form} />
                 ) : (
                   <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-2">
@@ -2634,6 +2738,7 @@ const showCeilingOptions =
                               <CardHeader className="p-4">
                                 <div className="flex items-center gap-3">
                                   <Checkbox
+                                    aria-label={`Select ${item.label}`}
                                     checked={isSelected}
                                     onCheckedChange={(checked) => {
                                       const current = form.getValues('exteriorAreas') || [];
@@ -2728,6 +2833,7 @@ const showCeilingOptions =
                                                 )}
                                               >
                                                 <Checkbox
+                                                  aria-label={`Select ${opt.label}`}
                                                   checked={checked}
                                                   onCheckedChange={(c) => {
                                                     const current = field.value ?? [];
@@ -3398,7 +3504,7 @@ const showCeilingOptions =
               </Button>
             ) : (
               <div className="space-y-4 flex-1 ml-4">
-                {isLimitReached && !isAdmin ? (
+                {!activeEstimateId && isLimitReached && !isAdmin ? (
                   <a
                     href={BOOKING_URL}
                     target="_blank"
@@ -3429,7 +3535,7 @@ const showCeilingOptions =
                     ) : (
                       <>
                         <WandSparkles className="mr-2 h-6 w-6" />
-                        Generate AI Estimate
+                        {activeEstimateId ? 'Update AI Estimate' : 'Generate AI Estimate'}
                       </>
                     )}
                   </Button>
@@ -3452,8 +3558,17 @@ const showCeilingOptions =
 
                 {!isAdmin && !isCountLoading && (
                   <div className="text-center text-xs font-medium text-muted-foreground">
-                    Remaining free estimates:{' '}
-                    <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span>
+                    {activeEstimateId ? (
+                      <>
+                        Editing existing estimate{' '}
+                        <span className="text-primary font-bold">v{activeRevision ?? 1}</span>
+                      </>
+                    ) : (
+                      <>
+                        Remaining free estimates:{' '}
+                        <span className="text-primary font-bold">{Math.max(0, 2 - estimateCount)} / 2</span>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -3476,7 +3591,16 @@ const showCeilingOptions =
         )}
       </AnimatePresence>
 
-      {state.data && <EstimateResult result={state.data} pdfMeta={state.pdfMeta} />}
+      {state.data && (
+        <EstimateResult
+          result={state.data}
+          pdfMeta={state.pdfMeta}
+          revision={activeRevision}
+          onEdit={handleEditGeneratedEstimate}
+          onRegenerate={handleRegenerateEstimate}
+          isRegenerating={isPending}
+        />
+      )}
     </TooltipProvider>
     </APIProvider>
   );

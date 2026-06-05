@@ -1,25 +1,26 @@
-# Design — AI Estimate → Jobber Booking Funnel
+# Design — AI Estimate → External Jobber Booking Funnel
 
 **Date:** 2026-05-07
 **Author:** Connor / Paint Buddy & Co
-**Status:** Approved (brainstorming complete) → ready for implementation plan. Conversion trigger upgrade added 2026-05-13.
+**Status:** Phase 1 revised 2026-06-03. Keep the external Jobber booking URL. Defer custom Jobber API/OAuth/schedule automation.
 **Subdomain:** `quote.paintbuddyco.com`
 
 ---
 
 ## 1. Problem & Goal
 
-The current `quote.paintbuddyco.com` (PBC Estimate AI) generates AI estimates but does not flow into a real human-confirmed booking. Users hitting the AI estimate result currently see a CTA that links externally to Jobber's Online Booking widget, breaking funnel attribution and forcing users to re-enter their information. The site also exists separately from the main marketing site (`paintbuddyco.com`).
+The current `quote.paintbuddyco.com` (PBC Estimate AI) generates AI estimates and sends users to Jobber's hosted booking widget. This is now the intended Phase 1 direction because Jobber already handles customer date/time selection, confirmation, and schedule placement.
 
-**Goal:** Turn this app into a self-contained marketing funnel that:
+**Goal:** Turn the estimate result into a stronger booking trigger without building a second booking system:
 
 1. Receives traffic from the main site's "Get a Quote" button.
-2. Converts that traffic to bookings inside our own app (no external Jobber redirect for AI estimate users).
-3. Pushes lead data with the AI estimate context directly into Connor's Jobber via the Jobber Public API.
+2. Helps users understand why the free site visit is the next step after the AI estimate.
+3. Sends booking-ready users to Jobber's hosted booking calendar.
 4. Preserves login/usage limits to protect proprietary pricing data.
+5. Tracks lightweight booking intent from the app, such as `jobber_booking_clicked`.
 
 **Marketing priority order:** A (booking conversion) > C (SEO) > D (shareability) > B (lead capture).
-This document covers Phase 1 (priority A end-to-end). Phases 2/3 (C, D, B) are listed but not specified in detail.
+This document covers Phase 1 (priority A) with the external Jobber URL retained. The original in-app Jobber API/OAuth plan is now a deferred Phase 2 candidate only if external Jobber conversion data proves the extra complexity is needed.
 
 ---
 
@@ -32,7 +33,7 @@ This document covers Phase 1 (priority A end-to-end). Phases 2/3 (C, D, B) are l
 [quote.paintbuddyco.com landing]
         │
         ├─→ "Book Online for a Firm Quote" → existing Jobber Online Booking widget
-        │   (fast track, kept for users who have already decided)
+        │   (fast track for users who have already decided)
         │
         └─→ "Start Free AI Estimate"
                 │
@@ -45,25 +46,23 @@ This document covers Phase 1 (priority A end-to-end). Phases 2/3 (C, D, B) are l
                 ▼
         [AI estimate result screen] ★ primary conversion point
                 │
-                ├─→ "Get Your Free Site Visit" CTA  (NEW — the main funnel)
-                │       │ inline form expansion (Option A)
+                ├─→ "Book Your Free Site Visit" CTA
+                │       │ external Jobber booking URL
                 │       ▼
-                │   POST /api/jobber/booking
-                │       │ → Firestore booking record (audit-first)
-                │       │ → Jobber clientCreate + requestCreate (Option 2A)
-                │       │ → Resend confirmation email to user
-                │       │ → Resend backup notification to Connor
+                │   [Jobber hosted booking form]
+                │       │ customer chooses date/time in Jobber
+                │       │ Jobber owns confirmation + schedule placement
                 │       ▼
-                │   [Inline confirmation: reference ID + next steps]
+                │   [Jobber confirmation]
                 │
                 └─→ "Download PDF" (kept as today)
 ```
 
 ### Dual-track rationale
 
-- **AI estimate → booking** is the **main funnel**.
-- **Direct "Book Online"** is kept on the landing only, as a fast track for users who arrive already decided.
-- Both tracks land in Connor's Jobber inbox.
+- **AI estimate → hosted Jobber booking** is the main Phase 1 funnel.
+- **Direct "Book Online"** remains on the landing page as a fast track for users who arrive already decided.
+- Both tracks land in Jobber. The app should not claim booking completion unless Jobber data is later imported or integrated.
 
 ---
 
@@ -75,40 +74,65 @@ Reference: [`src/components/estimate/estimate-result.tsx`](../../../src/componen
 |---|---|---|
 | Price card, breakdown, explanation, key factors | Already polished | **Keep as-is** |
 | Download PDF button | Present | **Keep** |
-| Bottom booking CTA | "Book Online Now" → external Jobber URL | **Replace**: "Get Your Free Site Visit" → triggers inline form (Option A). Support copy explains that Connor receives the estimate details and the site visit turns the range into a fixed written quote. |
-| QR code on result screen | Desktop only | **Remove from screen** (PDF version retains it) |
-| External Jobber link on result screen | Present | **Remove** — confined to landing page only |
+| Bottom booking CTA | "Book Online Now" → external Jobber URL | **Keep external Jobber URL**. Change copy to "Book Your Free Site Visit" and explain that Jobber lets the customer choose a time for Connor to confirm a firm written quote. |
+| QR code on result screen | Desktop only | Keep if useful for desktop users. PDF version retains it. |
+| External Jobber link on result screen | Present | **Keep** as the official Phase 1 booking path. |
 
-### Booking form (inline expansion)
+### CTA copy
 
-**Required fields (4):**
-- Name (prefilled from auth profile, editable)
-- Email (prefilled from auth profile, readonly)
-- Mobile phone (Australian format)
-- Property address
+Headline:
 
-**Optional fields (2):**
-- Preferred site visit time (free text or quick-select chips)
-- Notes for Connor (textarea)
-
-**Consent:** single checkbox — "I agree Connor may contact me about this estimate."
-
-**Submit behaviour:** loading state → inline confirmation block in the same position. No page navigation.
-
-### Confirmation block
-
+```text
+Ready for a firm written quote?
 ```
-Sent. Your reference is PBC-2026-00123.
-Connor will contact you within 15 minutes during business hours, or by 10:00 the next business morning.
-Your AI estimate and project details were attached to the request.
-[Back to Home]   [Generate Another Estimate]
+
+Support copy:
+
+```text
+Your AI estimate is a price guide. Book a free site visit in Jobber so Connor can inspect the property, confirm access and prep, and provide a final written quote.
+```
+
+Button:
+
+```text
+Book Your Free Site Visit
+```
+
+Trust strip:
+
+- Your AI estimate gives the price guide.
+- The site visit confirms the final written quote.
+- Booking opens Connor's live Jobber calendar.
+
+Do not claim "Connor already has your estimate details" while using the external Jobber URL. That is only true if a future API integration attaches estimate data to the Jobber request.
+
+### Hosted Jobber form
+
+Configure Jobber's hosted form with minimal fields:
+
+- Name.
+- Email.
+- Mobile.
+- Property address.
+- Preferred date/time or Jobber availability slot.
+- Painting type.
+- Notes.
+
+Recommended notes field label:
+
+```text
+Anything Connor should know before the visit?
 ```
 
 ---
 
-## 4. Jobber API Integration (Option 2A)
+## 4. Jobber API Integration (Deferred)
 
-### 4.1 OAuth setup (Connor, one-time)
+The API/OAuth/schedule automation below is **not part of Phase 1**. It is retained as a Phase 2 candidate only if hosted Jobber booking conversion is weak enough to justify the added complexity.
+
+Phase 1 uses the hosted Jobber booking URL. Jobber owns date/time selection, booking confirmation, and schedule placement.
+
+### 4.1 Deferred OAuth setup (Connor, one-time)
 
 Single-tenant flow. Connor connects his Jobber account once via `/admin/integrations`.
 
@@ -152,7 +176,7 @@ match /system_integrations/{doc} {
 - If within 5 minutes of expiry, refresh.
 - Use a Firestore transaction so concurrent requests don't double-refresh.
 
-### 4.3 Booking submission flow
+### 4.3 Deferred booking submission flow
 
 `POST /api/jobber/booking`
 
@@ -184,7 +208,7 @@ If any Jobber call fails (network, 429, 500):
 
 **Principle:** the user experience is not coupled to Jobber availability. Firestore is the source of truth; Jobber is the sync target.
 
-### 4.5 Firestore schema additions
+### 4.5 Deferred Firestore schema additions
 
 ```ts
 // bookings/{bookingId}
@@ -242,7 +266,7 @@ match /bookings/{bookingId} {
 }
 ```
 
-### 4.6 File structure
+### 4.6 Deferred file structure
 
 ```
 src/app/api/jobber/
@@ -282,11 +306,11 @@ src/lib/
 
 | Layer | Tooling | Cases |
 |---|---|---|
-| Unit (Jest) | Existing setup | Booking Zod schema; reference-id generator; token-expiry check (5-min buffer); Jobber description builder |
-| Integration (Jest + msw) | Mock Jobber GraphQL | clientCreate + requestCreate happy path; existing-client reuse via email lookup; token refresh and retry; 429 → optimistic success + Connor email; ownership rejection (403) |
-| Manual E2E | Browser | Login → estimate → booking form → submit → confirmation; verify request appears in Connor's Jobber dashboard; simulate Jobber failure (invalid token in env) and verify Connor backup email arrives |
+| Unit (Jest) | Existing setup | Existing estimate generation and display tests continue to pass |
+| Integration | None for Phase 1 | No Jobber API integration is built in Phase 1 |
+| Manual E2E | Browser | Login → estimate → result CTA → hosted Jobber booking page opens; verify Jobber form allows customer date/time selection |
 
-A separate Jobber dev/sandbox app should be registered in the Jobber Developer Center for non-production testing.
+A separate Jobber dev/sandbox app is only needed if the deferred API/OAuth integration is revived.
 
 ---
 
@@ -295,61 +319,53 @@ A separate Jobber dev/sandbox app should be registered in the Jobber Developer C
 ### 6.1 Environment variables (Firebase App Hosting)
 
 ```
-JOBBER_CLIENT_ID                  (public OK)
-JOBBER_CLIENT_SECRET              (Secret Manager)
-JOBBER_REDIRECT_URI               (https://quote.paintbuddyco.com/api/jobber/oauth/callback)
-RESEND_API_KEY                    (Secret Manager)
-RESEND_FROM_EMAIL                 (e.g. noreply@paintbuddyco.com)
-CONNOR_NOTIFICATION_EMAIL         (Connor's direct email)
-APP_BASE_URL                      (https://quote.paintbuddyco.com)
+NEXT_PUBLIC_SITE_URL              (https://quote.paintbuddyco.com)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY   (existing address autocomplete)
 ```
+
+No Jobber API credentials are required for Phase 1 because booking uses the hosted Jobber URL.
 
 ### 6.2 Deploy order
 
-1. Register prod app in Jobber Developer Center; configure redirect URI.
-2. Add secrets to Firebase Secret Manager and reference them in `apphosting.yaml`.
-3. Deploy Firestore rules (`bookings`, `system_integrations`).
-4. Deploy App Hosting build.
-5. Connect `quote.paintbuddyco.com` as a custom domain.
-6. Connor performs OAuth setup once at `/admin/integrations`.
-7. Update `paintbuddyco.com` main site's "Get a Quote" button to point at `quote.paintbuddyco.com`.
+1. Confirm the hosted Jobber booking URL and form fields.
+2. Confirm the Jobber form allows date/time selection for a free site visit.
+3. Deploy App Hosting build.
+4. Connect `quote.paintbuddyco.com` as a custom domain.
+5. Update `paintbuddyco.com` main site's "Get a Quote" button to point at `quote.paintbuddyco.com`.
 
 ### 6.3 Rollback
 
-A feature flag `NEXT_PUBLIC_USE_JOBBER_API_BOOKING` (default true). If issues appear post-deploy, set the flag to false and the result screen reverts to the existing external Jobber link with no code change required.
+Rollback is simple because the app already links to hosted Jobber. If the CTA copy underperforms, change the result-screen copy without touching backend booking infrastructure.
 
 ---
 
 ## 7. Monitoring
 
-Lightweight, Firestore-based for Phase 1 — no extra SaaS.
+Lightweight for Phase 1 — no extra SaaS and no Jobber API dependency.
 
 ```
 metrics_daily/{YYYY-MM-DD}
 ├── estimateGenerated: number
 ├── resultBookingCtaViewed: number
-├── bookingFormOpened: number       (CTA click)
-├── bookingSubmitted: number
-├── bookingJobberSyncFailed: number
-└── conversionRate (computed at read time on /admin)
+├── jobberBookingClicked: number
+└── jobberClickRate (computed at read time on /admin)
 ```
 
-Counters are incremented atomically from server-side API routes using `FieldValue.increment(1)`. The `bookingFormOpened` event is recorded by a thin `POST /api/metrics/booking-form-opened` route fired when the user expands the inline form (auth-gated, deduped per `(userId, estimateId)` per day).
+If click tracking is added, record `jobber_booking_clicked` when the result-screen CTA opens the hosted Jobber booking URL. Store estimate context such as work type, price band, suburb, and device type.
 
-Every booking and metric event should preserve attribution and segment fields where available: UTM source/medium/campaign, entry source, service category, suburb, estimate price band, device type, and new vs returning user.
+Every app-side metric event should preserve attribution and segment fields where available: UTM source/medium/campaign, entry source, service category, suburb, estimate price band, device type, and new vs returning user.
 
 KPIs visible on `/admin`:
-- Estimate → booking conversion (target ≥ 15%).
-- Jobber sync success rate (target ≥ 99%).
-- Booking → site visit progression (Phase 2 — webhook-driven).
+- Estimate → Jobber booking click conversion.
+- High-value estimates generated.
+- Final booking completion only if Jobber data is imported or reconciled.
 
-Alerting in Phase 1 is the Connor backup-notification email itself, plus a daily digest if any `pending`/`failed` bookings remain unprocessed for >24 hours (small Cloud Function cron).
+No app-side Jobber sync alerting exists in Phase 1 because the app does not call Jobber's API.
 
 GA4 events instrumented in Phase 1 to support future paid-channel work:
 - `estimate_started`
 - `estimate_generated`
-- `booking_form_opened`
-- `booking_submitted`
+- `jobber_booking_clicked`
 
 ---
 
@@ -363,21 +379,20 @@ Documented here so they are remembered, not built now.
 | C | `/painters/[suburb]` regional landing pages |
 | D | Shareable estimate URL (`/estimate/share/[token]`) + auto OG image |
 | D | Instagram-friendly estimate card image export |
-| — | Jobber webhook ingestion (quote sent → user notification) |
-| — | In-app time-slot selection (Option 2B) |
-| B | Abandoned booking-form recapture email |
+| — | Jobber webhook/API ingestion, only if later integration is justified |
+| — | In-app time-slot selection, only if hosted Jobber conversion data proves it is needed |
+| B | Abandoned external-booking recovery, only if consent and Jobber data allow it |
 | B | Exit-intent modal |
-| — | Automated retry queue for failed Jobber syncs |
+| — | Automated retry queue for failed Jobber syncs, only if API integration is revived |
 
 ---
 
 ## 9. Open Questions / Future Decisions
 
-1. Whether to encrypt Jobber tokens at the application layer (in addition to Firestore at-rest encryption). Decide during implementation review.
-2. Whether to allow Connor multiple `system_integrations/jobber` token entries for staging vs prod, or whether environment separation is sufficient.
-3. Long-term: can Jobber's Online Booking time-slot API be used for full automation (Option 2C)? Investigate before Phase 2 booking enhancements.
-4. Confirm the real response SLA before launch. The conversion upgrade recommends 15 minutes during business hours or by 10:00 the next business morning.
-5. Confirm whether one booking-form abandonment reminder is allowed under the current consent and privacy policy.
+1. Confirm the hosted Jobber booking form fields and date/time selection experience.
+2. Confirm whether "Book Your Free Site Visit" or "Book Your Free Quote Visit" converts better.
+3. Decide whether to add lightweight `jobber_booking_clicked` tracking.
+4. Only revisit API/OAuth/schedule automation if hosted Jobber conversion is poor or duplicate data entry becomes a proven blocker.
 
 ---
 
@@ -385,4 +400,4 @@ Documented here so they are remembered, not built now.
 
 The implementation plan should read [`docs/booking-conversion-upgrade.md`](../../booking-conversion-upgrade.md) before build work begins.
 
-That document defines the conversion trigger copy, speed-to-lead policy, follow-up policy, attribution fields, admin lead queue priority, and pre-build customer test assignment.
+That document defines the current external Jobber URL direction, result-screen CTA copy, lightweight measurement plan, and pre-build customer test assignment.

@@ -81,6 +81,13 @@ Font loading: `var(--font-inter)` via Next.js font optimization, fallback to `'I
 ### Buttons
 Use shadcn/ui `<Button>` with variants: `default`, `secondary`, `destructive`, `outline`, `ghost`, `link`.
 
+### Estimate Result CTA
+- Primary result CTA: `Book Your Free Site Visit`
+- Headline: `Ready for a firm written quote?`
+- Support copy should say the AI estimate is a price guide and Jobber lets the customer choose a time for the site visit.
+- Do not claim estimate details are automatically attached to Jobber while Phase 1 uses the external Jobber booking URL.
+- Keep booking visually stronger than PDF download, edit, and regenerate actions.
+
 ### Forms
 - `react-hook-form` + `zod` resolver for all forms
 - shadcn/ui `<Form>`, `<FormField>`, `<FormItem>`, `<FormLabel>`, `<FormMessage>`

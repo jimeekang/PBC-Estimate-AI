@@ -136,6 +136,9 @@ Server Action (src/app/estimate/actions.ts)
         │
         ▼
       Estimate Result page (price range + AI explanation)
+        â”‚
+        â””â”€ Booking CTA â”€â”€â†’ External Jobber booking URL
+              â””â”€ Customer chooses date/time in Jobber
 ```
 
 ---
@@ -151,6 +154,8 @@ Server Action (src/app/estimate/actions.ts)
 ### 2. Dual Pricing Modes
 - **Entire property**: Anchor-based (apartment SQM curve / house bedroom count)
 - **Specific areas only**: Per-room/per-item calculation with individual anchors
+- **Interior entire trim**: When trim is selected, collect door/window/skirting quantities and price them with a whole-property trim quantity anchor set to 50% of the existing specific-area trim unit prices. Specific-area trim pricing stays unchanged.
+- **Exterior trim**: Keep detailed exterior trim quantities for full/exterior scopes because exterior door, window, architrave, and front door counts materially affect labour. Fall back to the standard exterior trim allowance only when detailed quantities are not supplied.
 
 ### 3. Range Width Caps
 Price ranges are dynamically capped to prevent unrealistically wide spreads:
@@ -172,6 +177,11 @@ Price ranges are dynamically capped to prevent unrealistically wide spreads:
 - Admin users have unlimited estimates
 - Promotional +1 estimate via coupon/event is only being considered and is not confirmed or implemented yet
 - Separate rate limits (30s/5hr/10day) for abuse prevention
+
+### 7. Booking Strategy
+- Phase 1 keeps booking in Jobber's hosted booking flow.
+- The app result screen links out to Jobber for date/time selection and confirmation.
+- The app may track lightweight booking intent such as `jobber_booking_clicked`, but final booking completion remains Jobber-owned unless a future integration imports it.
 
 ---
 

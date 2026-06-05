@@ -129,6 +129,7 @@ const BASE_FULL_HOUSE_SCORE = 8.8;
 const ENTIRE_APT_POOR_PREP_UPLIFT = { min: 1.04, max: 1.08 } as const;
 
 const WATER_BASED_UPLIFT = { minPct: 0.04, maxPct: 0.06 } as const;
+const WHOLE_PROPERTY_TRIM_QUANTITY_FACTOR = 0.5;
 const TRIM_PREMIUM_ENTIRE_WATER_WHOLE_JOB = {
   base: { min: 3500, max: 3900 },
   extraItem: { min: 250, max: 400 },
@@ -401,6 +402,10 @@ function getScaledTrimItemLineTotal(unitPrice: number, quantity: number): number
   return Math.round(unitPrice * qty * getQtyScaleFactor(qty));
 }
 
+function getWholePropertyTrimItemLineTotal(unitPrice: number, quantity: number): number {
+  return Math.round(getScaledTrimItemLineTotal(unitPrice, quantity) * WHOLE_PROPERTY_TRIM_QUANTITY_FACTOR);
+}
+
 const WHOLE_PROPERTY_DOOR_PREMIUM_CAP_PCT = 0.1;
 
 function trimPaintTypeToSystem(paintType: 'Oil-based' | 'Water-based') {
@@ -471,6 +476,21 @@ function getTrimOnlySkirtingRange(
   return {
     min: Math.round(linearMetres * rate.min) + TRIM_ONLY_SKIRTING_MARKET_UPLIFT,
     max: Math.round(linearMetres * rate.max) + TRIM_ONLY_SKIRTING_MARKET_UPLIFT,
+  };
+}
+
+function getWholePropertyTrimSkirtingRange(
+  input: GeneratePaintingEstimateInput,
+  paintType: 'Oil-based' | 'Water-based'
+) {
+  const linearMetres = getTrimOnlySkirtingLinearMetres(input);
+  if (linearMetres <= 0) return { min: 0, max: 0 };
+
+  const system = trimPaintTypeToSystem(paintType);
+  const rate = INTERIOR_SKIRTING_LINEAR_RATE[system];
+  return {
+    min: Math.round(linearMetres * rate.min * WHOLE_PROPERTY_TRIM_QUANTITY_FACTOR),
+    max: Math.round(linearMetres * rate.max * WHOLE_PROPERTY_TRIM_QUANTITY_FACTOR),
   };
 }
 
@@ -641,6 +661,27 @@ function hasSelectedTrimOptions(input: z.infer<typeof GeneratePaintingEstimateIn
   return !!input.trimPaintOptions?.trimItems?.length;
 }
 
+function hasWholePropertyTrimQuantityInput(input: GeneratePaintingEstimateInput) {
+  if (input.scopeOfPainting !== 'Entire property' || !input.paintAreas?.trimPaint) return false;
+  const trimItems = input.trimPaintOptions?.trimItems ?? [];
+  if (!trimItems.length) return false;
+
+  return (
+    (trimItems.includes('Doors') && (input.interiorDoorItems ?? []).some((item) => item.quantity > 0)) ||
+    (trimItems.includes('Window Frames') && (input.interiorWindowItems ?? []).some((item) => item.quantity > 0)) ||
+    (trimItems.includes('Skirting Boards') && getTrimOnlySkirtingLinearMetres(input) > 0)
+  );
+}
+
+function hasNonTrimWholeInteriorSurface(flags?: {
+  ceilingPaint?: boolean;
+  wallPaint?: boolean;
+  trimPaint?: boolean;
+  ensuitePaint?: boolean;
+}) {
+  return !!(flags?.ceilingPaint || flags?.wallPaint || flags?.ensuitePaint);
+}
+
 function hasSelectedFrontDoor(input: z.infer<typeof GeneratePaintingEstimateInputSchema>) {
   return !!input.exteriorFrontDoor;
 }
@@ -726,7 +767,8 @@ function shouldApply3B2BFairHouseCalibration(
   return (
     input.scopeOfPainting === 'Entire property' &&
     isHouse &&
-    houseKey === '3B2B'
+    houseKey === '3B2B' &&
+    hasNonTrimWholeInteriorSurface(input.paintAreas)
   );
 }
 
@@ -1107,8 +1149,10 @@ const GeneratePaintingEstimateInputSchema = z.object({
   (data) => {
     const needsTrimOnlySkirting =
       data.typeOfWork.includes('Interior Painting') &&
-      data.scopeOfPainting === 'Specific areas only' &&
-      !!data.specificInteriorTrimOnly &&
+      (
+        (data.scopeOfPainting === 'Entire property' && !!data.paintAreas?.trimPaint) ||
+        (data.scopeOfPainting === 'Specific areas only' && !!data.specificInteriorTrimOnly)
+      ) &&
       (data.trimPaintOptions?.trimItems ?? []).includes('Skirting Boards');
     if (!needsTrimOnlySkirting) return true;
 
@@ -1121,6 +1165,32 @@ const GeneratePaintingEstimateInputSchema = z.object({
     );
   },
   { path: ['skirtingLinearMetres'], message: 'Enter skirting length or add room dimensions for skirting-only pricing.' }
+).refine(
+  (data) => {
+    const needsDoorItems =
+      data.typeOfWork.includes('Interior Painting') &&
+      (
+        data.scopeOfPainting === 'Specific areas only' ||
+        (data.scopeOfPainting === 'Entire property' && !!data.paintAreas?.trimPaint)
+      ) &&
+      (data.trimPaintOptions?.trimItems ?? []).includes('Doors');
+    if (!needsDoorItems) return true;
+    return (data.interiorDoorItems ?? []).some((item) => typeof item.quantity === 'number' && item.quantity > 0);
+  },
+  { path: ['interiorDoorItems'], message: 'Please add at least one door quantity.' }
+).refine(
+  (data) => {
+    const needsWindowItems =
+      data.typeOfWork.includes('Interior Painting') &&
+      (
+        data.scopeOfPainting === 'Specific areas only' ||
+        (data.scopeOfPainting === 'Entire property' && !!data.paintAreas?.trimPaint)
+      ) &&
+      (data.trimPaintOptions?.trimItems ?? []).includes('Window Frames');
+    if (!needsWindowItems) return true;
+    return (data.interiorWindowItems ?? []).some((item) => typeof item.quantity === 'number' && item.quantity > 0);
+  },
+  { path: ['interiorWindowItems'], message: 'Please add at least one window quantity.' }
 );
 
 const GeneratePaintingEstimateOutputSchema = z.object({
@@ -1403,6 +1473,7 @@ export const generatePaintingEstimate = ai.defineFlow(
 
       let selectedRooms: string[] = [];
       let areaFactor = 1.0;
+      const wholePropertyTrimQuantityPricing = hasWholePropertyTrimQuantityInput(input);
 
       if (isWhole) {
         selectedRooms = (input.roomsToPaint ?? [])
@@ -1417,9 +1488,12 @@ export const generatePaintingEstimate = ai.defineFlow(
         if (!hasPricedInteriorSurfaceSelection(globalAreas)) {
           throw new Error('At least one priced interior surface must be selected.');
         }
+        const globalAreasForBase = wholePropertyTrimQuantityPricing
+          ? { ...globalAreas, trimPaint: false }
+          : globalAreas;
         areaFactor = aptLike
-          ? sumAreaFactorWholeApartment(globalAreas)
-          : sumAreaFactor(globalAreas);
+          ? sumAreaFactorWholeApartment(globalAreasForBase)
+          : sumAreaFactor(globalAreasForBase);
       } else {
         const rooms = input.interiorRooms ?? [];
         selectedRooms = rooms
@@ -1481,28 +1555,36 @@ export const generatePaintingEstimate = ai.defineFlow(
           // Guard: approxSize may be undefined, NaN, or empty string from form
           const sqmRaw = toNumberOrUndefined(input.approxSize);
           const rawMedian = getRawMedianFromSqm(sqmRaw); // handles undefined/NaN internally
-          const singleSurfaceShare = hasSingleSurfaceWholeApartment
-            ? getWholeApartmentSingleSurfaceShare(input.paintAreas)
-            : areaFactor;
-          const median = rawMedian * singleSurfaceShare;
-          const band = ENTIRE_APT_BAND[condition];
+          const trimQuantityOnly =
+            wholePropertyTrimQuantityPricing && !hasNonTrimWholeInteriorSurface(input.paintAreas);
 
-          const computedMin = Math.round(median * band.min);
-          const computedMax = Math.round(median * band.max);
-          const absoluteFloor = hasSingleSurfaceWholeApartment
-            ? Math.round(rawMedian * singleSurfaceShare * 0.78)
-            : Math.round(rawMedian * 0.78);
-          intMin = Number.isFinite(computedMin) ? Math.max(computedMin, absoluteFloor) : absoluteFloor;
-          intMax = Number.isFinite(computedMax) ? Math.max(computedMax, Math.round(absoluteFloor * 1.2)) : Math.round(absoluteFloor * 1.2);
+          if (trimQuantityOnly) {
+            intMin = 0;
+            intMax = 0;
+          } else {
+            const singleSurfaceShare = hasSingleSurfaceWholeApartment
+              ? getWholeApartmentSingleSurfaceShare(input.paintAreas)
+              : areaFactor;
+            const median = rawMedian * singleSurfaceShare;
+            const band = ENTIRE_APT_BAND[condition];
 
-          if (hasSingleSurfaceWholeApartment && input.paintAreas?.trimPaint) {
-            intMin = Math.max(intMin, ENTIRE_APARTMENT_TRIM_ONLY_BASE.min);
-            intMax = Math.max(intMax, ENTIRE_APARTMENT_TRIM_ONLY_BASE.max);
-          }
+            const computedMin = Math.round(median * band.min);
+            const computedMax = Math.round(median * band.max);
+            const absoluteFloor = hasSingleSurfaceWholeApartment
+              ? Math.round(rawMedian * singleSurfaceShare * 0.78)
+              : Math.round(rawMedian * 0.78);
+            intMin = Number.isFinite(computedMin) ? Math.max(computedMin, absoluteFloor) : absoluteFloor;
+            intMax = Number.isFinite(computedMax) ? Math.max(computedMax, Math.round(absoluteFloor * 1.2)) : Math.round(absoluteFloor * 1.2);
 
-          if (condition === 'Poor') {
-            intMin = Math.round(intMin * ENTIRE_APT_POOR_PREP_UPLIFT.min);
-            intMax = Math.round(intMax * ENTIRE_APT_POOR_PREP_UPLIFT.max);
+            if (hasSingleSurfaceWholeApartment && input.paintAreas?.trimPaint) {
+              intMin = Math.max(intMin, ENTIRE_APARTMENT_TRIM_ONLY_BASE.min);
+              intMax = Math.max(intMax, ENTIRE_APARTMENT_TRIM_ONLY_BASE.max);
+            }
+
+            if (condition === 'Poor') {
+              intMin = Math.round(intMin * ENTIRE_APT_POOR_PREP_UPLIFT.min);
+              intMax = Math.round(intMax * ENTIRE_APT_POOR_PREP_UPLIFT.max);
+            }
           }
         }
 
@@ -1647,8 +1729,35 @@ export const generatePaintingEstimate = ai.defineFlow(
           const interiorDoorTypes = trimItems.includes('Doors')
             ? input.trimPaintOptions.interiorDoorTypes ?? []
             : [];
+          const interiorDoorItems = trimItems.includes('Doors') ? input.interiorDoorItems ?? [] : [];
+          const interiorWindowItems = trimItems.includes('Window Frames') ? input.interiorWindowItems ?? [] : [];
+          const includeSkirting = trimItems.includes('Skirting Boards');
 
-          if (interiorWindowFrameTypes.length > 0) {
+          if (globalTrimOn && wholePropertyTrimQuantityPricing) {
+            if (interiorDoorItems.length > 0) {
+              for (const item of interiorDoorItems) {
+                const unitPrice = getInteriorDoorUnitPrice(item.system, item.scope, item.doorType);
+                const lineTotal = getWholePropertyTrimItemLineTotal(unitPrice, item.quantity);
+                intMin += lineTotal;
+                intMax += lineTotal;
+              }
+            }
+
+            if (interiorWindowItems.length > 0) {
+              for (const item of interiorWindowItems) {
+                const unitPrice = getInteriorWindowUnitPrice(item.system, item.type, item.scope);
+                const lineTotal = getWholePropertyTrimItemLineTotal(unitPrice, item.quantity);
+                intMin += lineTotal;
+                intMax += lineTotal;
+              }
+            }
+
+            if (includeSkirting) {
+              const skirtingCost = getWholePropertyTrimSkirtingRange(input, paintType);
+              intMin += skirtingCost.min;
+              intMax += skirtingCost.max;
+            }
+          } else if (interiorWindowFrameTypes.length > 0) {
             for (const type of interiorWindowFrameTypes) {
               const premium = INTERIOR_WINDOW_TYPE_PREMIUM[paintType][type];
               intMin += premium.min;
@@ -1656,7 +1765,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             }
           }
 
-          if (globalTrimOn && paintType === 'Water-based') {
+          if (globalTrimOn && !wholePropertyTrimQuantityPricing && paintType === 'Water-based') {
             const itemCount = trimItems.length;
             if (itemCount > 0) {
               const premium = getWholeJobWaterTrimPremium(itemCount);
@@ -1668,7 +1777,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             intMax = uplifted.max;
           }
 
-          if (globalTrimOn && interiorDoorTypes.length > 0) {
+          if (globalTrimOn && !wholePropertyTrimQuantityPricing && interiorDoorTypes.length > 0) {
             const uncappedDoorPremiumPct = [...new Set(interiorDoorTypes)].reduce((sum, type) => {
               return sum + INTERIOR_DOOR_WHOLE_JOB_PREMIUM_PCT[type];
             }, 0);
@@ -1842,9 +1951,17 @@ export const generatePaintingEstimate = ai.defineFlow(
     if (totalMin > totalProjectCap) totalMin = totalProjectCap;
 
     if (!isBoth) {
-      const capped = capRangeWidthSmart(totalMin, totalMax, input, 'total');
-      totalMin = capped.min;
-      totalMax = capped.max;
+      if (isInt) {
+        totalMin = intMin;
+        totalMax = intMax;
+      } else if (isExt) {
+        totalMin = extMin;
+        totalMax = extMax;
+      } else {
+        const capped = capRangeWidthSmart(totalMin, totalMax, input, 'total');
+        totalMin = capped.min;
+        totalMax = capped.max;
+      }
     }
 
     // -----------------------------
@@ -1941,6 +2058,7 @@ export const generatePaintingEstimate = ai.defineFlow(
     if (output?.priceRange) {
         return {
           ...output,
+          priceRange: resolvedTotalPriceRange,
           explanation: withFrontDoorPricingNote(
             withTrimPricingNote(
               output.explanation,
@@ -1948,7 +2066,7 @@ export const generatePaintingEstimate = ai.defineFlow(
             ),
             includeFrontDoorPricingNote
           ),
-          breakdown: output.breakdown ?? breakdown,
+          breakdown,
           details:
             output.details && output.details.length
             ? [
@@ -1971,10 +2089,7 @@ export const generatePaintingEstimate = ai.defineFlow(
                 ...(includeTrimPricingNote ? [trimPricingDetail] : []),
                 ...(includeFrontDoorPricingNote ? [frontDoorPricingDetail] : []),
               ],
-        pricingMeta:
-          output.pricingMeta?.mode === 'interior_itemized'
-            ? output.pricingMeta
-            : undefined,
+        pricingMeta: undefined,
       };
     }
 

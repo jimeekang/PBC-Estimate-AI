@@ -109,10 +109,15 @@ export function LiteEstimateForm() {
             <Sparkles className="h-5 w-5 text-primary" />
           </div>
           <div className="space-y-2">
-            <CardTitle className="text-2xl">Quick Price Guide</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-2xl">Quick Price Guide</CardTitle>
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200">
+                EXAMPLE
+              </span>
+            </div>
             <p className="text-sm text-muted-foreground">
-              Answer a few questions to get a fast whole-property guide. If you already want the
-              real number, booking online is still the fastest path to a firm written quote.
+              Answer a few questions to get an example whole-property guide. For the real written
+              number, book online so Paint Buddy & Co can inspect the site and confirm the scope.
             </p>
           </div>
         </CardHeader>
@@ -362,7 +367,7 @@ export function LiteEstimateForm() {
         </CardContent>
       </Card>
 
-      {result ? <EstimateResult result={result} /> : null}
+      {result ? <EstimateResult result={result} isExample /> : null}
       <Toaster />
     </>
   );

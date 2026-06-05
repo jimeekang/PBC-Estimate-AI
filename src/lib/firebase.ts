@@ -233,12 +233,19 @@ export const getEstimate = async (id: string) => {
   return null;
 };
 
-export const uploadEstimatePhotos = async (idToken: string, photos: File[]): Promise<string[]> => {
+export const uploadEstimatePhotos = async (
+  idToken: string,
+  photos: File[],
+  estimateId?: string
+): Promise<string[]> => {
   const formData = new FormData();
 
   photos.forEach((photo) => {
     formData.append('photos', photo);
   });
+  if (estimateId) {
+    formData.append('estimateId', estimateId);
+  }
 
   const response = await fetch('/api/estimate-photos', {
     method: 'POST',
@@ -257,6 +264,25 @@ export const uploadEstimatePhotos = async (idToken: string, photos: File[]): Pro
   }
 
   return payload.photoPaths;
+};
+
+export const deleteEstimatePhotos = async (idToken: string, photoPaths: string[]): Promise<void> => {
+  if (photoPaths.length === 0) return;
+
+  const response = await fetch('/api/estimate-photos', {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ photoPaths }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Photo cleanup failed.');
+  }
 };
 
 export const getEstimatePhotoBlobUrl = async (idToken: string, photoPath: string): Promise<string> => {

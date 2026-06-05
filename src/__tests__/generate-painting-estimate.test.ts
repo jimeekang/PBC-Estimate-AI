@@ -1,6 +1,10 @@
+const mockExplanationPrompt = jest.fn<Promise<{ output: unknown }>, []>(
+  async () => ({ output: undefined })
+);
+
 jest.mock('@/ai/genkit', () => ({
   ai: {
-    definePrompt: () => async () => ({ output: undefined }),
+    definePrompt: () => mockExplanationPrompt,
     defineFlow: (_config: unknown, fn: unknown) => fn,
   },
 }));
@@ -32,6 +36,10 @@ const baseWholeHousePayload: GeneratePaintingEstimateInput = {
 };
 
 describe('generatePaintingEstimate', () => {
+  beforeEach(() => {
+    mockExplanationPrompt.mockResolvedValue({ output: undefined });
+  });
+
   test('whole-house calibration does not change when bedroomCount already represents the full bedroom total', async () => {
     const baseline = await generatePaintingEstimate({
       ...baseWholeHousePayload,
@@ -56,6 +64,67 @@ describe('generatePaintingEstimate', () => {
     expect(result.breakdown?.interior?.max).toBe(11500);
     expect(result.breakdown?.total?.min).toBe(10000);
     expect(result.breakdown?.total?.max).toBe(11500);
+  });
+
+  test('AI prompt output cannot override deterministic price range or breakdown', async () => {
+    mockExplanationPrompt.mockResolvedValueOnce({
+      output: {
+        priceRange: 'AUD 1 - 2',
+        explanation: 'Prompt explanation',
+        details: ['Prompt detail'],
+        breakdown: {
+          interior: { min: 1, max: 2, priceRange: 'AUD 1 - 2' },
+          total: { min: 1, max: 2, priceRange: 'AUD 1 - 2' },
+        },
+        pricingMeta: {
+          mode: 'interior_itemized',
+          subtotalExGst: 1,
+          gst: 0,
+          totalIncGst: 1,
+        },
+      },
+    });
+
+    const result = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      roomsToPaint: [],
+    });
+
+    expect(result.priceRange).toBe('AUD 10,000 - 11,500');
+    expect(result.breakdown?.interior).toEqual({
+      min: 10000,
+      max: 11500,
+      priceRange: 'AUD 10,000 - 11,500',
+    });
+    expect(result.breakdown?.total).toEqual({
+      min: 10000,
+      max: 11500,
+      priceRange: 'AUD 10,000 - 11,500',
+    });
+    expect(result.pricingMeta).toBeUndefined();
+    expect(result.explanation).toBe('Prompt explanation');
+    expect(result.details).toEqual(['Prompt detail']);
+  });
+
+  test('exterior-only estimate keeps total range aligned with exterior breakdown', async () => {
+    const result = await generatePaintingEstimate({
+      name: 'Exterior Test',
+      email: 'test@example.com',
+      typeOfWork: ['Exterior Painting'],
+      scopeOfPainting: 'Entire property',
+      propertyType: 'House / Townhouse',
+      houseStories: '1 storey',
+      approxSize: 180,
+      wallHeight: 3,
+      exteriorAreas: ['Wall'],
+      wallFinishes: ['rendered'],
+      wallType: 'rendered',
+      timingPurpose: 'Maintenance or refresh',
+      paintCondition: 'Fair',
+    });
+
+    expect(result.breakdown?.total).toEqual(result.breakdown?.exterior);
+    expect(result.priceRange).toBe(result.breakdown?.exterior?.priceRange);
   });
 
   test('entire-apartment ensuite-only interior selection produces a priced range', async () => {
@@ -83,62 +152,61 @@ describe('generatePaintingEstimate', () => {
     );
   });
 
-  test('whole-house door type premiums apply on top of the trim share for entire-property pricing', async () => {
-    const baseline = await generatePaintingEstimate({
-      ...baseWholeHousePayload,
-      roomsToPaint: [],
+  test('entire-apartment trim quantities use the 50 percent whole-property trim anchor', async () => {
+    const result = await generatePaintingEstimate({
+      name: 'Apartment Trim Quantity Test',
+      email: 'test@example.com',
+      typeOfWork: ['Interior Painting'],
+      scopeOfPainting: 'Entire property',
+      propertyType: 'Apartment',
+      apartmentStructure: '2Bed2Bath',
+      approxSize: 85,
+      timingPurpose: 'Maintenance or refresh',
+      paintCondition: 'Fair',
+      paintAreas: {
+        ceilingPaint: true,
+        wallPaint: true,
+        trimPaint: true,
+        ensuitePaint: false,
+      },
       trimPaintOptions: {
         paintType: 'Oil-based',
-        trimItems: ['Doors'],
-        interiorDoorTypes: ['flush'],
+        trimItems: ['Doors', 'Window Frames', 'Skirting Boards'],
       },
+      interiorDoorItems: [
+        { doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 7 },
+      ],
+      interiorWindowItems: [
+        { type: 'Normal', scope: 'Window & Frame', system: 'oil_2coat', quantity: 8 },
+      ],
+      skirtingPricingMode: 'linear_metres',
+      skirtingLinearMetres: 65,
     });
 
-    const premium = await generatePaintingEstimate({
-      ...baseWholeHousePayload,
-      roomsToPaint: [],
-      trimPaintOptions: {
-        paintType: 'Oil-based',
-        trimItems: ['Doors'],
-        interiorDoorTypes: ['flush', 'bi_folding'],
-      },
-    });
-
-    expect((premium.breakdown?.interior?.min ?? 0)).toBeGreaterThan(
-      baseline.breakdown?.interior?.min ?? 0
-    );
-    expect((premium.breakdown?.interior?.max ?? 0)).toBeGreaterThan(
-      baseline.breakdown?.interior?.max ?? 0
-    );
+    expect(result.breakdown?.interior?.min).toBe(5010);
+    expect(result.breakdown?.interior?.max).toBe(5786);
   });
 
-  test('whole-house door type premiums are capped at 10% for entire-property pricing', async () => {
-    const baseline = await generatePaintingEstimate({
+  test('whole-house trim quantities use the 50 percent whole-property trim anchor', async () => {
+    const result = await generatePaintingEstimate({
       ...baseWholeHousePayload,
       roomsToPaint: [],
       trimPaintOptions: {
         paintType: 'Oil-based',
-        trimItems: ['Doors'],
-        interiorDoorTypes: ['flush'],
+        trimItems: ['Doors', 'Window Frames', 'Skirting Boards'],
       },
+      interiorDoorItems: [
+        { doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 12 },
+      ],
+      interiorWindowItems: [
+        { type: 'Normal', scope: 'Window & Frame', system: 'oil_2coat', quantity: 12 },
+      ],
+      skirtingPricingMode: 'linear_metres',
+      skirtingLinearMetres: 130,
     });
 
-    const capped = await generatePaintingEstimate({
-      ...baseWholeHousePayload,
-      roomsToPaint: [],
-      trimPaintOptions: {
-        paintType: 'Oil-based',
-        trimItems: ['Doors'],
-        interiorDoorTypes: ['sliding', 'panelled', 'french', 'bi_folding'],
-      },
-    });
-
-    expect(capped.breakdown?.interior?.min).toBeLessThanOrEqual(
-      Math.ceil((baseline.breakdown?.interior?.min ?? 0) * 1.1)
-    );
-    expect(capped.breakdown?.interior?.max).toBeLessThanOrEqual(
-      Math.ceil((baseline.breakdown?.interior?.max ?? 0) * 1.1)
-    );
+    expect(result.breakdown?.interior?.min).toBe(12597);
+    expect(result.breakdown?.interior?.max).toBe(14097);
   });
 
   test('trim-only interior door quantities use the volume discount scale', async () => {
@@ -196,15 +264,22 @@ describe('generatePaintingEstimate', () => {
     });
   });
 
-  test('whole-house water-based trim carries at least AUD 3,500 more than oil-based trim', async () => {
+  test('whole-house water-based trim quantities price above oil-based quantities', async () => {
     const oil = await generatePaintingEstimate({
       ...baseWholeHousePayload,
       roomsToPaint: [],
       trimPaintOptions: {
         paintType: 'Oil-based',
-        trimItems: ['Doors'],
-        interiorDoorTypes: ['flush'],
+        trimItems: ['Doors', 'Window Frames', 'Skirting Boards'],
       },
+      interiorDoorItems: [
+        { doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 12 },
+      ],
+      interiorWindowItems: [
+        { type: 'Normal', scope: 'Window & Frame', system: 'oil_2coat', quantity: 12 },
+      ],
+      skirtingPricingMode: 'linear_metres',
+      skirtingLinearMetres: 130,
     });
 
     const water = await generatePaintingEstimate({
@@ -212,13 +287,30 @@ describe('generatePaintingEstimate', () => {
       roomsToPaint: [],
       trimPaintOptions: {
         paintType: 'Water-based',
-        trimItems: ['Doors'],
-        interiorDoorTypes: ['flush'],
+        trimItems: ['Doors', 'Window Frames', 'Skirting Boards'],
       },
+      interiorDoorItems: [
+        {
+          doorType: 'flush',
+          scope: 'Door & Frame',
+          system: 'water_3coat_white_finish',
+          quantity: 12,
+        },
+      ],
+      interiorWindowItems: [
+        {
+          type: 'Normal',
+          scope: 'Window & Frame',
+          system: 'water_3coat_white_finish',
+          quantity: 12,
+        },
+      ],
+      skirtingPricingMode: 'linear_metres',
+      skirtingLinearMetres: 130,
     });
 
-    expect((water.breakdown?.interior?.min ?? 0) - (oil.breakdown?.interior?.min ?? 0)).toBeGreaterThanOrEqual(3500);
-    expect((water.breakdown?.interior?.max ?? 0) - (oil.breakdown?.interior?.max ?? 0)).toBeGreaterThanOrEqual(3500);
+    expect(water.breakdown?.interior?.min).toBeGreaterThan(oil.breakdown?.interior?.min ?? 0);
+    expect(water.breakdown?.interior?.max).toBeGreaterThan(oil.breakdown?.interior?.max ?? 0);
   });
 
   test('custom large rooms such as Rumpus are normalized to the Living Room score path', async () => {

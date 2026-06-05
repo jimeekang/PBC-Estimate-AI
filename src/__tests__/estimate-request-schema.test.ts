@@ -1,4 +1,4 @@
-import { estimateRequestSchema } from '../schemas/estimate-request';
+import { estimateRequestSchema, estimateSubmissionSchema } from '../schemas/estimate-request';
 
 const basePayload = {
   name: 'Test User',
@@ -166,6 +166,61 @@ describe('estimateRequestSchema', () => {
     );
   });
 
+  test('requires trim quantities for entire-property interior trim pricing', () => {
+    const result = estimateRequestSchema.safeParse({
+      ...basePayload,
+      paintAreas: {
+        ceilingPaint: true,
+        wallPaint: true,
+        trimPaint: true,
+        ensuitePaint: false,
+      },
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors', 'Window Frames', 'Skirting Boards'],
+      },
+      interiorDoorItems: [],
+      interiorWindowItems: [],
+      skirtingPricingMode: 'linear_metres',
+      skirtingLinearMetres: undefined,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.success ? [] : result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: ['interiorDoorItems'] }),
+        expect.objectContaining({ path: ['interiorWindowItems'] }),
+        expect.objectContaining({ path: ['skirtingLinearMetres'] }),
+      ])
+    );
+  });
+
+  test('accepts entire-property interior trim with door, window, and skirting quantities', () => {
+    const result = estimateRequestSchema.safeParse({
+      ...basePayload,
+      paintAreas: {
+        ceilingPaint: true,
+        wallPaint: true,
+        trimPaint: true,
+        ensuitePaint: false,
+      },
+      trimPaintOptions: {
+        paintType: 'Oil-based',
+        trimItems: ['Doors', 'Window Frames', 'Skirting Boards'],
+      },
+      interiorDoorItems: [
+        { doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 7 },
+      ],
+      interiorWindowItems: [
+        { type: 'Normal', scope: 'Window & Frame', system: 'oil_2coat', quantity: 8 },
+      ],
+      skirtingPricingMode: 'linear_metres',
+      skirtingLinearMetres: 65,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   test('rejects apartment specific-area interior jobs until apartment room policy is defined', () => {
     const result = estimateRequestSchema.safeParse({
       ...basePayload,
@@ -222,6 +277,89 @@ describe('estimateRequestSchema', () => {
     );
   });
 
+  test('rejects specific-area interior jobs with no billable room or trim item', () => {
+    const result = estimateRequestSchema.safeParse({
+      ...basePayload,
+      propertyType: 'House / Townhouse',
+      scopeOfPainting: 'Specific areas only',
+      apartmentStructure: undefined,
+      approxSize: undefined,
+      bedroomCount: undefined,
+      bathroomCount: undefined,
+      paintAreas: {
+        ceilingPaint: false,
+        wallPaint: false,
+        trimPaint: false,
+        ensuitePaint: false,
+      },
+      interiorRooms: [],
+      specificInteriorTrimOnly: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.success ? '' : result.error.flatten().fieldErrors.interiorRooms?.[0]).toBe(
+      'Select at least one interior room, handrail, door, window, or skirting item.'
+    );
+  });
+
+  test('accepts valid trim-only door, window, and skirting specific-area interior jobs', () => {
+    const trimOnlyBase = {
+      ...basePayload,
+      propertyType: 'House / Townhouse',
+      scopeOfPainting: 'Specific areas only' as const,
+      apartmentStructure: undefined,
+      approxSize: undefined,
+      bedroomCount: undefined,
+      bathroomCount: undefined,
+      paintAreas: {
+        ceilingPaint: false,
+        wallPaint: false,
+        trimPaint: false,
+        ensuitePaint: false,
+      },
+      interiorRooms: [],
+      specificInteriorTrimOnly: true,
+    };
+
+    expect(
+      estimateRequestSchema.safeParse({
+        ...trimOnlyBase,
+        trimPaintOptions: {
+          paintType: 'Oil-based',
+          trimItems: ['Doors'],
+        },
+        interiorDoorItems: [
+          { doorType: 'flush', scope: 'Door & Frame', system: 'oil_2coat', quantity: 1 },
+        ],
+      }).success
+    ).toBe(true);
+
+    expect(
+      estimateRequestSchema.safeParse({
+        ...trimOnlyBase,
+        trimPaintOptions: {
+          paintType: 'Oil-based',
+          trimItems: ['Window Frames'],
+        },
+        interiorWindowItems: [
+          { type: 'Normal', scope: 'Window & Frame', system: 'oil_2coat', quantity: 1 },
+        ],
+      }).success
+    ).toBe(true);
+
+    expect(
+      estimateRequestSchema.safeParse({
+        ...trimOnlyBase,
+        trimPaintOptions: {
+          paintType: 'Oil-based',
+          trimItems: ['Skirting Boards'],
+        },
+        skirtingPricingMode: 'linear_metres',
+        skirtingLinearMetres: 12,
+      }).success
+    ).toBe(true);
+  });
+
   test('accepts valid Australian mobile and landline numbers', () => {
     expect(
       estimateRequestSchema.safeParse({
@@ -247,6 +385,32 @@ describe('estimateRequestSchema', () => {
     expect(result.success).toBe(false);
     expect(result.success ? '' : result.error.flatten().fieldErrors.phone?.[0]).toBe(
       'Enter a valid Australian phone number.'
+    );
+  });
+});
+
+describe('estimateSubmissionSchema', () => {
+  test('trims optional estimateId when present', () => {
+    const result = estimateSubmissionSchema.safeParse({
+      idToken: 'token',
+      estimateId: '  estimate-123  ',
+      formData: basePayload,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.success ? result.data.estimateId : '').toBe('estimate-123');
+  });
+
+  test('rejects blank estimateId values', () => {
+    const result = estimateSubmissionSchema.safeParse({
+      idToken: 'token',
+      estimateId: '   ',
+      formData: basePayload,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.success ? '' : result.error.flatten().fieldErrors.estimateId?.[0]).toBe(
+      'Estimate ID is required when provided.'
     );
   });
 });

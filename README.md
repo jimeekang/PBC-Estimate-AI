@@ -6,6 +6,7 @@ Professional painting estimate service using AI, "PBC Estimate AI".
 
 - **AI Estimate Generation**: Accurate price calculation using Genkit and Gemini 2.5 Flash, based on real historical quote data.
 - **Data-Driven Logic**: Specialized pricing for Interior, Exterior, and Combined projects with specific rules for trim types, paint conditions, and difficulty factors.
+- **Trim Quantity Pricing**: Interior entire-property trim uses a dedicated 50% whole-property quantity anchor, while interior specific-area trim keeps the existing item prices. Exterior trim keeps detailed quantity pricing where counts materially affect labour.
 - **Address Autocomplete**: Integrated Australian address suggestion for precise location entry.
 - **Customized Form**: Detailed options for building type, work scope, room types, paint condition, and more.
 - **History Management**: Generated estimate data stored in Firebase Firestore for admin review.
@@ -50,6 +51,12 @@ For Firebase App Check, add a reCAPTCHA v3 site key as `NEXT_PUBLIC_RECAPTCHA_V3
 - Admin accounts: unlimited estimates
 - Promotional extra estimates via coupon or event are only a future option under consideration and are **not part of the confirmed product policy yet**
 - Abuse-prevention rate limits remain separate from the free-estimate quota
+
+## Booking Strategy
+
+- Phase 1 keeps the external Jobber booking URL as the official booking path.
+- The estimate result CTA should push users to book a free site visit in Jobber, where they can choose a date/time and receive Jobber-managed confirmation.
+- Custom Jobber API/OAuth/schedule automation is deferred unless hosted Jobber conversion data proves the extra complexity is needed.
 
 ### 2. Set Admin Permissions
 

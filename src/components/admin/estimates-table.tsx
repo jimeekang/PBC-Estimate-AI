@@ -11,6 +11,10 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { getEstimates } from '@/lib/firebase';
+import {
+  formatEstimatePriceRangeForDisplay,
+  type EstimatePriceDisplayMeta,
+} from '@/lib/estimate-price-display';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -48,6 +52,7 @@ export interface EstimateDocument {
   };
   estimate?: {
     priceRange?: string;
+    pricingMeta?: EstimatePriceDisplayMeta;
   };
   createdAt?: FirestoreTimestampLike;
 }
@@ -303,7 +308,10 @@ export default function EstimatesTable({ estimates: initialEstimates, loading: i
                                     </TableCell>
                                     <TableCell>
                                         <span className="font-semibold text-primary text-sm">
-                                            {estimate.estimate?.priceRange || 'N/A'}
+                                            {formatEstimatePriceRangeForDisplay({
+                                                priceRange: estimate.estimate?.priceRange,
+                                                pricingMeta: estimate.estimate?.pricingMeta,
+                                            })}
                                         </span>
                                     </TableCell>
                                     <TableCell className="text-right text-xs text-muted-foreground">
