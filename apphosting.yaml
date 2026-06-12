@@ -47,7 +47,7 @@ env:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_SITE_URL
-    value: 'https://estimate--studio-5245261553-378c8.us-east4.hosted.app'
+    value: 'https://estimate-ai.paintbuddyco.com.au'
     availability:
       - BUILD
       - RUNTIME
