@@ -508,11 +508,7 @@ export function EstimateResult({
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.35, ease: 'easeOut' }}
-          className="overflow-hidden rounded-2xl shadow-lg"
-          style={{
-            background:
-              'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(209 69% 24%) 100%)',
-          }}
+          className="overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-white shadow-lg"
         >
           <div className="flex flex-col items-start justify-between gap-6 p-6 sm:flex-row sm:items-center sm:p-8">
             <div className="flex-1 space-y-2">
@@ -522,7 +518,7 @@ export function EstimateResult({
                   Best next step: book online for your final quote
                 </h3>
               </div>
-              <p className="max-w-md text-sm text-white/80">
+              <p className="max-w-md text-sm" style={{ color: 'rgba(255, 255, 255, 0.86)' }}>
                 Your AI estimate is a strong price guide. Booking online is the fastest path to a
                 on-site assessment — our painter comes to you, measures up, and gives you a firm
                 written quote.
@@ -541,7 +537,7 @@ export function EstimateResult({
                   <ArrowRight className="h-4 w-4" />
                 </a>
               </Button>
-              <p className="pt-1 text-xs text-white/60">
+              <p className="pt-1 text-xs" style={{ color: 'rgba(255, 255, 255, 0.66)' }}>
                 Takes less than 60 seconds to book online &bull; No obligation
               </p>
             </div>
