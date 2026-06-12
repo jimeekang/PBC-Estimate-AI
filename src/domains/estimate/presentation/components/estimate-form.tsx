@@ -95,6 +95,8 @@ const trimItems = [
   { id: 'Window Frames', label: 'Window Frames', icon: Layout },
   { id: 'Skirting Boards', label: 'Skirting Boards', icon: Baseline },
 ] as const;
+type TrimItemId = (typeof trimItems)[number]['id'];
+const emptyTrimItems: TrimItemId[] = [];
 
 const paintConditionOptions = [
   { id: 'Excellent', label: 'Excellent - Like new, no visible issues' },
@@ -505,7 +507,7 @@ function InteriorDoorTypeSelector({ form }: { form: ReturnType<typeof useForm<Es
             control={form.control}
             name="trimPaintOptions.interiorDoorTypes"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
+              <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
                 <FormControl>
                   <Checkbox
                     checked={field.value?.includes(option.id)}
@@ -556,14 +558,14 @@ function InteriorWindowDetail({ form }: { form: ReturnType<typeof useForm<Estima
       </div>
       <div className="space-y-3">
         {WINDOW_TYPE_OPTIONS.map((type) => (
-          <div key={type} className="space-y-1">
+          <div key={type} className="space-y-1.5 rounded-md border bg-background p-3">
             <div className="text-xs font-semibold text-foreground">{type}</div>
             <div className="grid grid-cols-1 gap-1.5">
               {WINDOW_SCOPES.map((scope) => {
                 const qty = getQty(type, scope);
                 return (
                   <div
-                    key={scope}
+                    key={`${type}-${scope}`}
                     className={cn(
                       'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
                       qty > 0 ? 'border-primary bg-primary/10' : 'bg-background'
@@ -615,6 +617,7 @@ export function EstimateForm() {
   const [isLimitReached, setIsLimitReached] = useState(false);
   const [activeEstimateId, setActiveEstimateId] = useState<string | undefined>();
   const [activeRevision, setActiveRevision] = useState<number | undefined>();
+  const [activeTrimDetail, setActiveTrimDetail] = useState<TrimItemId | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -684,15 +687,6 @@ export function EstimateForm() {
     control: form.control,
     name: 'interiorRooms',
   });
-  const {
-    fields: skirtingCalculatorFields,
-    append: appendSkirtingCalculatorRoom,
-    remove: removeSkirtingCalculatorRoom,
-  } = useFieldArray({
-    control: form.control,
-    name: 'skirtingCalculatorRooms',
-  });
-
   const fetchEstimateCount = useCallback(async (uid: string) => {
     try {
       if (!user || user.uid !== uid) {
@@ -777,7 +771,11 @@ export function EstimateForm() {
   const watchApartmentStructure = useWatch({ control: form.control, name: 'apartmentStructure' });
   const watchTrimPaintType = (useWatch({ control: form.control, name: 'trimPaintOptions.paintType' }) ??
     'Oil-based') as TrimPaintType;
-  const watchSkirtingPricingMode = useWatch({ control: form.control, name: 'skirtingPricingMode' }) ?? 'linear_metres';
+  const watchedTrimItems = useWatch({ control: form.control, name: 'trimPaintOptions.trimItems' });
+  const watchTrimItems = (watchedTrimItems ?? emptyTrimItems) as TrimItemId[];
+  const watchInteriorDoorItems = useWatch({ control: form.control, name: 'interiorDoorItems' }) ?? [];
+  const watchInteriorWindowItems = useWatch({ control: form.control, name: 'interiorWindowItems' }) ?? [];
+  const watchSkirtingLinearMetres = useWatch({ control: form.control, name: 'skirtingLinearMetres' });
   const isApartmentType = watchPropertyType === 'Apartment';
   const shouldShowApproxSize =
     watchScope === 'Entire property' ||
@@ -792,6 +790,20 @@ export function EstimateForm() {
   );
   const handrailRoomIndex = fields.findIndex((f) => f.roomName === 'Handrail');
   const isWholePropertyHandrailSelected = watchScope === 'Entire property' && handrailRoomIndex > -1;
+  const selectedTrimItems = trimItems.filter((item) => watchTrimItems.includes(item.id));
+  const doorQuantityTotal = watchInteriorDoorItems.reduce((total, item) => total + (item.quantity ?? 0), 0);
+  const windowQuantityTotal = watchInteriorWindowItems.reduce((total, item) => total + (item.quantity ?? 0), 0);
+  const activeTrimItem = trimItems.find((item) => item.id === activeTrimDetail);
+  const getTrimSummary = (trimId: TrimItemId) => {
+    if (!watchTrimItems.includes(trimId)) return 'Not selected';
+    if (trimId === 'Doors') return doorQuantityTotal > 0 ? `${doorQuantityTotal} items` : 'Add quantity';
+    if (trimId === 'Window Frames') {
+      return windowQuantityTotal > 0 ? `${windowQuantityTotal} items` : 'Add quantity';
+    }
+    return typeof watchSkirtingLinearMetres === 'number' && watchSkirtingLinearMetres > 0
+      ? `${Number(watchSkirtingLinearMetres.toFixed(1))} lm`
+      : 'Add length';
+  };
 
   const hasAnyRoomTrim = watchInteriorRooms?.some((r) => r.paintAreas?.trimPaint);
   const hasAnyRoomCeiling = watchInteriorRooms?.some((r) => r.paintAreas?.ceilingPaint);
@@ -805,6 +817,27 @@ const showCeilingOptions =
   isInterior &&
   ((watchScope === 'Entire property' && watchGlobalCeilingPaint) ||
     (watchScope === 'Specific areas only' && hasAnyRoomCeiling));
+
+  useEffect(() => {
+    if (watchTrimItems.length === 0) {
+      if (activeTrimDetail !== null) setActiveTrimDetail(null);
+      return;
+    }
+
+    if (!activeTrimDetail || !watchTrimItems.includes(activeTrimDetail)) {
+      setActiveTrimDetail(watchTrimItems[0]);
+    }
+  }, [activeTrimDetail, watchTrimItems]);
+
+  useEffect(() => {
+    if (!watchTrimItems.includes('Skirting Boards')) return;
+    if (form.getValues('skirtingPricingMode') !== 'linear_metres') {
+      form.setValue('skirtingPricingMode', 'linear_metres', { shouldDirty: true });
+    }
+    if ((form.getValues('skirtingCalculatorRooms') ?? []).length > 0) {
+      form.setValue('skirtingCalculatorRooms', [], { shouldDirty: true });
+    }
+  }, [form, watchTrimItems]);
 
   useEffect(() => {
     if (!isInterior || !isApartmentType || watchScope !== 'Specific areas only') return;
@@ -1112,16 +1145,6 @@ const showCeilingOptions =
     setIsPending(false);
   }
 
-  const handleEditGeneratedEstimate = () => {
-    setState((prev) => ({ ...prev, data: undefined, error: undefined }));
-    setCurrentStep(0);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleRegenerateEstimate = () => {
-    void form.handleSubmit(onSubmit, onInvalid)();
-  };
-
   function onInvalid(errors: FieldErrors<EstimateFormValues>) {
     // Find the first step that has an error and navigate there
     for (const [stepIdx, stepFields] of Object.entries(STEP_FIELDS)) {
@@ -1156,6 +1179,11 @@ const showCeilingOptions =
     ) => (errors[fieldName] as { message?: string } | undefined)?.message;
     const doorItemError = (errors.interiorDoorItems as { message?: string } | undefined)?.message;
     const windowItemError = (errors.interiorWindowItems as { message?: string } | undefined)?.message;
+    if (doorItemError) setActiveTrimDetail('Doors');
+    if (windowItemError) setActiveTrimDetail('Window Frames');
+    if (errors.skirtingLinearMetres || errors.skirtingCalculatorRooms) {
+      setActiveTrimDetail('Skirting Boards');
+    }
     const prioritizedMessage =
       directFieldMessage('typeOfWork') ??
       directFieldMessage('exteriorAreas') ??
@@ -1242,12 +1270,13 @@ const showCeilingOptions =
                     <React.Fragment key={step.id}>
                       <button
                         type="button"
+                        aria-label={step.label}
                         onClick={() => {
                           if (isCompleted) setCurrentStep(idx);
                         }}
                         disabled={!isCompleted}
                         className={cn(
-                          'flex flex-col items-center gap-1 transition-colors',
+                          'flex h-8 w-8 shrink-0 items-center justify-center transition-colors',
                           isCompleted ? 'cursor-pointer' : 'cursor-default'
                         )}
                       >
@@ -1261,7 +1290,7 @@ const showCeilingOptions =
                           {isCompleted ? <Check className="h-4 w-4" /> : idx + 1}
                         </div>
                         <span className={cn(
-                          'text-[10px] font-medium hidden sm:block',
+                          'sr-only',
                           isActive ? 'text-primary' :
                           isSkipped ? 'text-muted-foreground/40' :
                           'text-muted-foreground'
@@ -1305,7 +1334,7 @@ const showCeilingOptions =
                 <span>Job Details</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-8">
+            <CardContent className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-8">
               <FormField
                 control={form.control}
                 name="propertyType"
@@ -1398,19 +1427,19 @@ const showCeilingOptions =
                               defaultValue={field.value}
                               className="flex flex-col sm:flex-row gap-4 sm:gap-8"
                             >
-                              <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormItem className="flex items-center gap-3 space-y-0">
                                 <FormControl>
                                   <RadioGroupItem value="1 storey" />
                                 </FormControl>
                                 <FormLabel className="font-normal cursor-pointer">1 storey</FormLabel>
                               </FormItem>
-                              <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormItem className="flex items-center gap-3 space-y-0">
                                 <FormControl>
                                   <RadioGroupItem value="2 storey" />
                                 </FormControl>
                                 <FormLabel className="font-normal cursor-pointer">2 storey</FormLabel>
                               </FormItem>
-                              <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormItem className="flex items-center gap-3 space-y-0">
                                 <FormControl>
                                   <RadioGroupItem value="3 storey" />
                                 </FormControl>
@@ -1439,7 +1468,7 @@ const showCeilingOptions =
                           control={form.control}
                           name="typeOfWork"
                           render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                            <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
                               <FormControl>
                                 <Checkbox
                                   checked={field.value?.includes(item.id)}
@@ -1475,13 +1504,13 @@ const showCeilingOptions =
                         defaultValue={field.value}
                         className="flex flex-col sm:flex-row gap-4 sm:gap-8"
                       >
-                        <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormItem className="flex items-center gap-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value="Entire property" />
                           </FormControl>
                           <FormLabel className="font-normal cursor-pointer">Entire property</FormLabel>
                         </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormItem className="flex items-center gap-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value="Specific areas only" disabled={isInterior && isApartmentType} />
                           </FormControl>
@@ -1592,7 +1621,7 @@ const showCeilingOptions =
                   control={form.control}
                   name="paintAreas.ceilingPaint"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                    <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
                       <FormControl>
                         <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
@@ -1608,7 +1637,7 @@ const showCeilingOptions =
                   control={form.control}
                   name="paintAreas.wallPaint"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                    <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
                       <FormControl>
                         <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
@@ -1624,7 +1653,7 @@ const showCeilingOptions =
                   control={form.control}
                   name="paintAreas.trimPaint"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                    <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
                       <FormControl>
                         <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
@@ -1840,7 +1869,7 @@ const showCeilingOptions =
                   control={form.control}
                   name="paintAreas.ceilingPaint"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                    <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
                       <FormControl>
                         <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
@@ -1856,7 +1885,7 @@ const showCeilingOptions =
                   control={form.control}
                   name="paintAreas.wallPaint"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                    <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
                       <FormControl>
                         <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
@@ -1872,7 +1901,7 @@ const showCeilingOptions =
                   control={form.control}
                   name="paintAreas.trimPaint"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
+                    <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md p-4 hover:bg-accent/50 transition-colors">
                       <FormControl>
                         <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
@@ -2295,13 +2324,13 @@ const showCeilingOptions =
                   <FormItem className="space-y-3">
                     <FormControl>
                       <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4">
-                        <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormItem className="flex items-center gap-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value="Flat" />
                           </FormControl>
                           <FormLabel className="font-normal cursor-pointer">Flat ceiling (standard)</FormLabel>
                         </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormItem className="flex items-center gap-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value="Decorative" />
                           </FormControl>
@@ -2341,13 +2370,13 @@ const showCeilingOptions =
                   <FormItem className="space-y-3">
                     <FormControl>
                       <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row gap-4">
-                        <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormItem className="flex items-center gap-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value="Oil-based" />
                           </FormControl>
                           <FormLabel className="font-normal cursor-pointer">Oil</FormLabel>
                         </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormItem className="flex items-center gap-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value="Water-based" />
                           </FormControl>
@@ -2358,257 +2387,182 @@ const showCeilingOptions =
                   </FormItem>
                 )}
               />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
-                {trimItems.map((item) => (
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  {trimItems.map((item) => {
+                    const isSelected = watchTrimItems.includes(item.id);
+                    const isActive = activeTrimDetail === item.id;
+
+                    return (
+                      <FormField
+                        key={item.id}
+                        control={form.control}
+                        name="trimPaintOptions.trimItems"
+                        render={({ field }) => (
+                          <FormItem
+                            className={cn(
+                              'flex flex-row items-center gap-3 space-y-0 rounded-lg border bg-background p-3 transition-colors',
+                              isSelected && 'border-primary/40 bg-primary/[0.04]',
+                              isActive && 'border-primary bg-primary/10 shadow-sm'
+                            )}
+                          >
+                            <FormControl>
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    if (
+                                      (item.id === 'Doors' || item.id === 'Window Frames') &&
+                                      watchScope === 'Specific areas only' &&
+                                      !watchSpecificTrimOnly &&
+                                      !ensureTrimEnabledForSpecificRoom()
+                                    ) {
+                                      toast({
+                                        variant: 'destructive',
+                                        title: 'Select trim for a room first',
+                                        description:
+                                          `Turn on trim for the room(s) where ${item.label} applies, or use Trim-only mode.`,
+                                      });
+                                      return;
+                                    }
+
+                                    field.onChange([...(field.value || []), item.id]);
+                                    setActiveTrimDetail(item.id);
+                                    return;
+                                  }
+
+                                  field.onChange(field.value?.filter((value) => value !== item.id));
+                                  if (item.id === 'Window Frames') form.setValue('trimPaintOptions.interiorWindowFrameTypes', []);
+                                  if (item.id === 'Window Frames') form.setValue('interiorWindowItems', []);
+                                  if (item.id === 'Doors') form.setValue('trimPaintOptions.interiorDoorTypes', []);
+                                  if (item.id === 'Doors') form.setValue('interiorDoorItems', []);
+                                  if (item.id === 'Skirting Boards') {
+                                    form.setValue('skirtingLinearMetres', undefined, { shouldDirty: true });
+                                    form.setValue('skirtingCalculatorRooms', [], { shouldDirty: true });
+                                    form.setValue('skirtingPricingMode', 'linear_metres', { shouldDirty: true });
+                                  }
+                                }}
+                              />
+                            </FormControl>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) setActiveTrimDetail(item.id);
+                              }}
+                              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+                            >
+                              <span className="flex min-w-0 items-center gap-2 text-xs font-medium">
+                                <item.icon className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{item.label}</span>
+                              </span>
+                              <span
+                                className={cn(
+                                  'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                                  isSelected ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                                )}
+                              >
+                                {getTrimSummary(item.id)}
+                              </span>
+                            </button>
+                          </FormItem>
+                        )}
+                      />
+                    );
+                  })}
                   <FormField
-                    key={item.id}
                     control={form.control}
                     name="trimPaintOptions.trimItems"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value?.includes(item.id)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                if (
-                                  (item.id === 'Doors' || item.id === 'Window Frames') &&
-                                  watchScope === 'Specific areas only' &&
-                                  !watchSpecificTrimOnly &&
-                                  !ensureTrimEnabledForSpecificRoom()
-                                ) {
-                                  toast({
-                                    variant: 'destructive',
-                                    title: 'Select trim for a room first',
-                                    description:
-                                      `Turn on trim for the room(s) where ${item.label} applies, or use Trim-only mode.`,
-                                  });
-                                  return;
-                                }
-
-                                field.onChange([...(field.value || []), item.id]);
-                                return;
-                              }
-
-                              field.onChange(field.value?.filter((value) => value !== item.id));
-                              if (item.id === 'Window Frames') form.setValue('trimPaintOptions.interiorWindowFrameTypes', []);
-                              if (item.id === 'Window Frames') form.setValue('interiorWindowItems', []);
-                              if (item.id === 'Doors') form.setValue('trimPaintOptions.interiorDoorTypes', []);
-                              if (item.id === 'Doors') form.setValue('interiorDoorItems', []);
-                              if (item.id === 'Skirting Boards') {
-                                form.setValue('skirtingLinearMetres', undefined, { shouldDirty: true });
-                                form.setValue('skirtingCalculatorRooms', [], { shouldDirty: true });
-                                form.setValue('skirtingPricingMode', 'linear_metres', { shouldDirty: true });
-                              }
-                            }}
-                          />
-                        </FormControl>
-                        <FormLabel className="font-normal flex items-center gap-2 cursor-pointer text-xs">
-                          <item.icon className="h-3.5 w-3.5" /> {item.label}
-                        </FormLabel>
-                      </FormItem>
-                    )}
+                    render={() => <FormMessage />}
                   />
-                ))}
-              </div>
-               <FormField
-                 control={form.control}
-                 name="trimPaintOptions.trimItems"
-                 render={() => <FormMessage />}
-              />
+                </div>
 
-              {form.watch('trimPaintOptions.trimItems')?.includes('Skirting Boards') &&
+                <div className="min-h-[220px] max-h-[620px] overflow-y-auto rounded-xl border bg-background p-4 shadow-sm">
+                  {selectedTrimItems.length === 0 ? (
+                    <div className="flex h-full min-h-[180px] items-center justify-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                      Select a trim item to configure quantities.
+                    </div>
+                  ) : (
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          {activeTrimItem ? activeTrimItem.label : 'Trim details'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Configure one selected trim item at a time.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedTrimItems.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setActiveTrimDetail(item.id)}
+                            className={cn(
+                              'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                              activeTrimDetail === item.id
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'bg-background text-muted-foreground hover:bg-accent'
+                            )}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+              {activeTrimDetail === 'Skirting Boards' &&
+                watchTrimItems.includes('Skirting Boards') &&
                 (watchScope === 'Entire property' ||
                   (watchScope === 'Specific areas only' && watchSpecificTrimOnly)) && (
                   <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-4 space-y-4">
                     <div className="space-y-1">
                       <div className="text-xs font-semibold text-primary">Skirting Boards</div>
-                      <p className="text-xs text-muted-foreground">
-                        Enter either the total linear metres or use the quick room calculator to estimate skirting length.
-                      </p>
                     </div>
 
                     <FormField
                       control={form.control}
-                      name="skirtingPricingMode"
+                      name="skirtingLinearMetres"
                       render={({ field }) => (
-                        <FormItem className="space-y-3">
+                        <FormItem>
+                          <FormLabel>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted underline-offset-2">Total Skirting Length (lm)</span>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[220px] text-xs">
+                                Total running length of skirting boards along the base of all walls.
+                              </TooltipContent>
+                            </Tooltip>
+                          </FormLabel>
                           <FormControl>
-                            <RadioGroup
-                              onValueChange={field.onChange}
-                              value={field.value ?? 'linear_metres'}
-                              className="flex flex-col sm:flex-row gap-4"
-                            >
-                              <FormItem className="flex items-center space-x-3 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="linear_metres" />
-                                </FormControl>
-                                <FormLabel className="font-normal cursor-pointer">Linear metres (Recommended)</FormLabel>
-                              </FormItem>
-                              <FormItem className="flex items-center space-x-3 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="room_calculator" />
-                                </FormControl>
-                                <FormLabel className="font-normal cursor-pointer">Quick room calculator</FormLabel>
-                              </FormItem>
-                            </RadioGroup>
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              min="1"
+                              max="500"
+                              step="0.5"
+                              placeholder="e.g. 45"
+                              onKeyDown={preventInvalidChars}
+                              onPaste={preventInvalidPaste}
+                              onWheel={(e) => e.currentTarget.blur()}
+                              {...field}
+                              value={field.value ?? ''}
+                              onChange={(e) =>
+                                field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))
+                              }
+                            />
                           </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
-
-                    {watchSkirtingPricingMode === 'linear_metres' ? (
-                      <FormField
-                        control={form.control}
-                        name="skirtingLinearMetres"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="cursor-help underline decoration-dotted underline-offset-2">Total Skirting Length (lm)</span>
-                                </TooltipTrigger>
-                                <TooltipContent side="right" className="max-w-[220px] text-xs">
-                                  Total running length of skirting boards along the base of all walls.
-                                </TooltipContent>
-                              </Tooltip>
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                inputMode="decimal"
-                                min="1"
-                                max="500"
-                                step="0.5"
-                                placeholder="e.g. 45"
-                                onKeyDown={preventInvalidChars}
-                                onPaste={preventInvalidPaste}
-                                onWheel={(e) => e.currentTarget.blur()}
-                                {...field}
-                                value={field.value ?? ''}
-                                onChange={(e) =>
-                                  field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))
-                                }
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs font-medium text-muted-foreground">
-                            Add rooms to estimate skirting length from room dimensions.
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => appendSkirtingCalculatorRoom({ label: '', length: undefined, width: undefined })}
-                          >
-                            Add Room
-                          </Button>
-                        </div>
-
-                        {skirtingCalculatorFields.length === 0 && (
-                          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                            No rooms added yet.
-                          </div>
-                        )}
-
-                        <div className="space-y-3">
-                          {skirtingCalculatorFields.map((field, index) => (
-                            <div key={field.id} className="rounded-md border bg-background p-3 space-y-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <Input
-                                  placeholder="Room label (optional)"
-                                  className="h-8 text-xs"
-                                  {...form.register(`skirtingCalculatorRooms.${index}.label` as const)}
-                                />
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => removeSkirtingCalculatorRoom(index)}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <FormField
-                                  control={form.control}
-                                  name={`skirtingCalculatorRooms.${index}.length`}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs">Length (m)</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          type="number"
-                                          inputMode="decimal"
-                                          min="0.5"
-                                          max="50"
-                                          step="0.1"
-                                          placeholder="e.g. 4.5"
-                                          onKeyDown={preventInvalidChars}
-                                          onPaste={preventInvalidPaste}
-                                          onWheel={(e) => e.currentTarget.blur()}
-                                          {...field}
-                                          value={field.value ?? ''}
-                                          onChange={(e) =>
-                                            field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </FormControl>
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={form.control}
-                                  name={`skirtingCalculatorRooms.${index}.width`}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs">Width (m)</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          type="number"
-                                          inputMode="decimal"
-                                          min="0.5"
-                                          max="50"
-                                          step="0.1"
-                                          placeholder="e.g. 4.5"
-                                          onKeyDown={preventInvalidChars}
-                                          onPaste={preventInvalidPaste}
-                                          onWheel={(e) => e.currentTarget.blur()}
-                                          {...field}
-                                          value={field.value ?? ''}
-                                          onChange={(e) =>
-                                            field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </FormControl>
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <FormField
-                          control={form.control}
-                          name="skirtingLinearMetres"
-                          render={() => <FormMessage />}
-                        />
-                      </div>
-                    )}
                   </div>
                 )}
 
               {/* Interior door item pricing */}
-              {form.watch('trimPaintOptions.trimItems')?.includes('Doors') &&
+              {activeTrimDetail === 'Doors' &&
+                watchTrimItems.includes('Doors') &&
                 (watchScope === 'Entire property' || watchScope === 'Specific areas only' ? (
                   <InteriorDoorDetail form={form} />
                 ) : (
@@ -2620,7 +2574,8 @@ const showCeilingOptions =
                 render={() => <FormMessage />}
               />
 
-              {form.watch('trimPaintOptions.trimItems')?.includes('Window Frames') &&
+              {activeTrimDetail === 'Window Frames' &&
+                watchTrimItems.includes('Window Frames') &&
                 (watchScope === 'Entire property' || watchScope === 'Specific areas only' ? (
                   <InteriorWindowDetail form={form} />
                 ) : (
@@ -2636,7 +2591,7 @@ const showCeilingOptions =
                           control={form.control}
                           name="trimPaintOptions.interiorWindowFrameTypes"
                           render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
+                            <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md border bg-background p-3 has-[:checked]:bg-primary/10 transition-colors">
                               <FormControl>
                                 <Checkbox
                                   checked={field.value?.includes(type)}
@@ -2662,6 +2617,8 @@ const showCeilingOptions =
                 name="interiorWindowItems"
                 render={() => <FormMessage />}
               />
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -3308,13 +3265,13 @@ const showCeilingOptions =
                     <FormLabel>Why are you painting?</FormLabel>
                     <FormControl>
                       <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                        <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormItem className="flex items-center gap-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value="Maintenance or refresh" />
                           </FormControl>
                           <FormLabel className="font-normal cursor-pointer">Maintenance or refresh</FormLabel>
                         </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormItem className="flex items-center gap-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value="Preparing for sale or rental" />
                           </FormControl>
@@ -3337,7 +3294,7 @@ const showCeilingOptions =
                     <FormControl>
                       <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
                         {paintConditionOptions.map((option) => (
-                          <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
+                          <FormItem key={option.id} className="flex items-center gap-3 space-y-0">
                             <FormControl>
                               <RadioGroupItem value={option.id} />
                             </FormControl>
@@ -3368,7 +3325,7 @@ const showCeilingOptions =
                           control={form.control}
                           name="jobDifficulty"
                           render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
+                            <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-md border p-4 has-[:checked]:bg-primary/10 has-[:checked]:border-primary transition-colors">
                               <FormControl>
                                 <Checkbox
                                   checked={field.value?.includes(item.id)}
@@ -3486,13 +3443,13 @@ const showCeilingOptions =
           </AnimatePresence>
 
           {/* Wizard Navigation */}
-          <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex flex-col justify-between gap-3 border-t pt-4 sm:flex-row sm:items-start">
             <Button
               type="button"
               variant="outline"
               onClick={goBack}
               disabled={activeSteps.indexOf(currentStep) === 0}
-              className="gap-2"
+              className="w-full gap-2 sm:w-auto"
             >
               ← Back
             </Button>
@@ -3506,13 +3463,13 @@ const showCeilingOptions =
                 Next →
               </Button>
             ) : (
-              <div className="space-y-4 flex-1 ml-4">
+              <div className="w-full space-y-4 sm:ml-4 sm:flex-1">
                 {!activeEstimateId && isLimitReached && !isAdmin ? (
                   <a
                     href={BOOKING_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-0 text-lg font-bold text-primary-foreground shadow-lg transition-all h-14 hover:bg-primary/90"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-base font-bold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 sm:ml-auto sm:w-auto sm:min-w-[280px]"
                   >
                     <CalendarCheck className="h-6 w-6" />
                     Book Online for Final Quote
@@ -3522,30 +3479,30 @@ const showCeilingOptions =
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full text-lg h-14"
+                    className="h-12 w-full text-base sm:ml-auto sm:w-auto sm:min-w-[280px]"
                     disabled={isPending || isCountLoading}
                   >
                     {isPending ? (
                       <>
-                        <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                         Generating Estimate…
                       </>
                     ) : isCountLoading ? (
                       <>
-                        <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                         Loading…
                       </>
                     ) : (
                       <>
-                        <WandSparkles className="mr-2 h-6 w-6" />
+                        <WandSparkles className="mr-2 h-5 w-5" />
                         {activeEstimateId ? 'Update AI Estimate' : 'Generate AI Estimate'}
                       </>
                     )}
                   </Button>
                 )}
 
-                <div className="text-center p-6 rounded-xl border-2 border-primary/20 bg-primary/5 shadow-sm space-y-2">
-                  <p className="text-base font-medium flex items-center justify-center gap-2 flex-wrap">
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-center shadow-sm">
+                  <p className="flex flex-wrap items-center justify-center gap-2 text-sm font-medium sm:text-base">
                     <Calendar className="h-5 w-5 text-primary" />
                     <span>Need a firm written quote instead?</span>
                     <a
@@ -3598,10 +3555,6 @@ const showCeilingOptions =
         <EstimateResult
           result={state.data}
           pdfMeta={state.pdfMeta}
-          revision={activeRevision}
-          onEdit={handleEditGeneratedEstimate}
-          onRegenerate={handleRegenerateEstimate}
-          isRegenerating={isPending}
         />
       )}
     </TooltipProvider>

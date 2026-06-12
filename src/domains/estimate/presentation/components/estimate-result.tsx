@@ -4,7 +4,7 @@ import Image from 'next/image';
 import type { GeneratePaintingEstimateOutput } from '@/domains/estimate/application/generation/generate-painting-estimate';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { CheckCircle, DollarSign, Download, Home, Loader2, TreePine, Info, CalendarCheck, ArrowRight, Pencil, RefreshCw } from 'lucide-react';
+import { CheckCircle, DollarSign, Download, Home, Loader2, TreePine, Info, CalendarCheck, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useRef, useState } from 'react';
@@ -29,10 +29,6 @@ export interface EstimatePdfMeta {
 interface EstimateResultProps {
   result: GeneratePaintingEstimateOutput;
   pdfMeta?: EstimatePdfMeta;
-  revision?: number;
-  onEdit?: () => void;
-  onRegenerate?: () => void;
-  isRegenerating?: boolean;
   isExample?: boolean;
 }
 
@@ -423,10 +419,6 @@ function EstimateCard({
 export function EstimateResult({
   result,
   pdfMeta,
-  revision,
-  onEdit,
-  onRegenerate,
-  isRegenerating = false,
   isExample = false,
 }: EstimateResultProps) {
   const exportRef = useRef<HTMLDivElement>(null);
@@ -494,35 +486,6 @@ export function EstimateResult({
         <EstimateCard result={result} mode="screen" pdfMeta={pdfMeta} isExample={isExample} />
 
         <div className="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
-          {onEdit && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onEdit}
-              className="w-full sm:w-auto"
-            >
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit Details
-            </Button>
-          )}
-          {onRegenerate && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onRegenerate}
-              disabled={isRegenerating}
-              className="w-full sm:w-auto"
-            >
-              {isRegenerating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              {revision && revision > 1 ? `Regenerate v${revision + 1}` : 'Regenerate'}
-            </Button>
-          )}
           <Button
             type="button"
             variant="outline"
@@ -545,7 +508,11 @@ export function EstimateResult({
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.35, ease: 'easeOut' }}
-          className="overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-primary/80 shadow-lg"
+          className="overflow-hidden rounded-2xl shadow-lg"
+          style={{
+            background:
+              'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(209 69% 24%) 100%)',
+          }}
         >
           <div className="flex flex-col items-start justify-between gap-6 p-6 sm:flex-row sm:items-center sm:p-8">
             <div className="flex-1 space-y-2">
@@ -598,7 +565,11 @@ export function EstimateResult({
         </motion.div>
       </motion.div>
 
-      <div className="pointer-events-none fixed left-[-99999px] top-0">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed top-0 overflow-hidden"
+        style={{ left: '-10000px', width: 794 }}
+      >
         <div ref={exportRef}>
           <EstimateCard result={result} mode="pdf" pdfMeta={pdfMeta} isExample={isExample} />
         </div>

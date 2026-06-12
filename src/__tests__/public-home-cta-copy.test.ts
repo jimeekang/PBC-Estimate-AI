@@ -25,15 +25,12 @@ describe('public home CTA and example estimate copy', () => {
     expect(homePageSource).not.toContain('href="#quick-price-guide"');
   });
 
-  it('keeps the example quick price guide on the public home page', () => {
+  it('does not render the example quick price guide on the public home page', () => {
     const homePageSource = readProjectFile('src/app/(public)/page.tsx');
 
-    const quickGuideStart = homePageSource.indexOf('<section id="quick-price-guide"');
-    const marketingStart = homePageSource.indexOf('{/* Marketing use cases */}');
-    expect(quickGuideStart).toBeGreaterThanOrEqual(0);
-    expect(marketingStart).toBeGreaterThan(quickGuideStart);
-    const quickGuideSection = homePageSource.slice(quickGuideStart, marketingStart);
-    expect(quickGuideSection).toContain('<LiteEstimateForm />');
+    expect(homePageSource).not.toContain('<section id="quick-price-guide"');
+    expect(homePageSource).not.toContain('<LiteEstimateForm />');
+    expect(homePageSource).not.toContain('lite-estimate-form');
   });
 
   it('marks quick price guide screen and PDF output as an example', () => {

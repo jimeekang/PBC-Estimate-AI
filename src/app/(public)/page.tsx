@@ -1,6 +1,5 @@
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { LiteEstimateForm } from '@/domains/estimate/presentation/components/lite-estimate-form';
 import { PublicAuthRedirect } from '@/components/public-auth-redirect';
 import {
   ArrowRight,
@@ -180,12 +179,6 @@ export default function HomePage() {
         <p className="mt-3 text-sm font-medium text-primary/80">
           Booking online is the fastest way to move from price guide to final written quote.
         </p>
-      </section>
-
-      <section id="quick-price-guide" className="scroll-mt-8 px-4 pb-20">
-        <div className="mx-auto max-w-4xl">
-          <LiteEstimateForm />
-        </div>
       </section>
 
       {/* Marketing use cases */}
