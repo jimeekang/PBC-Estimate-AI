@@ -4,13 +4,13 @@ Professional painting estimate service using AI, "PBC Estimate AI".
 
 ## Key Features
 
-- **AI Estimate Generation**: Accurate price calculation using Genkit and Gemini 2.5 Flash, based on real historical quote data.
+- **AI Estimate Generation**: Accurate price calculation using Genkit and Gemini 2.5 Flash, based on real historical quote data. Pricing is 100% deterministic; the AI produces only the natural-language explanation.
 - **Data-Driven Logic**: Specialized pricing for Interior, Exterior, and Combined projects with specific rules for trim types, paint conditions, and difficulty factors.
 - **Trim Quantity Pricing**: Interior entire-property trim uses a dedicated 50% whole-property quantity anchor, while interior specific-area trim keeps the existing item prices. Exterior trim keeps detailed quantity pricing where counts materially affect labour.
 - **Address Autocomplete**: Integrated Australian address suggestion for precise location entry.
 - **Customized Form**: Detailed options for building type, work scope, room types, paint condition, and more.
 - **History Management**: Generated estimate data stored in Firebase Firestore for admin review.
-- **Authentication System**: Secure user management via Firebase Auth (Google Login and Email verification).
+- **Authentication System**: Secure user management via Firebase Auth — **Email/Password login (with email verification) and Google login**.
 
 ## Tech Stack
 
@@ -30,6 +30,17 @@ Estimate-specific code is organized as a DDD bounded context in `src/domains/est
 - `presentation/components`: estimate form, result view, and public quick-guide form.
 
 Legacy paths such as `src/lib/pricing-engine.ts`, `src/schemas/estimate-request.ts`, `src/ai/flows/generate-painting-estimate.ts`, and `src/components/estimate/estimate-form.tsx` are compatibility wrappers.
+
+## Pricing Caps (source of truth: `pricing-engine.ts`)
+
+Price ranges and totals are bounded in `src/domains/estimate/domain/pricing/pricing-engine.ts`. The range-width caps below reflect the current `capRangeWidthSmart` implementation (see ARCHITECTURE.md §3 for the full breakdown).
+
+- **Project cap**: `MAX_PRICE_CAP = 35000` normally. The single exception is **3-storey full-exterior projects**, which raise the exterior project ceiling to `EXTERIOR_FULL_PROJECT_CEILING = 55000` via `getExteriorProjectCap`.
+- **Policy note**: The combined `total` is intended never to exceed 35000, but the current code has a path that can breach this when Interior + Exterior are summed (audit finding **F1**, fix pending). See `docs/audit/`.
+
+## Audit
+
+The latest full audit (2026-07-09) index lives at [`docs/audit/README.md`](docs/audit/README.md).
 
 ## Getting Started
 
