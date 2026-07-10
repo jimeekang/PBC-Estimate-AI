@@ -13,6 +13,20 @@ Stack: Next.js + Firebase + GenKit AI. Market: Sydney Northern Beaches (2026).
 
 ---
 
+## Model Routing (모델 라우팅 정책)
+
+작업 성격에 따라 담당 모델을 분리한다:
+
+| 작업 유형 | 담당 모델 | Reasoning |
+|---|---|---|
+| 계획·기획·디자인·문서 작업·아이디어 등 코딩 외 작업 | Claude Opus 4.8 | extra (최고 추론) |
+| 코딩·git·데이터베이스 등 모든 구현 작업 | Codex GPT-5.5 | high |
+
+- 실제 코드/파일 구현·커밋·마이그레이션은 Codex 세션(`.codex/AGENTS.md` 참조)이 수행한다.
+- Claude는 분석·설계·문서 개정안까지 산출하고, 최종 코드 반영은 Codex/오케스트레이터가 담당한다.
+
+---
+
 ## Domain Rules (파일 참조)
 
 작업 도메인에 따라 아래 파일을 읽고 규칙을 적용할 것:
@@ -48,3 +62,9 @@ Stack: Next.js + Firebase + GenKit AI. Market: Sydney Northern Beaches (2026).
 - `src/domains/estimate/presentation/components/` → `frontend-senior-dev`. 스키마 변경 시 `firebase-backend-dev` 리뷰 필요.
 - `src/app/estimate/actions.ts` → `firebase-backend-dev`. 비율 제한, Firestore 쓰기, 인증 포함.
 - `src/lib`, `src/schemas`, `src/ai/flows`, `src/components/estimate`의 estimate 관련 파일은 호환 wrapper만 둔다. 새 estimate 코드는 `src/domains/estimate`를 직접 import한다.
+
+---
+
+## Audit
+
+- 최신 전체 감사 리포트 인덱스: [`docs/audit/README.md`](docs/audit/README.md) (2026-07-09).

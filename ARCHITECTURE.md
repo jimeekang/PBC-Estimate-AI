@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
 > PBC Estimate AI — System Architecture
-> Last updated: 2026-06-05
+> Last updated: 2026-07-10
 
 ---
 
@@ -11,7 +11,7 @@
 |-------|-----------|
 | Framework | Next.js 16 (App Router, TypeScript) |
 | AI | Genkit + Google Generative AI (Gemini 2.5 Flash) |
-| Auth | Firebase Authentication (Google + Email/Password) |
+| Auth | Firebase Authentication (Email/Password + Google login) |
 | Database | Cloud Firestore |
 | Storage | Firebase Storage (estimate photos) |
 | Security | App Check (reCAPTCHA v3), Admin custom claims |
@@ -169,9 +169,9 @@ Server Action (src/app/estimate/actions.ts)
         │
         ▼
       Estimate Result page (price range + AI explanation)
-        â”‚
-        â””â”€ Booking CTA â”€â”€â†’ External Jobber booking URL
-              â””â”€ Customer chooses date/time in Jobber
+        │
+        └─ Booking CTA ──→ External Jobber booking URL
+              └─ Customer chooses date/time in Jobber
 ```
 
 ---
@@ -191,27 +191,52 @@ Server Action (src/app/estimate/actions.ts)
 - **Exterior trim**: Keep detailed exterior trim quantities for full/exterior scopes because exterior door, window, architrave, and front door counts materially affect labour. Fall back to the standard exterior trim allowance only when detailed quantities are not supplied.
 
 ### 3. Range Width Caps
-Price ranges are dynamically capped to prevent unrealistically wide spreads:
-- Interior/Total: $0~5k→$1,200 cap / $5k~10k→$1,800 / $10k~18k→$2,500 / $18k+→$3,500
-- Exterior: $0~10k→$800 / $10k~20k→$1,500 / $20k+→$2,500
+> **Source of truth**: `capRangeWidthSmart` in `pricing-engine.ts` (≈ L795–852). The tiers below are transcribed directly from the current code. Thresholds compare against `minVal`.
 
-### 4. Overlap Control
+Price ranges are dynamically capped to prevent unrealistically wide spreads. The cap depends on the `context` (`'interior'` | `'exterior'` | `'total'`):
+
+| Context | Tier (by `minVal`) | Cap |
+|---|---|---|
+| **interior** (default) | `≤ 5000` | 1,200 |
+| | `> 5000` | 1,500 |
+| **exterior** | `≤ 3000` | 1,000 |
+| | `≤ 8000` | 1,800 |
+| | `≤ 10000` | 1,750 |
+| | `> 10000` | 2,000 |
+| **total** | `≤ 5000` | 1,200 |
+| | `≤ 12000` | 1,700 |
+| | `≤ 20000` | 2,200 |
+| | `> 20000` | 3,000 |
+
+Cap multipliers/floors applied after the base tier:
+- `paintCondition === 'Poor'` → cap × 1.5
+- Interior with ≥ 2 `jobDifficulty` flags (non-exterior) → cap × 1.4
+- `total` context only → cap floored at the deck accessory range width (`deckTail`) so a priced deck range is not flattened
+- Final cap is rounded; if the actual gap ≤ cap the original range is returned, otherwise `max = min + cap`.
+
+### 4. Project Price Ceiling
+- **`MAX_PRICE_CAP = 35000`** — the standard hard ceiling for a project total.
+- **`EXTERIOR_FULL_PROJECT_CEILING = 55000`** — a single exception applied **only** to **3-storey full-exterior scope** projects (Wall + Eaves + Gutter + Fascia + Exterior Trim), selected via `getExteriorProjectCap(...)`.
+- **Policy vs. code (audit F1)**: The combined `total` (Interior + Exterior summed) is *policy-bound* never to exceed `MAX_PRICE_CAP` (35000), but the current code has a path where the summed total can breach 35000. This is a confirmed audit finding (**F1**) and a **fix is pending** — do not treat the 35000 total ceiling as currently enforced in all paths. See `docs/audit/`.
+
+### 5. Overlap Control
 - Double storey + difficult access: capped at +0.5%~1% interior (prevents double counting)
 - Stairwell auto-inclusion: reduces double storey uplift when stairwell already selected
 - High ceiling: reduces extra uplift to avoid stacking
 
-### 5. Auth Architecture
+### 6. Auth Architecture
+- **Sign-in methods**: Firebase Auth with **Email/Password (email-verification enforced) and Google login**.
 - Client: Firebase Auth (onIdTokenChanged) → AuthContext (user, isAdmin)
 - Server: firebase-admin verifyIdToken → admin custom claims check
 - App Check: reCAPTCHA v3 for production, debug token for local dev
 
-### 6. Estimate Usage Policy
+### 7. Estimate Usage Policy
 - 2 free estimates for non-admin users
 - Admin users have unlimited estimates
 - Promotional +1 estimate via coupon/event is only being considered and is not confirmed or implemented yet
 - Separate rate limits (30s/5hr/10day) for abuse prevention
 
-### 7. Booking Strategy
+### 8. Booking Strategy
 - Phase 1 keeps booking in Jobber's hosted booking flow.
 - The app result screen links out to Jobber for date/time selection and confirmation.
 - The app may track lightweight booking intent such as `jobber_booking_clicked`, but final booking completion remains Jobber-owned unless a future integration imports it.
@@ -243,3 +268,10 @@ Price ranges are dynamically capped to prevent unrealistically wide spreads:
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Admin SDK credentials | Yes (server) |
 | `NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY` | App Check reCAPTCHA | Production |
 | `NEXT_PUBLIC_ENABLE_APPCHECK` | Toggle App Check | Production |
+
+---
+
+## Audit
+
+- Latest full audit (2026-07-09) index: [`docs/audit/README.md`](docs/audit/README.md).
+- Confirmed open items referenced in this doc: **F1** — summed Interior + Exterior total can exceed `MAX_PRICE_CAP` (35000) (§4, fix pending).

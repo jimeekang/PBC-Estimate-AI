@@ -1,7 +1,7 @@
 # DESIGN.md — UI/UX Design System
 
 > PBC Estimate AI
-> Last updated: 2026-03-30
+> Last updated: 2026-07-10
 
 ---
 
@@ -12,13 +12,13 @@
 - **Animation**: Framer Motion + tailwindcss-animate
 - **Icons**: Lucide React (outlined style)
 - **Font**: Inter (body + headline)
-- **Dark mode**: Supported via `class` strategy
+- **Dark mode**: Supported via `class` strategy (`darkMode: ['class']`)
 
 ---
 
 ## Color System
 
-Colors are defined as HSL CSS variables in `globals.css` and consumed via Tailwind config.
+Colors are defined as HSL CSS variables in `src/app/globals.css` and consumed via Tailwind config.
 
 ### Light Mode
 
@@ -42,14 +42,17 @@ Colors are defined as HSL CSS variables in `globals.css` and consumed via Tailwi
 |-------|-----|-------|
 | `--primary` | 209 60% 45% | Slightly lighter for dark bg |
 | `--background` | 224 71% 4% | Deep dark background |
+| `--secondary` | 215 28% 17% | Subtle dark surfaces |
 | `--muted` | 215 28% 17% | Subtle dark surfaces |
+| `--muted-foreground` | 218 11% 65% | Secondary text on dark |
+| `--accent` | 209 60% 20% | Highlights, hover on dark |
+| `--destructive` | 0 63% 31% | Error on dark |
 | `--border` | 215 28% 25% | Visible on dark |
 
 ### Blueprint Colors (Reference)
 
 The original blueprint defined: Soft blue (#77B5FE), Light gray (#F0F4F8), Pale purple (#B19CD9).
-These were evolved into the current HSL-based system for better Tailwind integration.
-The primary hue (209) preserves the blue trust tone from the original design.
+These were evolved into the current HSL system for better Tailwind integration. The primary hue (209) preserves the blue trust tone from the original design.
 
 ---
 
@@ -81,17 +84,19 @@ Font loading: `var(--font-inter)` via Next.js font optimization, fallback to `'I
 ### Buttons
 Use shadcn/ui `<Button>` with variants: `default`, `secondary`, `destructive`, `outline`, `ghost`, `link`.
 
-### Estimate Result CTA
-- Primary result CTA: `Book Your Free Site Visit`
-- Headline: `Ready for a firm written quote?`
-- Support copy should say the AI estimate is a price guide and Jobber lets the customer choose a time for the site visit.
-- Do not claim estimate details are automatically attached to Jobber while Phase 1 uses the external Jobber booking URL.
-- Keep booking visually stronger than PDF download, edit, and regenerate actions.
+### Estimate Result Booking CTA
+The result-screen booking block links to the external Jobber booking URL. Its copy is authoritative in the code, not here — this doc records intent only:
+
+- Keep booking visually stronger than PDF download, edit, and regenerate actions (gradient primary card, white button).
+- Frame the AI estimate as a price guide and booking as the path to a firm on-site written quote.
+- Do not claim estimate details are auto-attached to Jobber while Phase 1 uses the external URL.
+- Booking button opens `BOOKING_URL` in a new tab (`target="_blank" rel="noopener noreferrer"`).
+
+> Note: exact headline/button strings live in `estimate-result.tsx`. Any A/B copy decision ("Book Online Now" vs "Book Your Free Site Visit") is tracked in `docs/audit/persona-designer.md`, not duplicated here, to avoid doc/code drift.
 
 ### Forms
 - `react-hook-form` + `zod` resolver for all forms
 - shadcn/ui `<Form>`, `<FormField>`, `<FormItem>`, `<FormLabel>`, `<FormMessage>`
-- Validation: Zod schemas in `src/schemas/`
 
 ### Cards
 Use `<Card>`, `<CardHeader>`, `<CardContent>`, `<CardFooter>` from shadcn/ui.

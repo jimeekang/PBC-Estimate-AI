@@ -8,6 +8,13 @@ Stack: Next.js + Firebase + GenKit AI. Market: Sydney Northern Beaches (2026).
 - 코드 수정 시 변경된 부분만 출력 (전체 파일 재작성 금지).
 - 불명확하거나 큰 태스크 → 먼저 물어보고 서브태스크로 분해.
 
+## Model Routing (모델 라우팅)
+
+| 작업 | 모델 |
+|---|---|
+| 계획·기획·디자인·문서·아이디어 (코딩 외) | Claude Opus 4.8 (extra / 최고 추론) |
+| 코딩·git·DB 등 모든 구현 | Codex GPT-5.5 (reasoning: high) |
+
 ## Skills (필요 시 호출)
 
 | 작업 | 스킬 |

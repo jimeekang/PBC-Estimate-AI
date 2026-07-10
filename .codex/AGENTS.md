@@ -2,6 +2,18 @@
 
 This project uses the global gstack install via `.codex/skills/gstack` and the global Superpowers install via `.codex/skills/superpowers`.
 
+## Model Routing (역할)
+
+이 저장소의 구현 담당은 **Codex 세션(GPT-5.5, reasoning: high)** 이다.
+
+| 작업 유형 | 담당 모델 |
+|---|---|
+| 코딩·git·데이터베이스 등 모든 구현 작업 | **Codex GPT-5.5 (reasoning: high) — 이 세션이 담당** |
+| 계획·기획·디자인·문서·아이디어 등 코딩 외 작업 | Claude Opus 4.8 (extra) |
+
+- Codex 세션은 실제 코드 편집, 커밋, 마이그레이션, 배포 스크립트 등 구현 작업을 수행한다.
+- 계획·설계·문서 개정안은 Claude Opus 4.8이 산출한다. Codex는 그 산출물을 코드/파일에 반영한다.
+
 ## gstack
 
 - Use the matching gstack skill when the request maps to a workflow like QA, review, ship, investigate, browser automation, or deploy verification.
