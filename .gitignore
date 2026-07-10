@@ -40,6 +40,8 @@ studio-*-*.json
 # Codex project skill links
 .codex/skills/pbc-*/
 .codex/skills/gstack/
+.codex/logs/
+.codex/previews/
 
 # Build
 tsconfig.tsbuildinfo
