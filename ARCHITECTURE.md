@@ -217,7 +217,7 @@ Cap multipliers/floors applied after the base tier:
 ### 4. Project Price Ceiling
 - **`MAX_PRICE_CAP = 35000`** — the standard hard ceiling for a project total.
 - **`EXTERIOR_FULL_PROJECT_CEILING = 55000`** — a single exception applied **only** to **3-storey full-exterior scope** projects (Wall + Eaves + Gutter + Fascia + Exterior Trim), selected via `getExteriorProjectCap(...)`.
-- **Policy vs. code (audit F1)**: The combined `total` (Interior + Exterior summed) is *policy-bound* never to exceed `MAX_PRICE_CAP` (35000), but the current code has a path where the summed total can breach 35000. This is a confirmed audit finding (**F1**) and a **fix is pending** — do not treat the 35000 total ceiling as currently enforced in all paths. See `docs/audit/`.
+- **Policy vs. code (audit F1)**: The combined `total` (Interior + Exterior summed) is *policy-bound* never to exceed `MAX_PRICE_CAP` (35000), but the current code has a path where the summed total can breach 35000. This is a confirmed audit finding (**F1**) and a **fix is pending** — do not treat the 35000 total ceiling as currently enforced in all paths. See `docs/ROADMAP.md`.
 
 ### 5. Overlap Control
 - Double storey + difficult access: capped at +0.5%~1% interior (prevents double counting)
@@ -271,7 +271,7 @@ Cap multipliers/floors applied after the base tier:
 
 ---
 
-## Audit
+## Roadmap
 
-- Latest full audit (2026-07-09) index: [`docs/audit/README.md`](docs/audit/README.md).
+- Progress and open work (incl. the 2026-07-09 audit findings): [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - Confirmed open items referenced in this doc: **F1** — summed Interior + Exterior total can exceed `MAX_PRICE_CAP` (35000) (§4, fix pending).

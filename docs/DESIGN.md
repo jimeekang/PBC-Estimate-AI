@@ -92,7 +92,7 @@ The result-screen booking block links to the external Jobber booking URL. Its co
 - Do not claim estimate details are auto-attached to Jobber while Phase 1 uses the external URL.
 - Booking button opens `BOOKING_URL` in a new tab (`target="_blank" rel="noopener noreferrer"`).
 
-> Note: exact headline/button strings live in `estimate-result.tsx`. Any A/B copy decision ("Book Online Now" vs "Book Your Free Site Visit") is tracked in `docs/audit/persona-designer.md`, not duplicated here, to avoid doc/code drift.
+> Note: exact headline/button strings live in `estimate-result.tsx`. Any A/B copy decision ("Book Online Now" vs "Book Your Free Site Visit") is tracked in `docs/ROADMAP.md` (A/B infra), not duplicated here, to avoid doc/code drift.
 
 ### Forms
 - `react-hook-form` + `zod` resolver for all forms

@@ -36,11 +36,11 @@ Legacy paths such as `src/lib/pricing-engine.ts`, `src/schemas/estimate-request.
 Price ranges and totals are bounded in `src/domains/estimate/domain/pricing/pricing-engine.ts`. The range-width caps below reflect the current `capRangeWidthSmart` implementation (see ARCHITECTURE.md §3 for the full breakdown).
 
 - **Project cap**: `MAX_PRICE_CAP = 35000` normally. The single exception is **3-storey full-exterior projects**, which raise the exterior project ceiling to `EXTERIOR_FULL_PROJECT_CEILING = 55000` via `getExteriorProjectCap`.
-- **Policy note**: The combined `total` is intended never to exceed 35000, but the current code has a path that can breach this when Interior + Exterior are summed (audit finding **F1**, fix pending). See `docs/audit/`.
+- **Policy note**: The combined `total` is intended never to exceed 35000, but the current code has a path that can breach this when Interior + Exterior are summed (audit finding **F1**, fix pending). See `docs/ROADMAP.md`.
 
-## Audit
+## Roadmap
 
-The latest full audit (2026-07-09) index lives at [`docs/audit/README.md`](docs/audit/README.md).
+Progress and open work (incl. the 2026-07-09 audit findings) live in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Getting Started
 

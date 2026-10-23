@@ -1,18 +1,15 @@
 # Codex project guidance
 
-This project uses the global gstack install via `.codex/skills/gstack` and the global Superpowers install via `.codex/skills/superpowers`.
+This project uses the global gstack install via `.codex/skills/gstack` and the Superpowers Codex plugin.
+
+Role: Codex is the **execution session** in the orchestration defined in [CLAUDE.md](../CLAUDE.md#orchestration-모델-라우팅). It receives tasks from the Claude Code lead, reports progress and results back, and writes critical reviews with analyst (GPT-6 Astra / xhigh).
 
 ## Model Routing (역할)
 
-이 저장소의 구현 담당은 **Codex 세션(GPT-5.5, reasoning: high)** 이다.
-
-| 작업 유형 | 담당 모델 |
-|---|---|
-| 코딩·git·데이터베이스 등 모든 구현 작업 | **Codex GPT-5.5 (reasoning: high) — 이 세션이 담당** |
-| 계획·기획·디자인·문서·아이디어 등 코딩 외 작업 | Claude Opus 4.8 (extra) |
-
-- Codex 세션은 실제 코드 편집, 커밋, 마이그레이션, 배포 스크립트 등 구현 작업을 수행한다.
-- 계획·설계·문서 개정안은 Claude Opus 4.8이 산출한다. Codex는 그 산출물을 코드/파일에 반영한다.
+- [전역 AGENTS.md](<C:/Users/kjm12/.codex/AGENTS.md>)와 [프로젝트 모델 라우팅](../AGENTS.md#model-routing-모델-라우팅-정책)을 따른다. 사용자 명시 선택을 우선하며, 별도 선택이 없는 기본값은 **GPT-6.1 Sol / high**이다.
+- 위임 시 analyst는 **GPT-6 Astra / xhigh**, implementer는 **GPT-6.1 Sol / high**, quick_edit는 **GPT-6 Luna / high**, explorer는 **GPT-6 Astra / high**를 사용한다.
+- 분석·설계·리뷰·QA 판정은 analyst, 구현·git·DB·테스트 작성과 실행은 implementer 기준으로 분류한다. 네 역할의 실제 설정은 전역 `agents/*.toml`을 따르며, 그 외 에이전트는 현재 채팅 설정을 상속한다.
+- 문서의 역할 지정은 현재 주 채팅의 모델을 자동 전환하지 않는다. 지정 모델이 지원되지 않으면 제한을 알리고 임의 대체하지 않는다.
 
 ## gstack
 
