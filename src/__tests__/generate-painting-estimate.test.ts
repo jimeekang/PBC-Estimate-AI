@@ -37,7 +37,97 @@ const baseWholeHousePayload: GeneratePaintingEstimateInput = {
 
 describe('generatePaintingEstimate', () => {
   beforeEach(() => {
-    mockExplanationPrompt.mockResolvedValue({ output: undefined });
+    mockExplanationPrompt.mockReset().mockResolvedValue({ output: undefined });
+  });
+
+  test('prompt failures fall back to the deterministic estimate after one retry', async () => {
+    const error = new Error('boom');
+    mockExplanationPrompt.mockRejectedValue(error);
+    const logError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.useFakeTimers();
+
+    try {
+      const result = await generatePaintingEstimate({
+        ...baseWholeHousePayload,
+        roomsToPaint: [],
+      });
+
+      expect(result.priceRange).toBe('AUD 10,000 - 11,500');
+      expect(result.breakdown?.total).toEqual({
+        min: 10000,
+        max: 11500,
+        priceRange: 'AUD 10,000 - 11,500',
+      });
+      expect(result.explanation).toContain('indicative estimate');
+      expect(mockExplanationPrompt).toHaveBeenCalledTimes(2);
+      expect(logError).toHaveBeenCalledWith(expect.any(String), error);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+      logError.mockRestore();
+    }
+  });
+
+  test('a prompt timeout falls back after 20 seconds without retrying', async () => {
+    mockExplanationPrompt.mockImplementation(() => new Promise(() => {}));
+    const logError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.useFakeTimers();
+
+    try {
+      let settled = false;
+      const pending = generatePaintingEstimate({
+        ...baseWholeHousePayload,
+        roomsToPaint: [],
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await jest.advanceTimersByTimeAsync(19_999);
+      expect(settled).toBe(false);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true);
+      const result = await pending;
+
+      expect(result.priceRange).toBe('AUD 10,000 - 11,500');
+      expect(result.explanation).toContain('indicative estimate');
+      expect(mockExplanationPrompt).toHaveBeenCalledTimes(1);
+      expect(logError).toHaveBeenCalledWith(expect.any(String), expect.any(Error));
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+      logError.mockRestore();
+    }
+  });
+
+  test('a transient prompt failure retries once and retains the successful explanation', async () => {
+    mockExplanationPrompt
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce({
+        output: {
+          priceRange: 'AUD 1 - 2',
+          explanation: 'Recovered explanation',
+          details: ['Recovered detail'],
+        },
+      });
+    const logError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.useFakeTimers();
+
+    try {
+      const result = await generatePaintingEstimate({
+        ...baseWholeHousePayload,
+        roomsToPaint: [],
+      });
+
+      expect(result.priceRange).toBe('AUD 10,000 - 11,500');
+      expect(result.explanation).toBe('Recovered explanation');
+      expect(result.details).toEqual(['Recovered detail']);
+      expect(mockExplanationPrompt).toHaveBeenCalledTimes(2);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+      logError.mockRestore();
+    }
   });
 
   test('whole-house calibration does not change when bedroomCount already represents the full bedroom total', async () => {
