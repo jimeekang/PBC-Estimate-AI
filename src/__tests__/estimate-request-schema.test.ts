@@ -390,6 +390,40 @@ describe('estimateRequestSchema', () => {
 });
 
 describe('estimateSubmissionSchema', () => {
+  test.each([
+    'estimates/user-1/estimate-123/1792818600000-0-room.jpg',
+    'estimates/user-1/1792818600000/0-room.jpg',
+  ])('accepts photo paths produced by the upload API: %s', (photoPath) => {
+    expect(estimateSubmissionSchema.safeParse({
+      idToken: 'token', formData: basePayload, photoPaths: [photoPath],
+    }).success).toBe(true);
+  });
+
+  test.each([
+    'photo.jpg',
+    'estimates/user-1/estimate-123/photo.jpg',
+    'estimates/user-1/estimate-123/1792818600000-0-room.jpg/extra',
+    'estimates/user-1/estimate-123/1792818600000-0-room.jpg\n',
+    'estimates/user-1/estimate-123/1792818600000-0-room%2fphoto.jpg',
+    `estimates/user-1/estimate-123/1792818600000-0-${'a'.repeat(1024)}.jpg`,
+  ])('rejects malformed or oversized photo paths (case %#)', (photoPath) => {
+    const result = estimateSubmissionSchema.safeParse({
+      idToken: 'token', formData: basePayload, photoPaths: [photoPath],
+    });
+    expect(result.success).toBe(false);
+    expect(result.success ? [] : result.error.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: ['photoPaths', 0] }),
+    ]));
+  });
+
+  test.each(['parent/child', '../estimate', '.', 'a'.repeat(129), 'id with spaces'])('rejects invalid estimate document IDs: %s', (estimateId) => {
+    const result = estimateSubmissionSchema.safeParse({ idToken: 'token', estimateId, formData: basePayload });
+    expect(result.success).toBe(false);
+    expect(result.success ? [] : result.error.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: ['estimateId'] }),
+    ]));
+  });
+
   test('trims optional estimateId when present', () => {
     const result = estimateSubmissionSchema.safeParse({
       idToken: 'token',

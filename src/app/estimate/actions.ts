@@ -103,7 +103,8 @@ function stripUndefined<T>(value: T): T {
 
 async function enforceEstimateRateLimit(
   uid: string,
-  realEstimateCount: number
+  realEstimateCount: number,
+  opts: { enforceQuota: boolean }
 ): Promise<EstimateRateLimitReservation> {
   const adminDb = getAdminDb();
   const now = new Date();
@@ -131,7 +132,9 @@ async function enforceEstimateRateLimit(
     // Only stale drafts are excluded; stored counts are bookkeeping.
     const estimateCount = realEstimateCount;
 
-    assertEstimateQuotaAvailable(estimateCount);
+    if (opts.enforceQuota) {
+      assertEstimateQuotaAvailable(estimateCount);
+    }
 
     if (lastSubmitAt && now.getTime() - lastSubmitAt < MIN_SUBMIT_INTERVAL_MS) {
       throw new Error('Please wait at least 30 seconds before requesting another estimate.');
@@ -199,13 +202,13 @@ async function releaseEstimateReservation(
   });
 }
 
-async function getUserEstimateQuotaCount(adminDb: Firestore, uid: string) {
+async function getUserEstimateQuotaCount(adminDb: Firestore, uid: string, excludeId?: string) {
   const estimatesSnapshot = await adminDb
     .collection('estimates')
     .where('userId', '==', uid)
     .get();
 
-  return countQuotaUsage(estimatesSnapshot.docs, Date.now(), STALE_DRAFT_TTL_MS);
+  return countQuotaUsage(estimatesSnapshot.docs, Date.now(), STALE_DRAFT_TTL_MS, excludeId);
 }
 
 async function reserveEstimateQuotaSlot(
@@ -247,6 +250,26 @@ async function getMutableEstimateSnapshot(args: {
   }
 
   return existing;
+}
+
+async function claimDraftReservation(adminDb: Firestore, estimateId: string, requesterUid: string) {
+  const estimateRef = adminDb.collection('estimates').doc(estimateId);
+  return adminDb.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(estimateRef);
+    const existing = snapshot.data() as ExistingEstimateSnapshot | undefined;
+    if (!snapshot.exists || existing?.userId !== requesterUid || existing.status !== 'draft' ||
+        existing.revision !== 0 || !isEstimateRateLimitReservation(existing.rateLimitReservation)) {
+      return false;
+    }
+
+    // Consume the first-promotion exception before AI; failures must not restore it.
+    transaction.set(estimateRef, {
+      rateLimitReservation: FieldValue.delete(),
+      reservationClaimedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  });
 }
 
 function buildPaintingEstimatePayload(rawData: EstimateRequest) {
@@ -423,10 +446,10 @@ export async function createEstimateDraft(payload: unknown): Promise<CreateEstim
 
     const estimateCount = isAdmin ? 0 : await getUserEstimateQuotaCount(adminDb, decodedToken.uid);
 
-    if (!isAdmin) {
-      rateLimitReservation = await enforceEstimateRateLimit(decodedToken.uid, estimateCount);
-      reservedUid = decodedToken.uid;
-    }
+    rateLimitReservation = await enforceEstimateRateLimit(decodedToken.uid, estimateCount, {
+      enforceQuota: !isAdmin,
+    });
+    reservedUid = decodedToken.uid;
 
     const draft = await createEstimateDraftDocument({
       adminDb,
@@ -502,7 +525,7 @@ export async function cleanupEstimateDraft(payload: unknown): Promise<CleanupEst
       };
     });
 
-    if (deletedReservation?.ownerUid && !isAdmin) {
+    if (deletedReservation?.ownerUid) {
       await releaseEstimateReservation(
         deletedReservation.ownerUid,
         deletedReservation.rateLimitReservation
@@ -511,7 +534,7 @@ export async function cleanupEstimateDraft(payload: unknown): Promise<CleanupEst
 
     return {
       deleted: Boolean(deletedReservation?.ownerUid),
-      released: Boolean(deletedReservation?.ownerUid && !isAdmin),
+      released: Boolean(deletedReservation?.ownerUid),
     };
   } catch (error: unknown) {
     console.error('Error cleaning up estimate draft:', error);
@@ -539,6 +562,10 @@ export async function submitEstimate(payload: unknown): Promise<SubmitEstimateRe
     const isAdmin = decodedToken.admin === true;
     const estimateId = validatedPayload.data.estimateId;
     const photoPaths = validatedPayload.data.photoPaths ?? [];
+
+    if (photoPaths.some((path) => path.split('/')[1] !== decodedToken.uid)) {
+      return { error: 'Invalid request payload.' };
+    }
 
     if (!decodedToken.email || !decodedToken.email_verified) {
       return { error: 'A verified email address is required.' };
@@ -577,14 +604,29 @@ export async function submitEstimate(payload: unknown): Promise<SubmitEstimateRe
     }
 
     let estimateCount = 0;
-    if (!estimateId) {
-      estimateCount = await getUserEstimateQuotaCount(adminDb, decodedToken.uid);
+    if (!isAdmin && (!estimateId || existingEstimate?.status === 'draft')) {
+      estimateCount = await getUserEstimateQuotaCount(adminDb, decodedToken.uid, estimateId);
+      // Reject a full-quota promotion before paying for AI; the transaction rechecks it.
+      if (estimateId) {
+        assertEstimateQuotaAvailable(estimateCount);
+      }
     }
 
-    if (!estimateId && !isAdmin) {
-      // The document creation transaction rechecks quota before consuming a slot.
-      rateLimitReservation = await enforceEstimateRateLimit(decodedToken.uid, estimateCount);
+    const hasDraftReservation = estimateId
+      ? await claimDraftReservation(adminDb, estimateId, decodedToken.uid)
+      : false;
+
+    if (!hasDraftReservation) {
+      rateLimitReservation = await enforceEstimateRateLimit(decodedToken.uid, estimateCount, {
+        enforceQuota: !estimateId && !isAdmin,
+      });
       reservedUid = decodedToken.uid;
+      if (estimateId) {
+        // Cleanup may have deleted and refunded the draft before the claim transaction.
+        await getMutableEstimateSnapshot({
+          adminDb, estimateId, requesterUid: decodedToken.uid, isAdmin,
+        });
+      }
     }
 
     const aiPayload = buildPaintingEstimatePayload(rawData);
