@@ -3,11 +3,13 @@
 import { generatePaintingEstimate } from '@/domains/estimate/application/generation/generate-painting-estimate';
 import type { GeneratePaintingEstimateOutput } from '@/domains/estimate/application/generation/generate-painting-estimate';
 import {
+  assertEstimateQuotaAvailable,
   buildEstimateCreatePayload,
   buildEstimateDraftPayload,
   buildEstimateUpdatePayload,
   buildRateLimitReleasePatch,
   canMutateEstimate,
+  countQuotaUsage,
   isEstimateRateLimitReservation,
   type EstimateRateLimitReservation,
   type ExistingEstimateSnapshot,
@@ -19,11 +21,12 @@ import {
   estimateSubmissionSchema,
   type EstimateRequest,
 } from '@/domains/estimate/domain/schemas/estimate-request';
-import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, type Firestore, type Transaction } from 'firebase-admin/firestore';
 
 const MIN_SUBMIT_INTERVAL_MS = 30 * 1000;
 const MAX_SUBMITS_PER_HOUR = 5;
 const MAX_SUBMITS_PER_DAY = 10;
+const STALE_DRAFT_TTL_MS = 30 * 60 * 1000;
 
 type SubmitEstimateSuccess = {
   error?: undefined;
@@ -125,12 +128,10 @@ async function enforceEstimateRateLimit(
     const lastSubmitAt = data?.lastSubmitAt ?? 0;
     const hourlyCount = data?.hourlyBucket === currentHour ? data?.hourlyCount ?? 0 : 0;
     const dailyCount = data?.dailyBucket === currentDay ? data?.dailyCount ?? 0 : 0;
-    // Use the higher of the stored counter and the real collection count to prevent drift
-    const estimateCount = Math.max(data?.estimateCount ?? 0, realEstimateCount);
+    // Only stale drafts are excluded; stored counts are bookkeeping.
+    const estimateCount = realEstimateCount;
 
-    if (estimateCount >= 2) {
-      throw new Error('You have already used your 2 free estimates.');
-    }
+    assertEstimateQuotaAvailable(estimateCount);
 
     if (lastSubmitAt && now.getTime() - lastSubmitAt < MIN_SUBMIT_INTERVAL_MS) {
       throw new Error('Please wait at least 30 seconds before requesting another estimate.');
@@ -198,14 +199,33 @@ async function releaseEstimateReservation(
   });
 }
 
-async function getUserEstimateCount(adminDb: Firestore, uid: string) {
+async function getUserEstimateQuotaCount(adminDb: Firestore, uid: string) {
   const estimatesSnapshot = await adminDb
     .collection('estimates')
     .where('userId', '==', uid)
-    .count()
     .get();
 
-  return estimatesSnapshot.data().count;
+  return countQuotaUsage(estimatesSnapshot.docs, Date.now(), STALE_DRAFT_TTL_MS);
+}
+
+async function reserveEstimateQuotaSlot(
+  adminDb: Firestore,
+  transaction: Transaction,
+  uid: string,
+  existingEstimateId?: string
+) {
+  const rateLimitRef = adminDb.collection('estimateRateLimits').doc(uid);
+  // All new slots share this document lock, including stale draft promotions.
+  await transaction.get(rateLimitRef);
+  const estimates = await transaction.get(adminDb.collection('estimates').where('userId', '==', uid));
+  const estimateCount = countQuotaUsage(
+    estimates.docs, Date.now(), STALE_DRAFT_TTL_MS, existingEstimateId
+  );
+  assertEstimateQuotaAvailable(estimateCount);
+  transaction.set(rateLimitRef, {
+    estimateCount: estimateCount + 1,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
 }
 
 async function getMutableEstimateSnapshot(args: {
@@ -258,6 +278,7 @@ function buildPaintingEstimatePayload(rawData: EstimateRequest) {
 async function createEstimateDocument(args: {
   adminDb: Firestore;
   userId: string;
+  isAdmin: boolean;
   inputSnapshot: unknown;
   estimate: unknown;
   photoPaths: string[];
@@ -269,7 +290,13 @@ async function createEstimateDocument(args: {
     photoPaths: args.photoPaths,
     timestamp: FieldValue.serverTimestamp(),
   });
-  const estimateRef = await args.adminDb.collection('estimates').add(payload);
+  const estimateRef = args.adminDb.collection('estimates').doc();
+  await args.adminDb.runTransaction(async (transaction) => {
+    if (!args.isAdmin) {
+      await reserveEstimateQuotaSlot(args.adminDb, transaction, args.userId);
+    }
+    transaction.set(estimateRef, payload);
+  });
 
   return {
     estimateId: estimateRef.id,
@@ -280,6 +307,7 @@ async function createEstimateDocument(args: {
 async function createEstimateDraftDocument(args: {
   adminDb: Firestore;
   userId: string;
+  isAdmin: boolean;
   rateLimitReservation?: EstimateRateLimitReservation;
 }) {
   const payload = buildEstimateDraftPayload({
@@ -287,7 +315,13 @@ async function createEstimateDraftDocument(args: {
     rateLimitReservation: args.rateLimitReservation,
     timestamp: FieldValue.serverTimestamp(),
   });
-  const estimateRef = await args.adminDb.collection('estimates').add(payload);
+  const estimateRef = args.adminDb.collection('estimates').doc();
+  await args.adminDb.runTransaction(async (transaction) => {
+    if (!args.isAdmin) {
+      await reserveEstimateQuotaSlot(args.adminDb, transaction, args.userId);
+    }
+    transaction.set(estimateRef, payload);
+  });
 
   return {
     estimateId: estimateRef.id,
@@ -316,6 +350,10 @@ async function updateEstimateDocument(args: {
     const existing = snapshot.data() as ExistingEstimateSnapshot | undefined;
     if (!existing || !canMutateEstimate(existing, args.requesterUid, args.isAdmin)) {
       throw new Error('You do not have permission to update this estimate.');
+    }
+
+    if (!args.isAdmin && existing.status === 'draft') {
+      await reserveEstimateQuotaSlot(args.adminDb, transaction, args.requesterUid, args.estimateId);
     }
 
     const payload = buildEstimateUpdatePayload({
@@ -355,7 +393,7 @@ export async function getEstimateQuotaStatus(payload: unknown) {
     return { estimateCount: 0, limitReached: false };
   }
 
-  const estimateCount = await getUserEstimateCount(adminDb, decodedToken.uid);
+  const estimateCount = await getUserEstimateQuotaCount(adminDb, decodedToken.uid);
   return {
     estimateCount,
     limitReached: estimateCount >= 2,
@@ -383,7 +421,7 @@ export async function createEstimateDraft(payload: unknown): Promise<CreateEstim
       return { error: 'A verified email address is required.' };
     }
 
-    const estimateCount = isAdmin ? 0 : await getUserEstimateCount(adminDb, decodedToken.uid);
+    const estimateCount = isAdmin ? 0 : await getUserEstimateQuotaCount(adminDb, decodedToken.uid);
 
     if (!isAdmin) {
       rateLimitReservation = await enforceEstimateRateLimit(decodedToken.uid, estimateCount);
@@ -393,6 +431,7 @@ export async function createEstimateDraft(payload: unknown): Promise<CreateEstim
     const draft = await createEstimateDraftDocument({
       adminDb,
       userId: decodedToken.uid,
+      isAdmin,
       rateLimitReservation,
     });
     draftCreated = true;
@@ -539,12 +578,11 @@ export async function submitEstimate(payload: unknown): Promise<SubmitEstimateRe
 
     let estimateCount = 0;
     if (!estimateId) {
-      estimateCount = await getUserEstimateCount(adminDb, decodedToken.uid);
+      estimateCount = await getUserEstimateQuotaCount(adminDb, decodedToken.uid);
     }
 
     if (!estimateId && !isAdmin) {
-      // enforceEstimateRateLimit atomically checks and reserves the 2-estimate cap
-      // along with rate limits, preventing race conditions.
+      // The document creation transaction rechecks quota before consuming a slot.
       rateLimitReservation = await enforceEstimateRateLimit(decodedToken.uid, estimateCount);
       reservedUid = decodedToken.uid;
     }
@@ -566,6 +604,7 @@ export async function submitEstimate(payload: unknown): Promise<SubmitEstimateRe
       : await createEstimateDocument({
           adminDb,
           userId: decodedToken.uid,
+          isAdmin,
           inputSnapshot: sanitizedOptions,
           estimate,
           photoPaths,
