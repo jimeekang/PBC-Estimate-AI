@@ -217,6 +217,42 @@ describe('generatePaintingEstimate', () => {
     expect(result.priceRange).toBe(result.breakdown?.exterior?.priceRange);
   });
 
+  test('combined single-storey interior and exterior estimate stays under the $35k total cap', async () => {
+    const result = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      typeOfWork: ['Interior Painting', 'Exterior Painting'],
+      houseStories: '1 storey',
+      approxSize: 1500,
+      paintCondition: 'Poor',
+      exteriorAreas: ['Wall', 'Eaves', 'Gutter', 'Fascia', 'Exterior Trim'],
+      wallType: 'brick',
+      jobDifficulty: ['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'],
+    });
+
+    expect(result.breakdown?.interior?.max).toBeGreaterThan(0);
+    expect(result.breakdown?.exterior?.max).toBeGreaterThan(0);
+    expect(result.breakdown!.interior!.max + result.breakdown!.exterior!.max).toBeGreaterThan(35000);
+    expect(result.breakdown?.total?.max).toBeLessThanOrEqual(35000);
+  });
+
+  test('combined high-risk three-storey full exterior and interior estimate preserves the $55k cap', async () => {
+    const result = await generatePaintingEstimate({
+      ...baseWholeHousePayload,
+      typeOfWork: ['Interior Painting', 'Exterior Painting'],
+      houseStories: '3 storey',
+      approxSize: 1500,
+      paintCondition: 'Poor',
+      exteriorAreas: ['Wall', 'Eaves', 'Gutter', 'Fascia', 'Exterior Trim'],
+      wallType: 'brick',
+      jobDifficulty: ['Stairs', 'High ceilings', 'Extensive mouldings or trims', 'Difficult access areas'],
+    });
+
+    expect(result.breakdown?.interior?.max).toBeGreaterThan(0);
+    expect(result.breakdown?.exterior?.max).toBeGreaterThan(35000);
+    expect(result.breakdown?.total?.max).toBeLessThanOrEqual(55000);
+    expect(result.breakdown?.total?.max).toBeGreaterThanOrEqual(result.breakdown!.exterior!.max);
+  });
+
   test('entire-apartment ensuite-only interior selection produces a priced range', async () => {
     const result = await generatePaintingEstimate({
       name: 'Ensuite Only Test',
