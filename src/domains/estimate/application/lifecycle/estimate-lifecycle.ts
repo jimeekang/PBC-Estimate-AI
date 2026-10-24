@@ -1,3 +1,5 @@
+import { Timestamp } from 'firebase-admin/firestore';
+
 type TimestampValue = unknown;
 
 export type EstimateRateLimitReservation = {
@@ -45,6 +47,40 @@ export function canMutateEstimate(
   isAdmin: boolean
 ) {
   return isAdmin || existing.userId === requesterUid;
+}
+
+export function isStaleDraft(
+  existing: ExistingEstimateSnapshot,
+  now: number,
+  ttlMs: number
+) {
+  if (existing.status !== 'draft' || existing.revision !== 0) {
+    return false;
+  }
+
+  const activityAt = existing.updatedAt !== undefined ? existing.updatedAt : existing.createdAt;
+  if (!(activityAt instanceof Timestamp)) {
+    return false;
+  }
+
+  return activityAt.toMillis() < now - ttlMs;
+}
+
+export function countQuotaUsage(
+  docs: ReadonlyArray<{ id: string; data(): ExistingEstimateSnapshot }>,
+  now: number,
+  ttlMs: number,
+  excludeId?: string
+) {
+  return docs.filter((doc) =>
+    doc.id !== excludeId && !isStaleDraft(doc.data(), now, ttlMs)
+  ).length;
+}
+
+export function assertEstimateQuotaAvailable(estimateCount: number) {
+  if (estimateCount >= 2) {
+    throw new Error('You have already used your 2 free estimates.');
+  }
 }
 
 export function buildEstimateDraftPayload(args: {

@@ -1284,6 +1284,25 @@ function getSelectedOptionLines(input: GeneratePaintingEstimateInput): string[] 
 // -----------------------------
 // AI explanation prompt
 // -----------------------------
+class ExplanationPromptTimeoutError extends Error {}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new ExplanationPromptTimeoutError('Estimate explanation timed out')),
+          timeoutMs
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const explanationPrompt = ai.definePrompt({
   name: 'explanationPrompt',
   input: {
@@ -2038,7 +2057,7 @@ export const generatePaintingEstimate = ai.defineFlow(
         : undefined;
     const selectedOptionLines = getSelectedOptionLines(input);
 
-    const { output } = await explanationPrompt({
+    const explanationInput = {
       input,
       intMin,
       intMax,
@@ -2053,7 +2072,19 @@ export const generatePaintingEstimate = ai.defineFlow(
       pavingMin: pavingCostForPrompt?.min,
       pavingMax: pavingCostForPrompt?.max,
       selectedOptionLines,
-    });
+    };
+    let explanationOutput: GeneratePaintingEstimateOutput | null | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        ({ output: explanationOutput } = await withTimeout(explanationPrompt(explanationInput), 20_000));
+        break;
+      } catch (error) {
+        console.error('Failed to generate estimate explanation:', error);
+        explanationOutput = undefined;
+        if (error instanceof ExplanationPromptTimeoutError) break;
+      }
+    }
+    const output = explanationOutput;
 
     if (output?.priceRange) {
         return {

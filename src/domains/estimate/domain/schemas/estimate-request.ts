@@ -515,9 +515,13 @@ export const estimateRequestSchema = z
 
 export const estimateSubmissionSchema = z.object({
   idToken: z.string().min(1, 'Authentication is required.'),
-  estimateId: z.string().trim().min(1, 'Estimate ID is required when provided.').optional(),
+  estimateId: z.string().trim().min(1, 'Estimate ID is required when provided.')
+    .regex(/^[A-Za-z0-9_-]{1,128}$/, 'Invalid estimate ID.').optional(),
   formData: estimateRequestSchema,
-  photoPaths: z.array(z.string().trim().min(1)).max(10).optional(),
+  photoPaths: z.array(z.string().max(1024).regex(
+    /^estimates\/[^/\s]+\/(?:[A-Za-z0-9_-]{1,128}\/\d+-\d+-[a-z0-9._-]+|\d+\/\d+-[a-z0-9._-]+)$/,
+    'Invalid estimate photo path.'
+  )).max(10).optional(),
 });
 
 export type EstimateRequest = z.infer<typeof estimateRequestSchema>;

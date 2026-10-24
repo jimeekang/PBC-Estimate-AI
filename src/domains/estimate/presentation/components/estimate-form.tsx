@@ -58,6 +58,7 @@ import {
   X,
   ImagePlus,
   Check,
+  Lock,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -687,6 +688,17 @@ export function EstimateForm() {
     control: form.control,
     name: 'interiorRooms',
   });
+
+  // submitEstimate rejects a non-admin email that differs from the signed-in account,
+  // so non-admins can't edit it; admins keep the field editable.
+  const accountEmail = user?.email ?? '';
+  const isEmailLocked = !isAdmin;
+
+  useEffect(() => {
+    if (!accountEmail) return;
+    if (isAdmin && form.getFieldState('email').isDirty) return;
+    form.resetField('email', { defaultValue: accountEmail });
+  }, [accountEmail, isAdmin, form]);
   const fetchEstimateCount = useCallback(async (uid: string) => {
     try {
       if (!user || user.uid !== uid) {
@@ -1008,6 +1020,17 @@ const showCeilingOptions =
 
   async function onSubmit(values: EstimateFormValues) {
     if (!user) return;
+
+    // Mirror the server email check so the mismatch surfaces on the field, not after submission.
+    if (!isAdmin && values.email.toLowerCase() !== accountEmail.toLowerCase()) {
+      setCurrentStep(3);
+      form.setError(
+        'email',
+        { type: 'manual', message: 'Email must match your signed-in account. Sign in with that account to use it.' },
+        { shouldFocus: true }
+      );
+      return;
+    }
 
     const idToken = await user.getIdToken();
 
@@ -3189,10 +3212,25 @@ const showCeilingOptions =
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Address</FormLabel>
+                    <FormLabel className="flex items-center gap-1.5">
+                      Email Address
+                      {isEmailLocked && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
+                    </FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="e.g. john@example.com" {...field} />
+                      <Input
+                        type="email"
+                        placeholder="e.g. john@example.com"
+                        readOnly={isEmailLocked}
+                        aria-readonly={isEmailLocked || undefined}
+                        className={cn(isEmailLocked && 'cursor-default bg-muted')}
+                        {...field}
+                      />
                     </FormControl>
+                    {isEmailLocked && (
+                      <FormDescription className="text-xs text-muted-foreground">
+                        Your estimate is linked to your signed-in account email. To use a different email, sign in with that account.
+                      </FormDescription>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

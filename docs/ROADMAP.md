@@ -12,24 +12,27 @@
 | Jobber 예약 퍼널·CTA 정렬, 견적 UI 가이드 플로우 | `cbb3439`, `e09b88c`, `014b8f8` |
 | App Hosting 커스텀 도메인 연결 | `e90c7e3` |
 | 익명 견적 폼 `LiteEstimateForm` + `lite-estimate/actions.ts` (코드만 완성, 라우트 미연결) | F10 참고 |
-| 핵심 회귀 테스트 10 스위트 / 222건 통과 (일회성 checklist 테스트 4개는 정리) | `npx jest` (2026-10-24) |
+| 핵심 회귀 테스트 10 스위트 / 304건 통과 (2026-10-24 시작 시 222건) | `npx jest` |
 | F32 — 스킬 문서 인증 서술을 "Email/Password + Google"로 정정 | 2026-10-24 |
+| F20 — `firebase.json`에 rules 등록 + **운영 rules 배포**(클라이언트 쓰기 전면 차단, 직전 배포본은 클라이언트 `create` 허용). 배포 후 스캔: estimates 2건 모두 서버 생성 | PR #1, 2026-10-24 |
+| B1 — 쿼터 = 사용자 전체 문서(legacy `status` 없음 포함) − 30분 무활동 draft. 신규 저장·draft 승격은 같은 트랜잭션에서 단일 `userId` snapshot으로 재검사, stale draft는 삭제하지 않고 집계 제외 | PR #1 |
+| B3 — 설명 생성 20초 타임아웃 + 비타임아웃 오류 1회 재시도 → 결정론적 fallback | PR #1 |
+| F28 — admin도 비율 제한 적용(무료 쿼터만 면제). 수정(`estimateId`) 경로에도 비율 제한, draft 첫 승격 예외는 AI 전 트랜잭션 claim(1회·실패 시 미복원), 승격 쿼터는 AI 전 사전 확인. `estimateId`·`photoPaths` 형식/소유 검증 | PR #1 (Wave 2) |
+| F11 — 비admin email 읽기전용 + 제출 전 불일치 차단 ("send a copy to"는 발송 인프라 부재로 보류) | PR #1 |
+| F1 — 현 동작 유지 결정(3층+전체 외벽이면 합산도 55k), 회귀 테스트 2건 + pbc-pricing SKILL.md 정정 | PR #1 (Wave 2) |
+| F31 — 테스트 타이틀 정정, range width cap 현재값을 SKILL.md에 문서화 (exterior 8k→10k 역전은 F2로) | PR #1 |
+| F19 footer 연도 자동 + 이메일 · F25 storage.rules 주석 정정 | PR #1 |
 
-> 주의: 이전 로드맵에서 완료 표시됐던 **F19·F25는 코드에 반영되지 않았다** (footer `2023` 하드코딩, storage.rules 주석 "public read" 그대로). 아래 "즉시"로 되돌림.
+## 2. 즉시 — 남은 후속 (2026-10-24 리뷰에서 도출)
 
-## 2. 즉시 — 버그·보안·정합성
-
-| ID | 등급 | 문제 | 위치 | 조치 | 단계 |
-|---|---|---|---|---|---|
-| F20 | High | `firestore.rules`가 `firebase.json`에 미등록 → 배포 시 rules 누락. admin 대시보드는 클라이언트 SDK 직접 읽기라 rules가 유일한 방어선 | `firebase.json` | `"firestore": {"rules": "firestore.rules"}` 추가 → 콘솔 배포본 대조 → `firebase deploy --only firestore:rules` 절차화 | implementer → app-security |
-| F1 | High | Interior+Exterior 합산 total이 35,000 초과 가능 (`Math.max(MAX_PRICE_CAP, exteriorProjectCap)` → 최대 55,000) | `generate-painting-estimate.ts:1939` | interior 포함 합산은 35,000 고정, exterior 단독만 55,000 | estimate-rule-designer(승인) → implementer |
-| B1 | High | 사진 경로 고아 draft가 무료 쿼터 1회 영구 소진. count가 status 무필터 | `src/app/estimate/actions.ts:201` `getUserEstimateCount` | `status=='generated'` 필터(또는 쿼터 권위 단일화) + 서버측 draft 정리/롤백 | implementer |
-| B3 | Medium | `explanationPrompt` throw 시 견적 전체 실패 (try/catch 0건) | `generate-painting-estimate.ts:2041` | try/catch → 결정론적 fallback 설명 + timeout/retry | implementer |
-| F28 | High | admin rate limit 완전 우회 — 정책 문서는 "admin도 rate limit" | `actions.ts` (`isAdmin` 분기 ~L352·L386) | **정책 결정 필요**: 코드에 적용 vs 문서를 실동작으로 수정 | 팀장 결정 → implementer |
-| F11 | High | email 필드 편집 가능하지만 서버가 계정과 다르면 거부 → 4단계 완주 후 실패 | `estimate-form.tsx:3189` | 읽기전용 + "send a copy to" 선택 필드 분리, 최소 client 사전 검증 | frontend-senior-dev |
-| F31 | Medium | 테스트 타이틀 "$7500" vs assert 6,700, cap 테스트가 문서와 다른 값 고정 | `pricing-engine.test.ts:153` | 타이틀 정정 + cap 값 코드·테스트·문서 3자 동기화 (F2와 함께) | implementer |
-| F19 | Low | footer 연도 2023 하드코딩 | `src/components/footer.tsx:10` | `new Date().getFullYear()` + 연락처/ABN | quick_edit |
-| F25 | Low | storage.rules 주석 "public read" ↔ 실제 owner-only | `storage.rules` | 주석을 "owner-only read; admin은 서버 API 경유"로 | quick_edit |
+| 항목 | 내용 | 단계 |
+|---|---|---|
+| 실환경 검증 | 실제 로그인 계정으로 F11 email 잠금·제출 차단, admin 대시보드 목록/상세(rules 배포 후), 사진 견적 1건 draft→승격 | 사용자 / frontend-senior-dev |
+| `next build` | 이번 변경 후 빌드 미실행 (`ignoreBuildErrors` 때문에 tsc와 별도 확인 필요, F24와 연계) | implementer |
+| Firestore emulator 테스트 | rules 허용/거부 케이스 + B1/F28 트랜잭션 동시성을 stub이 아닌 emulator로 검증 | project-tester |
+| 수정 재요청 UX | 결과 수신 후 30초 내 수정 재요청은 거부됨 → 남은 시간 안내 문구 | frontend-senior-dev |
+| 고아 draft 사진 | 30분 무활동 draft는 집계만 제외되고 문서·Storage 사진은 남음 → 보존 정책 + 정리 잡 | firebase-backend-dev |
+| admin 클레임 운영 | 클레임 부여 절차 문서화, 회수 시 `revokeRefreshTokens` | app-security |
 
 ## 3. 30일 — 퍼널 개방 · 계측 · speed-to-lead
 
@@ -59,10 +62,10 @@
 
 ## 5. 결정이 필요한 항목
 
-1. **F28** admin rate limit: 적용할지, 정책 문서를 "admin 무제한"으로 바꿀지
-2. **F2/F31** range width cap 정책값 (코드 현재값: interior ≤5k→1,200 그 외 1,500 / exterior ≤3k→1,000, ≤8k→1,800, ≤10k→1,750, 그 외 2,000)
-3. **F30** lite 캘리브레이션 정렬 vs 고지
-4. **F1** 수정은 가격 변경이므로 영향 범위 설명 후 승인 (pbc-pricing 규칙)
+1. **F30** lite 캘리브레이션 정렬 vs 고지
+2. **F2** exterior range width cap 8k→10k 역전(1,800→1,750) 해소 여부 — 가격 변경이므로 estimate-rule-designer 검토 후 승인
+
+> 2026-10-24 결정 완료: F28(admin도 비율 제한, 쿼터만 면제) · F1(현 동작 유지) · F31(현재 cap 값 문서화) · F19(연도+이메일만)
 
 ## 6. 기각된 주장 — 다시 이슈로 올리지 말 것
 
