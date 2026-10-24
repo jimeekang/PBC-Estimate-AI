@@ -150,11 +150,11 @@ describe('B: Interior House Entire Property', () => {
     expect(inferHouseKey({ bedroomsTotal: 2 })).toBe('2B1B');
   });
 
-  test('B1: inferHouseKey — 2B1B anchor min is $7500', () => {
+  test('B1: inferHouseKey — 2B1B anchor min is $6700', () => {
     expect(HOUSE_INTERIOR_ANCHORS['2B1B'].min).toBe(6700);
   });
 
-  test('B2: 3B2B Excellent 1 storey — anchor min $9500, max $14000', () => {
+  test('B2: 3B2B Excellent 1 storey — anchor min $8500, max $12450', () => {
     const key = inferHouseKey({ bedroomsTotal: 3, bathroomsTotal: 2 });
     expect(key).toBe('3B2B');
     const anchor = HOUSE_INTERIOR_ANCHORS['3B2B'];
